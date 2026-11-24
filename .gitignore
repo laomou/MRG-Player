@@ -1,0 +1,9 @@
+# Build trees.
+build*/
+
+# Smoke-test captures land in the working directory and are throwaway.
+*-screenshot.bmp
+*-screenshot.png
+
+# Design sources are kept outside the repository.
+design/

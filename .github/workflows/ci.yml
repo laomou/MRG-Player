@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# The smoke tests never open a window or a device, so a headless runner works.
+env:
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+
+jobs:
+  linux:
+    name: Linux (GCC)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build pkg-config zlib1g-dev \
+            libasound2-dev libpulse-dev libudev-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev \
+            libxcursor-dev libxinerama-dev libxss-dev
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DMRG_ENABLE_SMOKE_TESTS=ON \
+            -DMRG_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Smoke tests
+        run: |
+          printf 'NES\x1aSTUB' > "$RUNNER_TEMP/stub.nes"
+          ./build/mrg-player --smoke-test-home
+          ./build/mrg-player --smoke-test-settings --language=en
+          ./build/mrg-player --smoke-test-settings --language=zh
+          MRG_CORES_DIR="$PWD/build/cores" ./build/mrg-player --smoke-test-pause "$RUNNER_TEMP/stub.nes"
+          MRG_CORES_DIR="$PWD/build/cores" ./build/mrg-player --smoke-test-rom "$RUNNER_TEMP/stub.nes"
+          MRG_CORES_DIR="$PWD/build/cores" ./build/mrg-player --smoke-test-screenshot "$RUNNER_TEMP/stub.nes"
+
+  platform:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (MSVC)
+            os: windows-latest
+            binary: build/Release/mrg-player.exe
+          - name: macOS (Apple Clang)
+            os: macos-latest
+            binary: build/mrg-player
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      # zlib drives the PNG screenshots and unpacking downloaded core archives.
+      # vcpkg only ships a static zlib with the dynamic CRT under this triplet,
+      # which matches the default /MD build.
+      - name: Install zlib (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows-static-md --clean-after-build
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DBUILD_TESTING=ON -DMRG_ENABLE_SMOKE_TESTS=ON `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TESTING=ON \
+            -DMRG_ENABLE_SMOKE_TESTS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Smoke tests
+        shell: bash
+        run: |
+          printf 'NES\x1aSTUB' > "$RUNNER_TEMP/stub.nes"
+          "${{ matrix.binary }}" --smoke-test-home
+          "${{ matrix.binary }}" --smoke-test-settings --language=en
+          "${{ matrix.binary }}" --smoke-test-settings --language=zh
+          MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-pause "$RUNNER_TEMP/stub.nes"
+          MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-rom "$RUNNER_TEMP/stub.nes"
+          MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-screenshot "$RUNNER_TEMP/stub.nes"

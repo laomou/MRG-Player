@@ -1,0 +1,28 @@
+---
+# clang-format configuration for the MRG Player sources.
+#
+# The base is the Google C++ style guide. The overrides below describe
+# conventions this code base already follows, so formatting a file does not
+# silently restyle it away from its neighbours.
+BasedOnStyle: Google
+
+# The sources bind the star to the variable: "SDL_Renderer *renderer".
+DerivePointerAlignment: false
+PointerAlignment: Right
+
+# Two-space indents, wrapped at 120 columns.
+ColumnLimit: 120
+IndentWidth: 2
+
+# Bodies stay on their own line, and switch labels line up with the switch.
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
+IndentCaseLabels: false
+
+# "public:" sits at the class indent, and a trailing comment gets one space.
+AccessModifierOffset: -2
+SpacesBeforeTrailingComments: 1
+
+# Fill parameter lists instead of putting each one on its own line.
+BinPackParameters: true
+BinPackArguments: true
