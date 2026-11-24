@@ -74,7 +74,7 @@ jobs:
             binary: build/Release/mrg-player.exe
           - name: macOS (Apple Clang)
             os: macos-latest
-            binary: build/mrg-player
+            binary: build/mrg-player.app/Contents/MacOS/mrg-player
     steps:
       - uses: actions/checkout@v5
         with:

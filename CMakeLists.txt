@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 project(mrg_player VERSION 1.0 LANGUAGES CXX)
 
+# The About page shows this string. A release build passes the tag it was cut
+# from, so a packaged binary reports the version it actually is, while a plain
+# checkout keeps reporting the project version.
+set(MRG_VERSION_STRING "" CACHE STRING "Version reported by the launcher")
+if(MRG_VERSION_STRING STREQUAL "")
+  set(MRG_VERSION_STRING "${PROJECT_VERSION}")
+endif()
+
 # An unset CMAKE_BUILD_TYPE leaves every target on the compiler's default,
 # which for GCC is -O0: the emulator then runs about five times slower than it
 # needs to and a whole frame costs milliseconds instead of a fraction of one.
@@ -116,9 +124,8 @@ add_executable(mrg-player
 target_include_directories(mrg-player PRIVATE src)
 target_compile_features(mrg-player PRIVATE cxx_std_17)
 target_compile_options(mrg-player PRIVATE ${MRG_WARNING_FLAGS})
-# The About page reports this string, so the release number lives in one place:
-# the project() version above.
-target_compile_definitions(mrg-player PRIVATE MRG_VERSION="${PROJECT_VERSION}")
+# The About page reports this string, so the release number lives in one place.
+target_compile_definitions(mrg-player PRIVATE MRG_VERSION="${MRG_VERSION_STRING}")
 target_link_libraries(mrg-player PRIVATE runtime-libretro)
 
 if(MRG_ENABLE_SMOKE_TESTS)
@@ -246,11 +253,22 @@ else()
 endif()
 
 # Multi-config generators place the executable in a per-config directory, so the
-# font has to sit beside it rather than only in the top of the build tree.
-add_custom_command(TARGET mrg-player POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:mrg-player>/assets"
-  COMMENT "Copying assets next to the executable")
+# font has to sit beside it rather than only in the top of the build tree. A
+# macOS bundle is a directory, and SDL_GetBasePath reports its Resources folder
+# there, so the assets go inside the bundle instead of next to the binary.
+if(APPLE)
+  add_custom_command(TARGET mrg-player POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+      "$<TARGET_BUNDLE_CONTENT_DIR:mrg-player>/Resources/assets"
+    COMMENT "Copying assets into the application bundle")
+else()
+  add_custom_command(TARGET mrg-player POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+      "$<TARGET_FILE_DIR:mrg-player>/assets"
+    COMMENT "Copying assets next to the executable")
+endif()
 
 if(BUILD_TESTING)
   add_executable(ui-rendering-test
@@ -296,5 +314,17 @@ if(TARGET SDL2::SDL2main)
   target_link_libraries(mrg-player PRIVATE SDL2::SDL2main)
 endif()
 
-install(TARGETS mrg-player RUNTIME DESTINATION bin)
+if(APPLE)
+  # A macOS release is a bundle so Finder treats it as an application; the
+  # fonts travel inside it, which is where SDL_GetBasePath looks first.
+  set_target_properties(mrg-player PROPERTIES
+    MACOSX_BUNDLE ON
+    MACOSX_BUNDLE_BUNDLE_NAME "MRG Player"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "io.github.laomou.mrg-player"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${MRG_VERSION_STRING}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${MRG_VERSION_STRING}")
+  install(TARGETS mrg-player BUNDLE DESTINATION . RUNTIME DESTINATION bin)
+else()
+  install(TARGETS mrg-player RUNTIME DESTINATION bin)
+endif()
 install(DIRECTORY assets/fonts DESTINATION share/mrg-player)

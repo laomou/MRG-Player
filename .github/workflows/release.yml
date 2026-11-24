@@ -1,0 +1,164 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  # A manual run builds the same archives without publishing them, which is how
+  # the packaging steps are checked without cutting a release.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Packaging never opens a window; the fonts and the smoke flags are irrelevant
+# here, so setup stays identical to CI.
+env:
+  SDL_VIDEODRIVER: dummy
+  SDL_AUDIODRIVER: dummy
+
+jobs:
+  linux:
+    name: Linux package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build pkg-config zlib1g-dev \
+            libasound2-dev libpulse-dev libudev-dev \
+            libx11-dev libxext-dev libxrandr-dev libxi-dev \
+            libxcursor-dev libxinerama-dev libxss-dev
+
+      # The About page reports the tag, so the archive name and the version the
+      # binary prints can never disagree.
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMRG_VERSION_STRING="${GITHUB_REF_NAME#v}"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then VERSION="0.0.0-dev"; fi
+          cmake --install build --prefix stage
+          tar -czf "mrg-player-${VERSION}-linux-x86_64.tar.gz" \
+            -C stage bin share
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-package
+          path: mrg-player-*-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows package
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      # Static zlib with the dynamic CRT matches the default /MD build, so the
+      # archive needs no extra DLLs from vcpkg.
+      - name: Install zlib
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install zlib:x64-windows-static-md --clean-after-build
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          cmake -S . -B build -A x64 "-DMRG_VERSION_STRING=$version" `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($env:GITHUB_REF_TYPE -ne 'tag') { $version = '0.0.0-dev' }
+          cmake --install build --config Release --prefix stage
+          Compress-Archive -Path stage\* -DestinationPath "mrg-player-$version-windows-x64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: mrg-player-*-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS package
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMRG_VERSION_STRING="${GITHUB_REF_NAME#v}"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then VERSION="0.0.0-dev"; fi
+          cmake --install build --prefix stage
+          # ditto keeps the bundle metadata a plain zip would drop.
+          ditto -c -k --keepParent stage/mrg-player.app \
+            "mrg-player-${VERSION}-macos-arm64.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: mrg-player-*-macos-arm64.zip
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [linux, windows, macos]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # A manual run stops after proving the archives build; only a tag
+      # publishes them.
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          name: ${{ github.ref_name }}
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
