@@ -131,6 +131,10 @@ private:
   std::string error_;
   std::string gameId_;
   std::string gamePath_;
+  // The path the core is handed, plus the staged ASCII copy used instead when
+  // the original name is one the core cannot open.
+  std::string romLoadPath_;
+  std::string stagedRomPath_;
   std::string savePath_;
   std::string stateDirectory_;
   std::string systemDirectory_;
