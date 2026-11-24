@@ -37,6 +37,13 @@ constexpr int kRightColumnX = kTrackX + kColumnWidth + kColumnGutter;
 constexpr std::size_t kBindingsPerColumn = 5;
 static_assert(config::kInputActionCount == 2 * kBindingsPerColumn);
 
+// The general page carries five rows now, so its rows are slightly shorter
+// than the ones on the other pages.
+constexpr int kGeneralRowCount = 5;
+constexpr int kGeneralRowY = 404;
+constexpr int kGeneralRowStep = 84;
+constexpr int kGeneralRowHeight = 76;
+
 TextId categoryText(int category) {
   constexpr std::array<TextId, kCategoryCount> ids{
       TextId::General,    TextId::Display,     TextId::Audio,
@@ -58,18 +65,22 @@ TextId categoryDescription(int category) {
 
 void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
                     const std::string &title, const std::string &description,
-                    const std::string &value, SDL_Color accent) {
-  rounded(renderer, 466, static_cast<float>(y), 1010, 92, 17,
+                    const std::string &value, SDL_Color accent,
+                    int height = 92) {
+  rounded(renderer, 466, static_cast<float>(y), 1010,
+          static_cast<float>(height), 17,
           selected ? SDL_Color{22, 35, 57, 246} : SDL_Color{7, 17, 34, 188});
   if (selected) {
-    rounded(renderer, 466, static_cast<float>(y), 6, 92, 3, accent);
-    rounded(renderer, 1228, static_cast<float>(y + 21), 216, 50, 25,
-            {accent.r, accent.g, accent.b, 54});
+    rounded(renderer, 466, static_cast<float>(y), 6,
+            static_cast<float>(height), 3, accent);
+    rounded(renderer, 1228, static_cast<float>(y + (height - 50) / 2), 216, 50,
+            25, {accent.r, accent.g, accent.b, 54});
   }
-  text(renderer, 498, y + 17, title, 2, {247, 248, 252, 255});
-  text(renderer, 498, y + 51, description, 1, {148, 169, 187, 255});
+  const int titleY = y + (height - 58) / 2;
+  text(renderer, 498, titleY, title, 2, {247, 248, 252, 255});
+  text(renderer, 498, titleY + 34, description, 1, {148, 169, 187, 255});
   const int valueX = 1420 - textWidth(value, 2);
-  text(renderer, valueX, y + 35, value, 2,
+  text(renderer, valueX, y + (height - 24) / 2, value, 2,
        selected ? accent : SDL_Color{205, 215, 226, 255});
 }
 
@@ -129,7 +140,7 @@ int settingCategoryCount() { return kCategoryCount; }
 
 int settingRowCount(int category) {
   if (category == 0)
-    return 3;
+    return kGeneralRowCount;
   if (category == 1)
     return 4;
   if (category == 2)
@@ -166,6 +177,19 @@ int controllerPageRowAt(int x, int y) {
   return kFixedRowCount + static_cast<int>(config::kInputActionCount);
 }
 
+int generalPageRowAt(int x, int y) {
+  if (x < kTrackX || x > kTrackX + kTrackWidth)
+    return -1;
+  if (y < kGeneralRowY)
+    return -1;
+  const int row = (y - kGeneralRowY) / kGeneralRowStep;
+  if (row < 0 || row >= kGeneralRowCount)
+    return -1;
+  if ((y - kGeneralRowY) % kGeneralRowStep >= kGeneralRowHeight)
+    return -1;
+  return row;
+}
+
 void changeSetting(AppSettings &settings, int category, int row,
                    int direction) {
   if (category == 0) {
@@ -173,8 +197,12 @@ void changeSetting(AppSettings &settings, int category, int row,
       settings.language = (settings.language + direction + 2) % 2;
     else if (row == 1)
       settings.startupPage = (settings.startupPage + direction + 2) % 2;
-    else
+    else if (row == 2)
       settings.rememberSelection = !settings.rememberSelection;
+    else if (row == 3)
+      settings.rewind = !settings.rewind;
+    else
+      settings.runahead = (settings.runahead + direction + 4) % 4;
   } else if (category == 1) {
     if (row == 0)
       settings.fullscreen = !settings.fullscreen;
@@ -252,23 +280,38 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
        {144, 165, 184, 255});
 
   if (category == 0) {
-    drawSettingRow(
-        renderer, 410, row == 0, tr(TextId::Language, language),
-        tr(TextId::LanguageDescription, language),
-        tr(settings.language == 0 ? TextId::English : TextId::SimplifiedChinese,
-           language),
-        game.accent);
-    drawSettingRow(renderer, 516, row == 1, tr(TextId::StartupPage, language),
-                   tr(TextId::StartupDescription, language),
-                   tr(settings.startupPage == 0 ? TextId::ContinuePlaying
-                                                : TextId::GameLibrary,
-                      language),
-                   game.accent);
-    drawSettingRow(
-        renderer, 622, row == 2, tr(TextId::RememberSelection, language),
-        tr(TextId::RememberDescription, language),
-        tr(settings.rememberSelection ? TextId::On : TextId::Off, language),
-        game.accent);
+    const std::string runahead =
+        settings.runahead == 0
+            ? tr(TextId::Off, language)
+            : (settings.runahead == 1
+                   ? tr(TextId::FrameOne, language)
+                   : std::to_string(settings.runahead) + " " +
+                         tr(TextId::Frames, language));
+    const std::array<std::pair<TextId, std::string>, kGeneralRowCount> rows{{
+        {TextId::Language,
+         tr(settings.language == 0 ? TextId::English
+                                   : TextId::SimplifiedChinese,
+            language)},
+        {TextId::StartupPage,
+         tr(settings.startupPage == 0 ? TextId::ContinuePlaying
+                                      : TextId::GameLibrary,
+            language)},
+        {TextId::RememberSelection,
+         tr(settings.rememberSelection ? TextId::On : TextId::Off, language)},
+        {TextId::Rewind,
+         tr(settings.rewind ? TextId::On : TextId::Off, language)},
+        {TextId::Runahead, runahead},
+    }};
+    constexpr std::array<TextId, kGeneralRowCount> descriptions{
+        TextId::LanguageDescription, TextId::StartupDescription,
+        TextId::RememberDescription, TextId::RewindDescription,
+        TextId::RunaheadDescription};
+    for (int index = 0; index < kGeneralRowCount; ++index) {
+      drawSettingRow(renderer, kGeneralRowY + index * kGeneralRowStep,
+                     row == index, tr(rows[index].first, language),
+                     tr(descriptions[index], language), rows[index].second,
+                     game.accent, kGeneralRowHeight);
+    }
   } else if (category == 1) {
     drawSettingRow(
         renderer, 410, row == 0, tr(TextId::DisplayMode, language),

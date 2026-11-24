@@ -17,6 +17,8 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Slot preview cards with instant-state thumbnails, save time, and the play time at capture
 - 4× fast-forward while Tab or the controller's right shoulder button is held, with a configurable audio policy (silent, or audible without backlog)
 - Half-speed slow motion and single-frame stepping from the pause menu
+- Rewind: holding Backspace or pushing in the left stick steps the machine back through a rolling window of the core's own snapshots
+- Optional runahead (0-3 frames) that runs the core past the picture on screen to hide the core's own input lag
 - Display options: square, 4:3, or 8:7 aspect ratio, integer scaling, and 0-16 px overscan crop, globally or per game
 - Core options: every option a libretro core declares is collected and editable from the pause menu, saved per core
 - In-game screenshots: **F12** writes a PNG of the current picture to the data root's `screenshots/` directory
@@ -27,7 +29,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
 - Import of `.nes`, `.gba`, `.sfc`/`.smc`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
-- Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, frame stepping, screenshots, turbo, display overrides, and mute
+- Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, rewind, runahead, frame stepping, screenshots, turbo, display overrides, and mute
 
 Every platform needs a libretro core installed on the machine — see [libretro cores](#libretro-cores). The project bundles no cores, ROMs, or BIOS files, and reports a clear error instead of guessing when no suitable core is found. Use only game images that you are legally entitled to use.
 
@@ -131,13 +133,14 @@ Select a populated card and press **M** or keyboard **X**, controller **X**, or 
 | Open pause menu | Escape | Escape | Guide or Y |
 | Fast-forward (hold) | Tab | Tab | Right shoulder |
 | Slow motion (hold) | Left Shift | Left Shift | Left shoulder |
+| Rewind (hold) | Backspace | Backspace | Left stick button |
 | Step one frame (paused) | . (period) | . (period) | Right shoulder |
 | Mute / unmute | M | M | — |
 | Screenshot | F12 | F12 | — |
 
 Two controllers are supported at the same time. The controller rows above apply to both players, so each connected pad drives the player it was assigned to in Settings.
 
-Every platform uses the same keyboard and controller mapping. The eight console actions are forwarded to the core's joypad, turbo is applied in front of the core, and the pause menu, fast-forward, slow motion, frame stepping, and screenshots behave identically.
+Every platform uses the same keyboard and controller mapping. The eight console actions are forwarded to the core's joypad, turbo is applied in front of the core, and the pause menu, fast-forward, slow motion, rewind, frame stepping, and screenshots behave identically.
 
 Holding **Turbo A** or **Turbo B** repeats that button: the console sees it pressed for two frames and released for two, which is fifteen presses per second at the NTSC field rate. Turbo is a front-end feature and never reaches the emulator as a button of its own, so it works for any game that rewards rapid tapping, and a normal A or B press still wins while the turbo key is held.
 
@@ -154,6 +157,12 @@ Pressing **M** mutes or unmutes the output from the game or pause screen and sho
 Instant states are the core's own serialization, so they restore the whole machine in one step and never depend on how long the session has been running. Each state file is wrapped in a versioned header that records the core's name and the game's content id, so a state written by a different core or a different game is refused instead of being loaded into an incompatible machine. Queued host audio is discarded on load, and the capture records the sample rate it was taken at so states stay loadable after the audio device changes.
 
 If a snapshot cannot be restored, the runtime reloads the core and reports that the state is incompatible or damaged. State files are stored per game and slot under `states/<platform>/` in the MRG Player data root.
+
+### Latency options
+
+**Settings → General** carries the two playback options that trade memory and CPU for feel. **Rewind** (on by default) keeps a rolling window of the core's own snapshots while a game runs: one snapshot every other frame, capped at roughly ten seconds or 32 MiB, whichever comes first. Hold **Backspace** or push in the left stick to step back through it; the first press skips the newest snapshot because it describes the frame already on screen, and each further press moves two frames back. Rewinding pauses the frame clock, drops its audio instead of queuing it, and stops when the window runs out. The window starts empty and is discarded on console reset, power cycle, state load, or when runahead is turned on.
+
+**Runahead** (off by default, 0-3 frames) hides the core's own input lag by running it past the picture that is shown. Each frame runs the core once with audio and video muted, remembers that machine, runs the remaining hidden frames, then produces the frame that is displayed and finally rolls the machine back to the remembered point, so the next input lands earlier in the core than the frame it produced. The cost is one serialization per frame plus the extra emulation, and some cores do not leave their audio clean after a load, so an audible click can appear; that is why the setting is off by default. Both settings are stored in `settings.ini` and applied to a running game immediately.
 
 ### Display options
 
@@ -241,4 +250,4 @@ Every platform needs a core, including the NES, so the game-path smoke tests are
 
 The `--smoke-test-*` flags are a developer tool and are compiled out by default: a build without `-DMRG_ENABLE_SMOKE_TESTS=ON` reports them as unknown options, so a released binary carries neither the flags nor the frame-capture code they drive. CI configures with the option on.
 
-Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, and cores pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, and the core options panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, unpacking the same core from stored and deflated zips, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.
+Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, and cores pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, and the core options panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, rewinding through remembered snapshots, showing the frame runahead produces, unpacking the same core from stored and deflated zips, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.

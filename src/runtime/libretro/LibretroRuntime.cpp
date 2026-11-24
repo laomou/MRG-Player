@@ -33,6 +33,12 @@ constexpr std::size_t kMaximumStateSize = 64U * 1024U * 1024U;
 constexpr std::uint32_t kFastForwardDivisor = 4;
 constexpr std::uint32_t kSlowMotionFactor = 2;
 constexpr int kAudioBufferSamples = 1024;
+// Rewind trades memory for depth: a snapshot every other frame, capped at
+// roughly ten seconds of play or 32 MiB of serialized machine state.
+constexpr std::uint64_t kRewindIntervalFrames = 2;
+constexpr std::size_t kRewindMaximumSnapshots = 300;
+constexpr std::size_t kRewindMaximumBytes = 32U * 1024U * 1024U;
+constexpr int kMaximumRunaheadFrames = 3;
 
 // Console action order of config::InputAction, mapped onto libretro joypad ids.
 constexpr std::array<unsigned, config::kCoreActionCount> kLibretroButtons{
@@ -154,6 +160,7 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   framePeriod_ = static_cast<Uint64>(static_cast<double>(frequency) / fps_);
   nextFrame_ = SDL_GetPerformanceCounter();
   resetPlayers();
+  clearRewind();
   paused_ = false;
   active_ = true;
   return true;
@@ -187,6 +194,7 @@ void LibretroRuntime::stop() {
   romBytes_.clear();
   frame_.clear();
   stateBuffer_.clear();
+  clearRewind();
   options_.clear();
   optionsPath_.clear();
   storedOptions_.clear();
@@ -575,6 +583,10 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
 }
 
 void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height, std::size_t pitch) {
+  // Runahead runs throw-away frames before the one that is shown; they must
+  // not reach the texture at all.
+  if (suppressVideo_)
+    return;
   if (width == 0 || height == 0)
     return;
   if (width != width_ || height != height_ || frame_.empty()) {
@@ -631,6 +643,10 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
 }
 
 std::size_t LibretroRuntime::onAudio(const std::int16_t *data, std::size_t frames) {
+  // Replayed frames are silent: their audio belongs to a timeline that is
+  // about to be rolled back, and rewinding while paused would pile it up.
+  if (suppressAudio_)
+    return frames;
   if (data == nullptr || frames == 0)
     return frames;
   if (muted_ || audioDevice_ == 0)
@@ -701,6 +717,7 @@ void LibretroRuntime::reset() {
   core_.reset();
   discardAudio();
   resetPlayers();
+  clearRewind();
   nextFrame_ = SDL_GetPerformanceCounter();
 }
 
@@ -720,6 +737,7 @@ void LibretroRuntime::powerCycle() {
   if (audioDevice_ != 0)
     SDL_PauseAudioDevice(audioDevice_, paused_ ? 1 : 0);
   resetPlayers();
+  clearRewind();
   nextFrame_ = SDL_GetPerformanceCounter();
 }
 
@@ -770,9 +788,102 @@ void LibretroRuntime::stepFrame() {
 void LibretroRuntime::runFrame() {
   // Turbo is a front-end pulse: the core only ever sees ordinary A/B presses.
   turboPulse_ = config::turboPulseOn(frameCount_);
-  core_.run();
+  if (runaheadFrames_ > 0 && core_.serializeSize() > 0) {
+    // Runahead, single instance: run the hidden frames with audio and video
+    // muted, remember the machine right after the first one, show the frame
+    // that comes next, then roll back so the next input lands earlier in the
+    // core than the picture it produced.
+    runaheadBuffer_.resize(core_.serializeSize());
+    suppressVideo_ = true;
+    suppressAudio_ = true;
+    core_.run();
+    const bool stored =
+        core_.serialize(runaheadBuffer_.data(), runaheadBuffer_.size());
+    for (int frame = 1; frame < runaheadFrames_; ++frame)
+      core_.run();
+    suppressVideo_ = false;
+    suppressAudio_ = false;
+    core_.run();
+    if (stored)
+      (void)core_.unserialize(runaheadBuffer_.data(), runaheadBuffer_.size());
+  } else {
+    core_.run();
+  }
   turboPulse_ = false;
   ++frameCount_;
+  // Rewind samples the machine every other frame; runahead already owns the
+  // serializer and the two would fight over the same timeline.
+  if (rewindEnabled_ && runaheadFrames_ == 0 &&
+      frameCount_ % kRewindIntervalFrames == 0)
+    captureRewind();
+}
+
+void LibretroRuntime::setRewindEnabled(bool enabled) noexcept {
+  if (rewindEnabled_ == enabled)
+    return;
+  rewindEnabled_ = enabled;
+  if (!enabled)
+    clearRewind();
+}
+
+void LibretroRuntime::setRunaheadFrames(int frames) noexcept {
+  const int value = std::clamp(frames, 0, kMaximumRunaheadFrames);
+  if (runaheadFrames_ == value)
+    return;
+  runaheadFrames_ = value;
+  if (value > 0)
+    clearRewind();
+}
+
+bool LibretroRuntime::rewindStep() noexcept {
+  if (!active_ || !rewindEnabled_)
+    return false;
+  // The newest snapshot was taken right after the frame on screen, so it
+  // describes the machine the player is already looking at. Dropping it first
+  // is what makes the very first press move backwards.
+  rewindBytes_ -= rewind_.back().data.size();
+  rewind_.pop_back();
+  if (rewind_.empty())
+    return false;
+  const Snapshot &snapshot = rewind_.back();
+  const bool restored =
+      core_.unserialize(snapshot.data.data(), snapshot.data.size());
+  rewindBytes_ -= snapshot.data.size();
+  rewind_.pop_back();
+  if (!restored)
+    return false;
+  // Run one frame so the picture matches the restored point in time, but keep
+  // its audio out of the queue: the player is scrubbing, not listening.
+  turboPulse_ = false;
+  suppressAudio_ = true;
+  core_.run();
+  suppressAudio_ = false;
+  discardAudio();
+  nextFrame_ = SDL_GetPerformanceCounter();
+  return true;
+}
+
+void LibretroRuntime::clearRewind() {
+  rewind_.clear();
+  rewindBytes_ = 0;
+}
+
+void LibretroRuntime::captureRewind() {
+  const std::size_t size = core_.serializeSize();
+  if (size == 0 || size > kRewindMaximumBytes)
+    return;
+  Snapshot snapshot;
+  snapshot.data.resize(size);
+  if (!core_.serialize(snapshot.data.data(), size))
+    return;
+  snapshot.frame = frameCount_;
+  rewindBytes_ += size;
+  rewind_.push_back(std::move(snapshot));
+  while (rewind_.size() > kRewindMaximumSnapshots ||
+         rewindBytes_ > kRewindMaximumBytes) {
+    rewindBytes_ -= rewind_.front().data.size();
+    rewind_.pop_front();
+  }
 }
 
 void LibretroRuntime::setVideoOptions(const VideoOptions &options) noexcept { video_ = options; }
@@ -975,6 +1086,9 @@ StateStatus LibretroRuntime::loadState(int slot, std::string &error) {
   }
   releaseInput();
   discardAudio();
+  // Snapshots taken before the load belong to a timeline that no longer
+  // exists, so the rewind window starts over from here.
+  clearRewind();
   nextFrame_ = SDL_GetPerformanceCounter();
   return StateStatus::Loaded;
 }

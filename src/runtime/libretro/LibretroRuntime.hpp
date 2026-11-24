@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <deque>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -46,6 +47,9 @@ public:
   void setFastForward(bool enabled) noexcept override;
   void setSlowMotion(bool enabled) noexcept override;
   void stepFrame() override;
+  void setRewindEnabled(bool enabled) noexcept override;
+  [[nodiscard]] bool rewindStep() noexcept override;
+  void setRunaheadFrames(int frames) noexcept override;
   void setVideoOptions(const VideoOptions &options) noexcept override;
   void setPlayerController(int player, SDL_JoystickID instanceId) noexcept override;
   StateStatus saveState(int slot, std::string &error) override;
@@ -98,6 +102,15 @@ private:
   void writeStateMetadata(const std::string &path) const;
   bool rebuildGame();
 
+  // Rewind holds the machine snapshots themselves, not pictures: the core is
+  // rolled back with the same serializer the save slots use.
+  struct Snapshot {
+    std::vector<std::uint8_t> data;
+    std::uint64_t frame = 0;
+  };
+  void clearRewind();
+  void captureRewind();
+
   // Core options arrive either as the version 1 key/description pairs or as
   // the version 2 definitions with labels and categories. Both are folded into
   // the same list, and stored values are re-applied after every declaration.
@@ -125,6 +138,9 @@ private:
   std::vector<std::uint8_t> romBytes_;
   std::vector<std::uint32_t> frame_;
   std::vector<std::uint8_t> stateBuffer_;
+  std::vector<std::uint8_t> runaheadBuffer_;
+  std::deque<Snapshot> rewind_;
+  std::size_t rewindBytes_ = 0;
   CoreOptionList options_;
   std::string optionsPath_;
   std::vector<std::pair<std::string, std::string>> storedOptions_;
@@ -152,6 +168,10 @@ private:
   bool active_ = false;
   bool gameLoaded_ = false;
   bool turboPulse_ = false;
+  bool rewindEnabled_ = false;
+  bool suppressVideo_ = false;
+  bool suppressAudio_ = false;
+  int runaheadFrames_ = 0;
   std::uint64_t frameCount_ = 0;
   Uint32 fastForwardFrames_ = 0;
   Uint64 framePeriod_ = 0;

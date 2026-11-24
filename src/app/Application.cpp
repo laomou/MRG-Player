@@ -350,6 +350,12 @@ int Application::run(int argc, char **argv) {
     activeRuntime->setMuted(settings.audioMuted);
     activeRuntime->setFastForwardAudio(settings.fastForwardAudio != 0);
   };
+  auto syncPlaybackOptions = [&] {
+    if (!activeRuntime)
+      return;
+    activeRuntime->setRewindEnabled(settings.rewind);
+    activeRuntime->setRunaheadFrames(settings.runahead);
+  };
   openSecondController();
   library::GameLibrary gameLibrary;
   if (!gameLibrary.initialize()) {
@@ -364,6 +370,7 @@ int Application::run(int argc, char **argv) {
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
   int settingRow = 0;
+  bool rewindHeld = false;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
   const Uint64 smokeSettingsStart = SDL_GetTicks64();
   bool smokeSettingsGeneral = false;
@@ -561,6 +568,7 @@ int Application::run(int argc, char **argv) {
     refreshActiveVideo();
     syncVideoOptions();
     syncAudioOptions();
+    syncPlaybackOptions();
     saveSettings(settings);
   };
   auto currentLanguage = [&] {
@@ -694,6 +702,7 @@ int Application::run(int argc, char **argv) {
     refreshActiveVideo();
     syncVideoOptions();
     syncAudioOptions();
+    syncPlaybackOptions();
     syncPlayerControllers();
     sessionAccumulatedMs = 0;
     sessionActiveSince = SDL_GetTicks64();
@@ -744,6 +753,7 @@ int Application::run(int argc, char **argv) {
   };
   auto leaveGame = [&] {
     recordCurrentSession();
+    rewindHeld = false;
     if (activeRuntime) {
       activeRuntime->setFastForward(false);
       activeRuntime->setSlowMotion(false);
@@ -768,6 +778,7 @@ int Application::run(int argc, char **argv) {
     activeRuntime->setPaused(true);
     activeRuntime->setFastForward(false);
     activeRuntime->setSlowMotion(false);
+    rewindHeld = false;
     pauseSessionClock();
     pauseAction = 0;
     pauseConfirmingPower = false;
@@ -1389,6 +1400,19 @@ int Application::run(int argc, char **argv) {
                                          SDL_CONTROLLERBUTTONDOWN);
           continue;
         }
+        if ((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
+            event.key.keysym.sym == SDLK_BACKSPACE) {
+          if (event.type == SDL_KEYDOWN && event.key.repeat != 0)
+            continue;
+          rewindHeld = event.type == SDL_KEYDOWN;
+          continue;
+        }
+        if ((event.type == SDL_CONTROLLERBUTTONDOWN ||
+             event.type == SDL_CONTROLLERBUTTONUP) &&
+            event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
+          rewindHeld = event.type == SDL_CONTROLLERBUTTONDOWN;
+          continue;
+        }
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
             event.key.keysym.sym == SDLK_ESCAPE) {
           enterPause();
@@ -1764,14 +1788,10 @@ int Application::run(int argc, char **argv) {
         } else if (x >= 466 && x <= 1476) {
           bool clickedOption = false;
           if (settingCategory == 0) {
-            if (y >= 410 && y <= 502) {
-              settingRow = 0;
-              clickedOption = true;
-            } else if (y >= 516 && y <= 608) {
-              settingRow = 1;
-              clickedOption = true;
-            } else if (y >= 622 && y <= 714) {
-              settingRow = 2;
+            const int clickedRow = ui::generalPageRowAt(static_cast<int>(x),
+                                                        static_cast<int>(y));
+            if (clickedRow >= 0) {
+              settingRow = clickedRow;
               clickedOption = true;
             }
           } else if (settingCategory == 3) {
@@ -1940,7 +1960,12 @@ int Application::run(int argc, char **argv) {
     const config::InputPrompts prompts = currentPrompts();
     if (screen == Screen::Game) {
       if (activeRuntime) {
-        activeRuntime->update();
+        // Holding the rewind key stops the clock and walks the snapshots
+        // backwards; releasing it resumes from the restored point in time.
+        if (rewindHeld)
+          (void)activeRuntime->rewindStep();
+        else
+          activeRuntime->update();
         activeRuntime->render(renderer);
       }
     } else if (screen == Screen::Pause) {

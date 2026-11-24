@@ -1,6 +1,7 @@
 #include "ui/GameManagementScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
+#include "ui/SettingsScreen.hpp"
 #include <SDL.h>
 #include <cstdlib>
 #include <iostream>
@@ -53,6 +54,13 @@ int main(int argc, char **argv) {
         "Gameplay area must not activate display rows");
   check(pauseActionAt(500, 450) == -1,
         "Gameplay area must not activate actions");
+  for (int row = 0; row < settingRowCount(0); ++row)
+    check(generalPageRowAt(1200, 404 + row * 84 + 20) == row,
+          "General row hit target");
+  check(generalPageRowAt(1200, 404 + settingRowCount(0) * 84) == -1,
+        "General hit testing must stop after the last row");
+  check(generalPageRowAt(300, 420) == -1,
+        "The settings sidebar must not activate general rows");
   check(powerCycleChoiceAt(600, 530) == 0,
         "Power-cycle dialog defaults to cancel");
   check(powerCycleChoiceAt(900, 530) == 1, "Power-cycle confirmation target");
