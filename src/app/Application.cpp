@@ -2277,6 +2277,15 @@ int Application::run(int argc, char **argv) {
     } else {
       homeRowSettled = false;
     }
+    // The highlighted game is the one being looked at, so its art jumps the
+    // queue; the shelf's left-to-right order fills in after it.
+    if (screen == Screen::Home || selectedEntryAvailable()) {
+      const auto &shelf = gameLibrary.entries();
+      if (selectedGame < static_cast<int>(shelf.size())) {
+        const auto index = static_cast<std::size_t>(selectedGame);
+        (void)coverCache.cover(renderer, shelf[index]);
+      }
+    }
     // Downloads and decodes finish here, never inside a draw call.
     coverCache.poll(renderer);
     if (screen == Screen::Game) {

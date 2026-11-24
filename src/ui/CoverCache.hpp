@@ -68,6 +68,10 @@ class CoverCache : public CoverSource {
   std::set<std::string> attempted_;
   std::thread worker_;
   std::shared_ptr<DownloadJob> job_;
+  // A card asks for its cover while it is being drawn, and a thread should not
+  // be started in the middle of a frame, so the request waits here until the
+  // next poll.
+  library::GameEntry pendingGame_;
 };
 
 }  // namespace launcher::ui

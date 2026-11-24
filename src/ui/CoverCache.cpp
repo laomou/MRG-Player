@@ -160,6 +160,7 @@ void CoverCache::shutdown() {
   else if (worker_.joinable())
     worker_.join();
   job_.reset();
+  pendingGame_ = {};
   for (auto &entry : covers_)
     SDL_DestroyTexture(entry.second);
   covers_.clear();
@@ -186,11 +187,11 @@ SDL_Texture *CoverCache::cover(SDL_Renderer *renderer, const library::GameEntry 
   // One download at a time. A card that asks while another download is running
   // stays unmarked on purpose: it gets its turn on a later frame instead of
   // being written off for the rest of the session.
-  if (job_ != nullptr)
+  if (job_ != nullptr || !pendingGame_.id.empty())
     return nullptr;
   if (!attempted_.insert(game.id).second)
     return nullptr;
-  startDownload(game);
+  pendingGame_ = game;
   return nullptr;
 }
 
@@ -246,8 +247,12 @@ void CoverCache::startDownload(const library::GameEntry &game) {
     for (const std::string &url : urls) {
       std::uint64_t bytes = 0;
       std::string error;
-      if (!io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error))
+      if (!io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error)) {
+        // A refused or missing file still leaves an empty download behind.
+        std::error_code code;
+        fs::remove(paths::fromUtf8(partial), code);
         continue;
+      }
       std::ifstream input(paths::fromUtf8(partial), std::ios::binary);
       std::vector<std::uint8_t> head(8, 0);
       input.read(reinterpret_cast<char *>(head.data()), static_cast<std::streamsize>(head.size()));
@@ -264,12 +269,22 @@ void CoverCache::startDownload(const library::GameEntry &game) {
       }
       fs::remove(paths::fromUtf8(partial), code);
     }
+    if (!ok) {
+      std::error_code code;
+      fs::remove(paths::fromUtf8(partial), code);
+    }
     job->ok = ok;
     job->done.store(true, std::memory_order_release);
   });
 }
 
 void CoverCache::poll(SDL_Renderer *renderer) {
+  // Between frames is the only place a download may begin.
+  if (job_ == nullptr && !pendingGame_.id.empty()) {
+    const library::GameEntry next = pendingGame_;
+    pendingGame_ = {};
+    startDownload(next);
+  }
   if (job_ == nullptr || !job_->done.load(std::memory_order_acquire))
     return;
   if (worker_.joinable())
