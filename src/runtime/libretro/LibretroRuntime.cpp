@@ -21,6 +21,7 @@
 #include "library/GameLibrary.hpp"
 #include "runtime/VideoViewport.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
+#include "util/ImageFile.hpp"
 #include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
@@ -120,9 +121,9 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   gamePath_ = game.filePath;
   renderer_ = renderer;
   const std::string directory = std::string(game::platformDescriptor(game.platform).managedDirectory);
-  savePath_ =
-      paths::toUtf8(paths::fromUtf8(config::dataSubdirectory("saves", directory)) /
-                    (game.id + ".srm"));
+  savePath_ = paths::toUtf8(
+      paths::fromUtf8(config::dataSubdirectory("saves", directory)) /
+      paths::fromUtf8(game.id + ".srm"));
   stateDirectory_ = config::dataSubdirectory("states", directory);
   systemDirectory_ =
       paths::toUtf8(paths::fromUtf8(config::dataRoot()) / "system");
@@ -919,7 +920,8 @@ std::string LibretroRuntime::statePath(int slot) const {
     return {};
   const fs::path file =
       paths::fromUtf8(stateDirectory_) /
-      (gameId_ + "-slot" + std::to_string(slot + 1) + ".mrgstate");
+      paths::fromUtf8(gameId_ + "-slot" + std::to_string(slot + 1) +
+                      ".mrgstate");
   return paths::toUtf8(file);
 }
 
@@ -999,7 +1001,7 @@ void LibretroRuntime::writeStateMetadata(const std::string &path) const {
       static_cast<int>(width_ * sizeof(std::uint32_t)), SDL_PIXELFORMAT_ARGB8888);
   if (thumbnail == nullptr)
     return;
-  (void)SDL_SaveBMP(thumbnail, (path + ".bmp").c_str());
+  (void)io::saveSurfaceBmp(thumbnail, path + ".bmp");
   SDL_FreeSurface(thumbnail);
 }
 

@@ -22,7 +22,8 @@ std::string batterySavePath(const library::GameEntry &game, std::string_view dir
                                     ? config::dataSubdirectory(
                                           "saves", std::string(game::platformDescriptor(game.platform).managedDirectory))
                                     : std::string(directoryOverride);
-  return paths::toUtf8(paths::fromUtf8(directory) / (game.id + ".srm"));
+  return paths::toUtf8(paths::fromUtf8(directory) /
+                       paths::fromUtf8(game.id + ".srm"));
 }
 
 } // namespace

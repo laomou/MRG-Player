@@ -74,6 +74,7 @@ add_library(mrg-platform STATIC
   src/config/AppPaths.cpp
   src/config/InputBindings.cpp
   src/game/GamePlatform.cpp
+  src/util/ImageFile.cpp
   src/util/Utf8Path.cpp
 )
 target_include_directories(mrg-platform PUBLIC src)

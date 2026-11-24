@@ -22,6 +22,7 @@
 #include "runtime/RuntimeRegistry.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "runtime/libretro/CoreInstaller.hpp"
+#include "util/ImageFile.hpp"
 #include "util/Utf8Path.hpp"
 
 #if defined(MRG_HAVE_ZLIB)
@@ -598,6 +599,12 @@ int main(int, char **) {
                  fs::is_regular_file(
                      launcher::paths::fromUtf8(unicodeInfo.thumbnailPath)),
              "the non-ASCII state thumbnail is missing");
+      SDL_Surface *unicodeThumbnail =
+          launcher::io::loadSurfaceBmp(unicodeInfo.thumbnailPath);
+      expect(unicodeThumbnail != nullptr,
+             "the non-ASCII state thumbnail cannot be decoded");
+      if (unicodeThumbnail != nullptr)
+        SDL_FreeSurface(unicodeThumbnail);
       expect(unicodeRuntime->loadState(0, unicodeError) ==
                  launcher::runtime::StateStatus::Loaded,
              "loading a non-ASCII state failed: " + unicodeError);

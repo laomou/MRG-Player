@@ -28,6 +28,7 @@
 #include "runtime/RuntimeRegistry.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "runtime/libretro/CoreInstaller.hpp"
+#include "util/ImageFile.hpp"
 #include "util/Utf8Path.hpp"
 #include "ui/GameManagementScreen.hpp"
 #include "ui/HomeScreen.hpp"
@@ -458,7 +459,7 @@ int Application::run(int argc, char **argv) {
       stateSlots[static_cast<std::size_t>(slot)].playTime = info.playTime;
       if (info.thumbnailPath.empty())
         continue;
-      SDL_Surface *surface = SDL_LoadBMP(info.thumbnailPath.c_str());
+      SDL_Surface *surface = io::loadSurfaceBmp(info.thumbnailPath);
       if (surface == nullptr)
         continue;
       stateSlots[static_cast<std::size_t>(slot)].thumbnail =
