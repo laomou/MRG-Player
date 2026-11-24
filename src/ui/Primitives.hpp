@@ -27,6 +27,11 @@ void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
           int scale, SDL_Color color);
 void centeredText(SDL_Renderer *renderer, int centerX, int y,
                   const std::string &value, int scale, SDL_Color color);
+// Centres a short label - a button glyph, a platform badge - inside a circle or
+// a pill. text() sits runs on the CJK baseline, so this uses the rendered box
+// instead of a hand-tuned offset.
+void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
+                   const std::string &value, int scale, SDL_Color color);
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time);
 
 // One footer legend entry: what the control does, then the control itself, the

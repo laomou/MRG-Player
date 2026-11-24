@@ -354,6 +354,25 @@ void centeredText(SDL_Renderer *renderer, int centerX, int y,
   text(renderer, centerX - textWidth(value, scale) / 2, y, value, scale, color);
 }
 
+void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
+                   const std::string &value, int scale, SDL_Color color) {
+  if (value.empty())
+    return;
+  TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
+  int width = 0;
+  int height = 0;
+  if (font == nullptr ||
+      TTF_SizeUTF8(font, value.c_str(), &width, &height) != 0) {
+    text(renderer, centerX - textWidth(value, scale) / 2, centerY - 3 * scale,
+         value, scale, color);
+    return;
+  }
+  TTF_Font *cjk = fontForScale(scale);
+  const int baseline = cjk ? TTF_FontAscent(cjk) : TTF_FontAscent(font);
+  const int top = centerY - height / 2 - (baseline - TTF_FontAscent(font));
+  text(renderer, centerX - width / 2, top, value, scale, color);
+}
+
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time) {
   for (int y = 0; y < kLogicalHeight; ++y) {
     const float t = static_cast<float>(y) / kLogicalHeight;

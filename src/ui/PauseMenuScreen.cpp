@@ -138,9 +138,9 @@ void drawPauseMenu(
     circle(renderer, 1048, static_cast<int>(y + 22), 14,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
-    centeredText(renderer, 1048, static_cast<int>(y + 13), glyphs[action], 2,
-                 selected ? SDL_Color{255, 211, 101, 255}
-                          : SDL_Color{210, 218, 232, 255});
+    centeredGlyph(renderer, 1048, static_cast<int>(y + 22), glyphs[action], 2,
+                  selected ? SDL_Color{255, 211, 101, 255}
+                           : SDL_Color{210, 218, 232, 255});
     text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
          2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
