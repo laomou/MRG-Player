@@ -76,7 +76,10 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
   const Game &style = styleFor(index);
   const CardBox box = cardBox(column, selected);
   const float x = box.x;
-  const float y = box.y - (selected ? pulse * 3.0f : 0.0f);
+  // The selected card sits still: the highlight does the work. A vertical
+  // float here only moved it a fraction of a pixel per frame, which the
+  // rasteriser turned into a one-pixel hop every few frames.
+  const float y = box.y;
   const float width = box.width;
   const float height = box.height;
   const Uint8 alpha = selected ? 255 : 150;
