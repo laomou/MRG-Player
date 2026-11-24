@@ -186,7 +186,10 @@ constexpr Entry kText[]{
     {"REFRESH", "刷新"},
     {"CORE INSTALLED", "核心已安装"},
     {"CORE INSTALL FAILED", "核心安装失败"},
-    {"DOWNLOADS COME FROM THE LIBRETRO NIGHTLY BUILDS", "下载来自 libretro 的每夜构建"}};
+    {"DOWNLOADS COME FROM THE LIBRETRO NIGHTLY BUILDS", "下载来自 libretro 的每夜构建"},
+    {"CORE OPTIONS", "核心选项"},
+    {"THIS CORE DECLARES NO OPTIONS", "该核心没有提供选项"},
+    {"RESTORE DEFAULTS", "恢复默认"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

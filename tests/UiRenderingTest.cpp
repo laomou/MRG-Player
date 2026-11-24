@@ -35,8 +35,17 @@ int main(int argc, char **argv) {
   }
   check(pauseSlotAt(1100, 270) == -1, "Outside slots");
   for (int action = 0; action < kPauseActionCount; ++action)
-    check(pauseActionAt(1200, 396 + action * 56 + 25) == action,
+    check(pauseActionAt(1200, 396 + action * 48 + 22) == action,
           "Pause action hit target");
+  check(kPauseActionCount == 8,
+        "The pause card lists resume, states, reset, display, options, home");
+  for (int row = 0; row < kPauseCoreOptionRows; ++row)
+    check(pauseCoreOptionAt(1200, 300 + row * 56 + 25, 0) == row,
+          "Core option row hit target");
+  check(pauseCoreOptionAt(1200, 300 + 25, 4) == 4,
+        "Core option hit target follows the scroll offset");
+  check(pauseCoreOptionAt(500, 300, 0) == -1,
+        "Gameplay area must not activate core option rows");
   for (int row = 0; row < kPauseVideoRowCount; ++row)
     check(pauseVideoRowAt(1200, 300 + row * 80 + 35) == row,
           "Display row hit target");

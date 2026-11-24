@@ -391,6 +391,7 @@ int Application::run(int argc, char **argv) {
   int smokeRomFrames = 0;
   bool smokeRomCaptured = false;
   bool smokePauseVideo = false;
+  bool smokePauseCoreOptions = false;
 #endif
   int stateSlot = 0;
   bool pauseConfirmingPower = false;
@@ -400,6 +401,11 @@ int Application::run(int argc, char **argv) {
   bool pauseVideoPanel = false;
   int pauseVideoRow = 0;
   ui::PauseVideoState pauseVideo;
+  // The core-options panel lists whatever the running core declared; values
+  // are stored per core so every game on that core keeps them.
+  bool pauseCoreOptionsPanel = false;
+  int pauseCoreOptionCursor = 0;
+  int pauseCoreOptionScroll = 0;
   std::string pauseFeedback;
   Uint64 pauseFeedbackUntil = 0;
   // Short banner over the picture when the mute hotkey changes the setting.
@@ -768,6 +774,9 @@ int Application::run(int argc, char **argv) {
     pausePowerChoice = 0;
     pauseVideoPanel = false;
     pauseVideoRow = 0;
+    pauseCoreOptionsPanel = false;
+    pauseCoreOptionCursor = 0;
+    pauseCoreOptionScroll = 0;
     pauseFeedback.clear();
     refreshStateSlots();
     screen = Screen::Pause;
@@ -880,6 +889,64 @@ int Application::run(int argc, char **argv) {
     else
       adjustPauseVideo(pauseVideoRow, 1);
   };
+  auto coreOptionList = [&]() -> const runtime::CoreOptionList & {
+    static const runtime::CoreOptionList empty;
+    return activeRuntime ? activeRuntime->coreOptions() : empty;
+  };
+  auto clampCoreOptionScroll = [&] {
+    const int total = static_cast<int>(coreOptionList().size());
+    const int maximum = std::max(0, total - ui::kPauseCoreOptionRows);
+    pauseCoreOptionScroll = std::clamp(pauseCoreOptionScroll, 0, maximum);
+  };
+  auto openPauseCoreOptionsPanel = [&] {
+    pauseCoreOptionsPanel = true;
+    pauseCoreOptionCursor = 0;
+    pauseCoreOptionScroll = 0;
+  };
+  auto closePauseCoreOptionsPanel = [&] { pauseCoreOptionsPanel = false; };
+  auto movePauseCoreOption = [&](int direction) {
+    const auto &options = coreOptionList();
+    if (options.empty())
+      return;
+    const int total = static_cast<int>(options.size());
+    pauseCoreOptionCursor = (pauseCoreOptionCursor + direction + total) % total;
+    if (pauseCoreOptionCursor < pauseCoreOptionScroll) {
+      pauseCoreOptionScroll = pauseCoreOptionCursor;
+    } else if (pauseCoreOptionCursor >=
+               pauseCoreOptionScroll + ui::kPauseCoreOptionRows) {
+      pauseCoreOptionScroll =
+          pauseCoreOptionCursor - ui::kPauseCoreOptionRows + 1;
+    }
+    clampCoreOptionScroll();
+  };
+  // Changing a value tells the core through the environment callback; the
+  // runtime persists it and flags the next GET_VARIABLE_UPDATE.
+  auto changePauseCoreOption = [&](int direction) {
+    if (!activeRuntime)
+      return;
+    const auto &options = activeRuntime->coreOptions();
+    if (options.empty())
+      return;
+    const int index = std::clamp(pauseCoreOptionCursor, 0,
+                                 static_cast<int>(options.size()) - 1);
+    const runtime::CoreOption &option =
+        options[static_cast<std::size_t>(index)];
+    if (option.values.empty())
+      return;
+    const int count = static_cast<int>(option.values.size());
+    const int selected =
+        (static_cast<int>(option.selected) + direction + count) % count;
+    if (!activeRuntime->setCoreOption(
+            option.key,
+            option.values[static_cast<std::size_t>(selected)].value)) {
+      std::fprintf(stderr, "Core option %s refused a new value\n",
+                   option.key.c_str());
+    }
+  };
+  auto resetPauseCoreOptions = [&] {
+    if (activeRuntime)
+      activeRuntime->resetCoreOptions();
+  };
   auto executePauseAction = [&] {
     if (!activeRuntime)
       return;
@@ -903,6 +970,10 @@ int Application::run(int argc, char **argv) {
       return;
     }
     if (pauseAction == 6) {
+      openPauseCoreOptionsPanel();
+      return;
+    }
+    if (pauseAction == 7) {
       leaveGame();
       return;
     }
@@ -1365,6 +1436,61 @@ int Application::run(int argc, char **argv) {
         continue;
       }
 
+      if (screen == Screen::Pause && pauseCoreOptionsPanel) {
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+          const SDL_Keycode key = event.key.keysym.sym;
+          if (key == SDLK_ESCAPE || key == SDLK_b)
+            closePauseCoreOptionsPanel();
+          else if (key == SDLK_UP)
+            movePauseCoreOption(-1);
+          else if (key == SDLK_DOWN)
+            movePauseCoreOption(1);
+          else if (key == SDLK_LEFT)
+            changePauseCoreOption(-1);
+          else if (key == SDLK_RIGHT)
+            changePauseCoreOption(1);
+          else if (key == SDLK_r)
+            resetPauseCoreOptions();
+          else if (key == SDLK_RETURN || key == SDLK_SPACE)
+            changePauseCoreOption(1);
+        } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+          const Uint8 button = event.cbutton.button;
+          if (button == SDL_CONTROLLER_BUTTON_B ||
+              button == SDL_CONTROLLER_BUTTON_BACK)
+            closePauseCoreOptionsPanel();
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP)
+            movePauseCoreOption(-1);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+            movePauseCoreOption(1);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+            changePauseCoreOption(-1);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+            changePauseCoreOption(1);
+          else if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
+            resetPauseCoreOptions();
+          else if (button == SDL_CONTROLLER_BUTTON_A)
+            changePauseCoreOption(1);
+        } else if (event.type == SDL_MOUSEBUTTONDOWN) {
+          float x = 0.0f;
+          float y = 0.0f;
+          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
+                                    &x, &y);
+          if (event.button.button == SDL_BUTTON_RIGHT) {
+            closePauseCoreOptionsPanel();
+          } else if (event.button.button == SDL_BUTTON_LEFT) {
+            const int row = ui::pauseCoreOptionAt(x, y, pauseCoreOptionScroll);
+            const int total = static_cast<int>(coreOptionList().size());
+            if (row >= 0 && row < total) {
+              pauseCoreOptionCursor = row;
+              changePauseCoreOption(1);
+            }
+          }
+        } else if (event.type == SDL_MOUSEWHEEL && event.wheel.y != 0) {
+          movePauseCoreOption(event.wheel.y < 0 ? 1 : -1);
+        }
+        continue;
+      }
+
       if (screen == Screen::Pause && pauseVideoPanel) {
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
           const SDL_Keycode key = event.key.keysym.sym;
@@ -1820,7 +1946,12 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Pause) {
       if (activeRuntime) {
         activeRuntime->render(renderer);
-        if (pauseVideoPanel) {
+        if (pauseCoreOptionsPanel) {
+          ui::drawPauseCoreOptionsPanel(renderer, pauseCoreOptionCursor,
+                                        pauseCoreOptionScroll,
+                                        activeRuntime->coreOptions(),
+                                        currentLanguage(), prompts);
+        } else if (pauseVideoPanel) {
           ui::drawPauseVideoPanel(renderer, pauseVideoRow, pauseVideo,
                                   currentLanguage(), prompts);
         } else {
@@ -1926,6 +2057,14 @@ int Application::run(int argc, char **argv) {
       } else if (smokePauseCard && pauseVideoPanel) {
         captureFrame(renderer, "pause-display-screenshot.bmp");
         smokePauseVideo = true;
+        // The options panel sits behind the same action, so the run proves
+        // both cards render.
+        pauseVideoPanel = false;
+        pauseAction = 6;
+        executePauseAction();
+      } else if (smokePauseVideo && pauseCoreOptionsPanel) {
+        captureFrame(renderer, "pause-options-screenshot.bmp");
+        smokePauseCoreOptions = true;
       }
     }
 #endif
@@ -1937,7 +2076,8 @@ int Application::run(int argc, char **argv) {
 #if defined(MRG_ENABLE_SMOKE_TESTS)
     if (options.smokeTest() &&
         (!options.smokeSettings || smokeSettingsAbout) &&
-        (!options.smokePause || smokePauseVideo || screen != Screen::Pause) &&
+        (!options.smokePause ||
+         smokePauseCoreOptions || screen != Screen::Pause) &&
         (!options.smokeRom || smokeRomCaptured))
       running = false;
     else

@@ -16,12 +16,16 @@ using i18n::tr;
 constexpr float kActionX = 1012.0f;
 constexpr float kActionY = 396.0f;
 constexpr float kActionWidth = 480.0f;
-constexpr float kActionHeight = 50.0f;
-constexpr float kActionStep = 56.0f;
+constexpr float kActionHeight = 44.0f;
+constexpr float kActionStep = 48.0f;
 
 constexpr float kVideoRowY = 300.0f;
 constexpr float kVideoRowStep = 80.0f;
 constexpr float kVideoRowHeight = 70.0f;
+
+constexpr float kOptionRowY = 300.0f;
+constexpr float kOptionRowStep = 56.0f;
+constexpr float kOptionRowHeight = 50.0f;
 
 constexpr float kConfirmX = 460.0f;
 constexpr float kConfirmY = 300.0f;
@@ -120,24 +124,24 @@ void drawPauseMenu(
     }
   }
   const std::array<TextId, kPauseActionCount> labels{
-      TextId::ResumeGame,   TextId::SaveState,  TextId::LoadState,
-      TextId::ConsoleReset, TextId::PowerCycle, TextId::Display,
-      TextId::ReturnHome};
-  const std::array<const char *, kPauseActionCount> glyphs{">", "S", "L", "R",
-                                                           "P", "D", "<"};
+      TextId::ResumeGame,   TextId::SaveState,    TextId::LoadState,
+      TextId::ConsoleReset, TextId::PowerCycle,   TextId::Display,
+      TextId::CoreOptions,  TextId::ReturnHome};
+  const std::array<const char *, kPauseActionCount> glyphs{
+      ">", "S", "L", "R", "P", "D", "O", "<"};
   for (int action = 0; action < kPauseActionCount; ++action) {
     const float y = kActionY + action * kActionStep;
     const bool selected = action == selectedAction;
-    rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 18,
+    rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 16,
             selected ? SDL_Color{255, 211, 101, 255}
                      : SDL_Color{255, 255, 255, 16});
-    circle(renderer, 1048, static_cast<int>(y + 25), 15,
+    circle(renderer, 1048, static_cast<int>(y + 22), 14,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
-    centeredText(renderer, 1048, static_cast<int>(y + 12), glyphs[action], 2,
+    centeredText(renderer, 1048, static_cast<int>(y + 13), glyphs[action], 2,
                  selected ? SDL_Color{255, 211, 101, 255}
                           : SDL_Color{210, 218, 232, 255});
-    text(renderer, 1084, static_cast<int>(y + 12), tr(labels[action], language),
+    text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
          2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
   }
@@ -297,6 +301,78 @@ int pauseActionAt(float x, float y) {
       return action;
   }
   return -1;
+}
+
+int pauseCoreOptionAt(float x, float y, int scroll) {
+  if (x < kActionX || x > kActionX + kActionWidth)
+    return -1;
+  for (int row = 0; row < kPauseCoreOptionRows; ++row) {
+    const float top = kOptionRowY + row * kOptionRowStep;
+    if (y >= top && y <= top + kOptionRowHeight)
+      return scroll + row;
+  }
+  return -1;
+}
+
+void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
+                               const runtime::CoreOptionList &options,
+                               i18n::Language language,
+                               const config::InputPrompts &prompts) {
+  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 64});
+  rounded(renderer, 968, 72, 568, 772, 28, {0, 0, 0, 45});
+  rounded(renderer, 976, 64, 552, 772, 28, {12, 21, 37, 225});
+  rounded(renderer, 1012, 104, 4, 32, 2, {255, 211, 101, 255});
+  text(renderer, 1032, 106, tr(TextId::PauseTitle, language), 2,
+       {255, 211, 101, 255});
+  text(renderer, 1012, 158, tr(TextId::CoreOptions, language), 3,
+       {245, 247, 252, 255});
+  fill(renderer, 1012, 218, 480, 1, {255, 255, 255, 30});
+
+  const int total = static_cast<int>(options.size());
+  if (total == 0) {
+    text(renderer, 1012, 320,
+         fitLine(tr(TextId::CoreOptionsEmpty, language), 480, 2), 2,
+         {165, 181, 204, 255});
+  } else {
+    const int offset =
+        std::clamp(scroll, 0, std::max(0, total - kPauseCoreOptionRows));
+    for (int row = 0; row < kPauseCoreOptionRows; ++row) {
+      const int index = offset + row;
+      if (index >= total)
+        break;
+      const runtime::CoreOption &option =
+          options[static_cast<std::size_t>(index)];
+      const bool selected = index == cursor;
+      const float y = kOptionRowY + row * kOptionRowStep;
+      rounded(renderer, kActionX, y, kActionWidth, kOptionRowHeight, 14,
+              selected ? SDL_Color{255, 211, 101, 255}
+                       : SDL_Color{255, 255, 255, 16});
+      text(renderer, 1032, static_cast<int>(y + 15),
+           fitLine(option.label, 240, 2), 2,
+           selected ? SDL_Color{24, 24, 39, 255}
+                    : SDL_Color{241, 245, 251, 255});
+      std::string value;
+      if (option.selected < option.values.size())
+        value = option.values[option.selected].label;
+      value = fitLine(value, 190, 2);
+      text(renderer, 1472 - textWidth(value, 2), static_cast<int>(y + 15),
+           value, 2,
+           selected ? SDL_Color{24, 24, 39, 255}
+                    : SDL_Color{255, 211, 101, 255});
+    }
+    text(renderer, 1012, 660,
+         std::to_string(cursor + 1) + " / " + std::to_string(total), 1,
+         {165, 181, 204, 255});
+  }
+
+  drawHintRow(renderer, 1492.0f, 700.0f,
+              {{tr(TextId::ResetCoreOptions, language), "R", false}},
+              {255, 211, 101, 255});
+  const std::vector<Hint> footer{
+      {tr(TextId::ChangeControl, language), prompts.horizontal, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
+      {tr(TextId::Back, language), prompts.back, false}};
+  drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
 }
 
 } // namespace launcher::ui

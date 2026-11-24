@@ -8,10 +8,11 @@
 
 #include "config/InputBindings.hpp"
 #include "i18n/Localization.hpp"
+#include "runtime/CoreOptions.hpp"
 
 namespace launcher::ui {
 
-inline constexpr int kPauseActionCount = 7;
+inline constexpr int kPauseActionCount = 8;
 inline constexpr int kStateSlotCount = 3;
 
 // What the pause menu shows for one save-state slot. The thumbnail texture is
@@ -47,6 +48,17 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                          const PauseVideoState &video, i18n::Language language,
                          const config::InputPrompts &prompts);
 int pauseVideoRowAt(float x, float y);
+
+// The option panel lists the settings the running core declares. Six fit on
+// the card at once and the rest scroll, so a core with dozens of options stays
+// navigable with the same controls as the display panel.
+inline constexpr int kPauseCoreOptionRows = 6;
+
+void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
+                               const runtime::CoreOptionList &options,
+                               i18n::Language language,
+                               const config::InputPrompts &prompts);
+int pauseCoreOptionAt(float x, float y, int scroll);
 
 // Power cycling wipes unsaved progress, so it asks first. Choice 0 cancels
 // (the default) and choice 1 confirms.

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "config/InputBindings.hpp"
@@ -52,6 +53,12 @@ public:
   [[nodiscard]] bool statePresent(int slot) const noexcept override;
   [[nodiscard]] StateInfo stateInfo(int slot) const override;
 
+  [[nodiscard]] const CoreOptionList &coreOptions() const noexcept override {
+    return options_;
+  }
+  bool setCoreOption(std::string_view key, std::string_view value) override;
+  void resetCoreOptions() override;
+
   [[nodiscard]] game::GamePlatform platform() const noexcept override { return platform_; }
   [[nodiscard]] std::string_view name() const noexcept override { return name_; }
   [[nodiscard]] std::string_view error() const noexcept override { return error_; }
@@ -91,6 +98,17 @@ private:
   void writeStateMetadata(const std::string &path) const;
   bool rebuildGame();
 
+  // Core options arrive either as the version 1 key/description pairs or as
+  // the version 2 definitions with labels and categories. Both are folded into
+  // the same list, and stored values are re-applied after every declaration.
+  bool declareCoreOptionsV1(const retro_variable *variables);
+  bool declareCoreOptionsV1Definitions(const retro_core_option_definition *definitions);
+  bool declareCoreOptionsV2(const retro_core_options_v2 *definitions);
+  void applyStoredCoreOptions();
+  void loadCoreOptionValues();
+  void saveCoreOptionValues() const;
+  [[nodiscard]] CoreOption *findCoreOption(std::string_view key);
+
   LibretroCore core_;
   SDL_Renderer *renderer_ = nullptr;
   SDL_Texture *texture_ = nullptr;
@@ -107,6 +125,10 @@ private:
   std::vector<std::uint8_t> romBytes_;
   std::vector<std::uint32_t> frame_;
   std::vector<std::uint8_t> stateBuffer_;
+  CoreOptionList options_;
+  std::string optionsPath_;
+  std::vector<std::pair<std::string, std::string>> storedOptions_;
+  bool optionsChanged_ = false;
 
   game::GamePlatform platform_ = game::GamePlatform::Unknown;
   config::InputBindings bindings_{};
