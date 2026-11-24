@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "runtime/VideoViewport.hpp"
 #include "util/Utf8Path.hpp"
 
 namespace launcher::ui {
@@ -21,6 +22,19 @@ std::array<TTF_Font *, 6> gFonts{};
 std::string gFontPath;
 std::array<TTF_Font *, 6> gLatinFonts{};
 std::string gLatinFontPath;
+
+// Canvas units to output pixels. The interface keeps its 1600x900 layout, but
+// every primitive converts on the way out, so a 1920x1080 window rasterises
+// text at 24 pixels instead of stretching a 20 pixel texture.
+float gScale = 1.0f;
+float gOffsetX = 0.0f;
+float gOffsetY = 0.0f;
+
+constexpr int kSubRows = 4;
+
+float deviceX(float value) { return gOffsetX + value * gScale; }
+float deviceY(float value) { return gOffsetY + value * gScale; }
+float deviceLength(float value) { return value * gScale; }
 
 void releaseGearTexture();
 
@@ -45,6 +59,22 @@ void clearTextCache() {
   }
   gTextCache.clear();
   gTextRenderer = nullptr;
+}
+
+// Drops every rasterised font, so the next measurement opens one at the size
+// the new output scale asks for. Text is cached per string, so the cache goes
+// first.
+void closeFonts() {
+  for (TTF_Font *&font : gFonts) {
+    if (font != nullptr)
+      TTF_CloseFont(font);
+    font = nullptr;
+  }
+  for (TTF_Font *&font : gLatinFonts) {
+    if (font != nullptr)
+      TTF_CloseFont(font);
+    font = nullptr;
+  }
 }
 
 // One gear silhouette, rasterised at four times the size the header asks for
@@ -117,14 +147,23 @@ bool requiresUtf8Font(const std::string &value) {
                      [](unsigned char ch) { return ch >= 0x80; });
 }
 
+// The four sizes the interface uses, in canvas units; the output scale turns
+// them into the pixel size FreeType actually rasterises.
+constexpr std::array<int, 6> kFontSizes{0, 14, 20, 28, 36, 44};
+
+int fontPixels(int scale) {
+  scale = std::clamp(scale, 1, 5);
+  return std::max(
+      1, static_cast<int>(std::lround(kFontSizes[scale] * gScale)));
+}
+
 TTF_Font *fontForScale(int scale, bool latin = false) {
   scale = std::clamp(scale, 1, 5);
   TTF_Font *&font =
       (latin ? gLatinFonts : gFonts)[static_cast<std::size_t>(scale)];
   const auto &path = latin ? gLatinFontPath : gFontPath;
-  constexpr std::array<int, 6> sizes{0, 14, 20, 28, 36, 44};
   if (font == nullptr && !path.empty()) {
-    font = TTF_OpenFont(path.c_str(), sizes[scale]);
+    font = TTF_OpenFont(path.c_str(), fontPixels(scale));
     if (font != nullptr)
       TTF_SetFontHinting(font, TTF_HINTING_NORMAL);
   }
@@ -133,6 +172,63 @@ TTF_Font *fontForScale(int scale, bool latin = false) {
 
 void setColor(SDL_Renderer *renderer, SDL_Color color) {
   SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+}
+
+// Draws one horizontal span of device pixels. The part that covers whole pixels
+// becomes a single rect and the two ends get the leftover coverage as alpha,
+// which is what smooths a curve that lands between pixels.
+void span(SDL_Renderer *renderer, float left, float right, float y,
+          SDL_Color color) {
+  if (right <= left)
+    return;
+  const float firstFull = std::ceil(left);
+  const float lastFull = std::floor(right);
+  if (lastFull <= firstFull) {
+    const int pixel = static_cast<int>(std::floor(left));
+    SDL_Color shade = color;
+    shade.a = static_cast<Uint8>(
+        std::lround(static_cast<float>(color.a) * (right - left)));
+    if (shade.a == 0)
+      return;
+    setColor(renderer, shade);
+    const SDL_FRect box{static_cast<float>(pixel), y, 1.0f, 1.0f};
+    SDL_RenderFillRectF(renderer, &box);
+    return;
+  }
+  if (firstFull > left) {
+    const int pixel = static_cast<int>(std::floor(left));
+    SDL_Color shade = color;
+    shade.a = static_cast<Uint8>(std::lround(
+        static_cast<float>(color.a) * (firstFull - left)));
+    if (shade.a != 0) {
+      setColor(renderer, shade);
+      const SDL_FRect box{static_cast<float>(pixel), y, 1.0f, 1.0f};
+      SDL_RenderFillRectF(renderer, &box);
+    }
+  }
+  setColor(renderer, color);
+  const SDL_FRect middle{firstFull, y, lastFull - firstFull, 1.0f};
+  SDL_RenderFillRectF(renderer, &middle);
+  if (right > lastFull) {
+    SDL_Color shade = color;
+    shade.a = static_cast<Uint8>(
+        std::lround(static_cast<float>(color.a) * (right - lastFull)));
+    if (shade.a != 0) {
+      setColor(renderer, shade);
+      const SDL_FRect box{lastFull, y, 1.0f, 1.0f};
+      SDL_RenderFillRectF(renderer, &box);
+    }
+  }
+}
+
+// Fills a rectangle that is already expressed in device pixels; the drawing
+// helpers that walk the output row by row use this so their rows stay one
+// pixel tall no matter how the canvas is scaled.
+void fillDevice(SDL_Renderer *renderer, float x, float y, float width,
+                float height, SDL_Color color) {
+  setColor(renderer, color);
+  const SDL_FRect rect{x, y, width, height};
+  SDL_RenderFillRectF(renderer, &rect);
 }
 
 Glyph glyph(char ch) {
@@ -242,20 +338,25 @@ bool initializeTextRenderer(const std::string &fontPath) {
 
 void shutdownTextRenderer() {
   clearTextCache();
-  for (TTF_Font *&font : gFonts) {
-    if (font != nullptr)
-      TTF_CloseFont(font);
-    font = nullptr;
-  }
-  for (TTF_Font *&font : gLatinFonts) {
-    if (font != nullptr)
-      TTF_CloseFont(font);
-    font = nullptr;
-  }
+  closeFonts();
   gLatinFontPath.clear();
   gFontPath.clear();
   if (TTF_WasInit() != 0)
     TTF_Quit();
+}
+
+void setClipRect(SDL_Renderer *renderer, float x, float y, float width,
+                 float height) {
+  const SDL_Rect clip{
+      static_cast<int>(std::lround(deviceX(x))),
+      static_cast<int>(std::lround(deviceY(y))),
+      std::max(0, static_cast<int>(std::lround(deviceLength(width)))),
+      std::max(0, static_cast<int>(std::lround(deviceLength(height))))};
+  SDL_RenderSetClipRect(renderer, &clip);
+}
+
+void clearClipRect(SDL_Renderer *renderer) {
+  SDL_RenderSetClipRect(renderer, nullptr);
 }
 
 SDL_Color mix(SDL_Color a, SDL_Color b, float t) {
@@ -269,8 +370,18 @@ SDL_Color mix(SDL_Color a, SDL_Color b, float t) {
 void fill(SDL_Renderer *renderer, float x, float y, float width, float height,
           SDL_Color color) {
   setColor(renderer, color);
-  const SDL_FRect rect{x, y, width, height};
+  const SDL_FRect rect{deviceX(x), deviceY(y), deviceLength(width),
+                       deviceLength(height)};
   SDL_RenderFillRectF(renderer, &rect);
+}
+
+void drawTexture(SDL_Renderer *renderer, SDL_Texture *texture, float x, float y,
+                 float width, float height) {
+  if (texture == nullptr)
+    return;
+  const SDL_FRect box{deviceX(x), deviceY(y), deviceLength(width),
+                      deviceLength(height)};
+  SDL_RenderCopyF(renderer, texture, nullptr, &box);
 }
 
 void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
@@ -285,8 +396,10 @@ void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
     return;
   SDL_SetTextureColorMod(gGearTexture, color.r, color.g, color.b);
   SDL_SetTextureAlphaMod(gGearTexture, color.a);
-  const SDL_FRect box{centerX - radius, centerY - radius, radius * 2.0f,
-                      radius * 2.0f};
+  const float cx = deviceX(centerX);
+  const float cy = deviceY(centerY);
+  const float size = deviceLength(radius);
+  const SDL_FRect box{cx - size, cy - size, size * 2.0f, size * 2.0f};
   SDL_RenderCopyF(renderer, gGearTexture, nullptr, &box);
   SDL_SetTextureColorMod(gGearTexture, 255, 255, 255);
   SDL_SetTextureAlphaMod(gGearTexture, 255);
@@ -294,12 +407,34 @@ void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
 
 void circle(SDL_Renderer *renderer, int centerX, int centerY, int radius,
             SDL_Color color) {
-  setColor(renderer, color);
-  for (int dy = -radius; dy <= radius; ++dy) {
-    const int dx = static_cast<int>(
-        std::sqrt(static_cast<float>(radius * radius - dy * dy)));
-    SDL_RenderDrawLine(renderer, centerX - dx, centerY + dy, centerX + dx,
-                       centerY + dy);
+  const float cx = deviceX(static_cast<float>(centerX));
+  const float cy = deviceY(static_cast<float>(centerY));
+  const float r = deviceLength(static_cast<float>(radius));
+  if (r <= 0.0f)
+    return;
+  const int firstRow = static_cast<int>(std::lround(cy - r));
+  const int rows = std::max(1, static_cast<int>(std::lround(r * 2.0f)));
+  // Vertical coverage is sampled four times per row and then applied as one
+  // alpha, so the edge is soft without the row being blended four times over.
+  for (int row = 0; row < rows; ++row) {
+    int inside = 0;
+    float widest = 0.0f;
+    for (int part = 0; part < kSubRows; ++part) {
+      const float offset =
+          static_cast<float>(row) + (part + 0.5f) / kSubRows - r;
+      const float half = std::sqrt(std::max(0.0f, r * r - offset * offset));
+      if (half > 0.0f) {
+        ++inside;
+        widest = std::max(widest, half);
+      }
+    }
+    if (inside == 0)
+      continue;
+    SDL_Color shade = color;
+    shade.a = static_cast<Uint8>(std::lround(
+        static_cast<float>(color.a) * inside / kSubRows));
+    span(renderer, cx - widest, cx + widest,
+         static_cast<float>(firstRow + row), shade);
   }
 }
 
@@ -308,23 +443,94 @@ void rounded(SDL_Renderer *renderer, float x, float y, float width,
   if (width <= 0 || height <= 0)
     return;
   radius = std::clamp(radius, 0.0f, std::min(width, height) * 0.5f);
-  // A single span per row avoids double-compositing translucent surfaces.
-  for (int row = 0; row < static_cast<int>(height); ++row) {
-    const float distance = std::min(row + 0.5f, height - row - 0.5f);
-    const float yy = std::max(0.0f, radius - distance);
-    const float inset =
-        radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
-    fill(renderer, x + inset, y + row, width - 2 * inset, 1, color);
+  const float left = deviceX(x);
+  const float top = deviceY(y);
+  const float w = deviceLength(width);
+  const float h = deviceLength(height);
+  const float r = deviceLength(radius);
+  const int firstRow = static_cast<int>(std::lround(top));
+  const int rows = std::max(1, static_cast<int>(std::lround(h)));
+  // Four vertical slices per row: the corner curve is sampled in both
+  // directions, then the row is drawn once with the coverage as its alpha so
+  // the panel is blended exactly once.
+  for (int row = 0; row < rows; ++row) {
+    int inside = 0;
+    float insetSum = 0.0f;
+    for (int part = 0; part < kSubRows; ++part) {
+      const float yy = static_cast<float>(row) + (part + 0.5f) / kSubRows;
+      if (yy <= 0.0f || yy >= h)
+        continue;
+      const float distance = std::min(yy, h - yy);
+      const float curve = std::max(0.0f, r - distance);
+      insetSum += r - std::sqrt(std::max(0.0f, r * r - curve * curve));
+      ++inside;
+    }
+    if (inside == 0)
+      continue;
+    const float inset = insetSum / static_cast<float>(inside);
+    SDL_Color shade = color;
+    shade.a = static_cast<Uint8>(std::lround(
+        static_cast<float>(color.a) * inside / kSubRows));
+    span(renderer, left + inset, left + w - inset,
+         static_cast<float>(firstRow + row), shade);
   }
 }
 
+void gradientRounded(SDL_Renderer *renderer, float x, float y, float width,
+                     float height, float radius, SDL_Color top,
+                     SDL_Color bottom) {
+  const float left = deviceX(x);
+  const float first = deviceY(y);
+  const float w = deviceLength(width);
+  const float h = deviceLength(height);
+  const float r = deviceLength(radius);
+  const int rows = std::max(1, static_cast<int>(std::lround(h)));
+  for (int row = 0; row < rows; ++row) {
+    const float t = (static_cast<float>(row) + 0.5f) / static_cast<float>(rows);
+    const float distance =
+        std::min(static_cast<float>(row) + 0.5f, h - row - 0.5f);
+    const float yy = std::max(0.0f, r - distance);
+    const float inset = r - std::sqrt(std::max(0.0f, r * r - yy * yy));
+    span(renderer, left + inset, left + w - inset, first + row,
+         mix(top, bottom, t));
+  }
+}
+
+void fadeBottomRounded(SDL_Renderer *renderer, float x, float y, float width,
+                       float height, float radius, SDL_Color color,
+                       Uint8 strength, float exponent) {
+  const float left = deviceX(x);
+  const float first = deviceY(y);
+  const float w = deviceLength(width);
+  const float h = deviceLength(height);
+  const float r = deviceLength(radius);
+  const int rows = std::max(1, static_cast<int>(std::lround(h)));
+  for (int row = 0; row < rows; ++row) {
+    const float t = (static_cast<float>(row) + 0.5f) / static_cast<float>(rows);
+    const float distance = h - row - 0.5f;
+    const float yy = std::max(0.0f, r - distance);
+    const float inset = r - std::sqrt(std::max(0.0f, r * r - yy * yy));
+    const float shade =
+        static_cast<float>(strength) * std::pow(std::min(1.0f, t), exponent);
+    SDL_Color rowColor = color;
+    rowColor.a = static_cast<Uint8>(std::lround(shade));
+    if (rowColor.a == 0)
+      continue;
+    span(renderer, left + inset, left + w - inset, first + row, rowColor);
+  }
+}
+
+// The fallback face is drawn in device pixels as well, so it keeps the same
+// size as the rasterised fonts it stands in for.
 int bitmapTextAdvance(const std::string &value, int scale) {
-  return static_cast<int>(value.size()) * 6 * scale;
+  const int pixel = std::max(1, static_cast<int>(std::lround(scale * gScale)));
+  return static_cast<int>(value.size()) * 6 * pixel;
 }
 
 void drawBitmapText(SDL_Renderer *renderer, int x, int y,
                     const std::string &value, int scale, SDL_Color color) {
   setColor(renderer, color);
+  const int pixel = std::max(1, static_cast<int>(std::lround(scale * gScale)));
   int cursor = x;
   for (char raw : value) {
     const char ch =
@@ -333,13 +539,13 @@ void drawBitmapText(SDL_Renderer *renderer, int x, int y,
     for (int row = 0; row < 7; ++row) {
       for (int col = 0; col < 5; ++col) {
         if ((bits[row] & (1u << (4 - col))) != 0u) {
-          const SDL_Rect pixel{cursor + col * scale, y + row * scale, scale,
-                               scale};
-          SDL_RenderFillRect(renderer, &pixel);
+          const SDL_Rect box{cursor + col * pixel, y + row * pixel, pixel,
+                             pixel};
+          SDL_RenderFillRect(renderer, &box);
         }
       }
     }
-    cursor += 6 * scale;
+    cursor += 6 * pixel;
   }
 }
 
@@ -371,11 +577,11 @@ int textWidth(const std::string &value, int scale) {
     width += utf8TextWidth(run, scale);
     begin = end;
   }
-  return width;
+  return gScale > 0.0f ? static_cast<int>(std::lround(width / gScale)) : width;
 }
 
-void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
-          int scale, SDL_Color color) {
+void textDevice(SDL_Renderer *renderer, int x, int y,
+                const std::string &value, int scale, SDL_Color color) {
   int cursor = x;
   std::size_t begin = 0;
   while (begin < value.size()) {
@@ -396,8 +602,9 @@ void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
     if (gTextRenderer != renderer)
       clearTextCache();
     gTextRenderer = renderer;
-    char keySuffix[32];
-    std::snprintf(keySuffix, sizeof(keySuffix), "\x1f%d|%u,%u,%u,%u", scale,
+    char keySuffix[40];
+    std::snprintf(keySuffix, sizeof(keySuffix), "\x1f%d|%d|%u,%u,%u,%u",
+                  scale, fontPixels(scale),
                   static_cast<unsigned>(color.r),
                   static_cast<unsigned>(color.g),
                   static_cast<unsigned>(color.b),
@@ -436,6 +643,12 @@ void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
   }
 }
 
+void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
+          int scale, SDL_Color color) {
+  textDevice(renderer, static_cast<int>(std::lround(deviceX(x))),
+             static_cast<int>(std::lround(deviceY(y))), value, scale, color);
+}
+
 void centeredText(SDL_Renderer *renderer, int centerX, int y,
                   const std::string &value, int scale, SDL_Color color) {
   text(renderer, centerX - textWidth(value, scale) / 2, y, value, scale, color);
@@ -445,23 +658,69 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
                    const std::string &value, int scale, SDL_Color color) {
   if (value.empty())
     return;
+  const int cx = static_cast<int>(std::lround(deviceX(centerX)));
+  const int cy = static_cast<int>(std::lround(deviceY(centerY)));
   TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
   int width = 0;
   int height = 0;
   if (font == nullptr ||
       TTF_SizeUTF8(font, value.c_str(), &width, &height) != 0) {
-    text(renderer, centerX - textWidth(value, scale) / 2, centerY - 3 * scale,
-         value, scale, color);
+    textDevice(renderer, cx - bitmapTextAdvance(value, scale) / 2,
+               cy - static_cast<int>(std::lround(3 * scale * gScale)), value,
+               scale, color);
     return;
   }
   TTF_Font *cjk = fontForScale(scale);
   const int baseline = cjk ? TTF_FontAscent(cjk) : TTF_FontAscent(font);
-  const int top = centerY - height / 2 - (baseline - TTF_FontAscent(font));
-  text(renderer, centerX - width / 2, top, value, scale, color);
+  const int top = cy - height / 2 - (baseline - TTF_FontAscent(font));
+  textDevice(renderer, cx - width / 2, top, value, scale, color);
+}
+
+void setOutputSize(int outputWidth, int outputHeight) {
+  const runtime::CanvasTransform frame =
+      runtime::fitCanvas(outputWidth, outputHeight);
+  const float delta = std::abs(frame.scale - gScale);
+  const bool moved = std::abs(frame.offsetX - gOffsetX) >= 0.5f ||
+                     std::abs(frame.offsetY - gOffsetY) >= 0.5f;
+  if (delta < 0.0005f && !moved)
+    return;
+  gScale = frame.scale;
+  gOffsetX = frame.offsetX;
+  gOffsetY = frame.offsetY;
+  if (delta < 0.0005f)
+    return;
+  // A new scale means a new rasterisation size for every glyph.
+  clearTextCache();
+  closeFonts();
+}
+
+void windowToCanvas(float windowX, float windowY, float &canvasX,
+                    float &canvasY) {
+  if (gScale <= 0.0f) {
+    canvasX = windowX;
+    canvasY = windowY;
+    return;
+  }
+  canvasX = (windowX - gOffsetX) / gScale;
+  canvasY = (windowY - gOffsetY) / gScale;
+}
+
+void canvasRect(float &x, float &y, float &width, float &height) {
+  x = gOffsetX;
+  y = gOffsetY;
+  width = deviceLength(kLogicalWidth);
+  height = deviceLength(kLogicalHeight);
 }
 
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
                     SDL_Texture *wallpaper) {
+  // Every band here is walked in device rows, so the gradient is smooth at any
+  // window size instead of being stretched by the renderer.
+  const float left = gOffsetX;
+  const float top = gOffsetY;
+  const float width = deviceLength(kLogicalWidth);
+  const float height = deviceLength(kLogicalHeight);
+  const int rows = std::max(1, static_cast<int>(std::lround(height)));
   if (wallpaper != nullptr) {
     int textureWidth = 0;
     int textureHeight = 0;
@@ -469,52 +728,60 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
                          &textureHeight) == 0 &&
         textureWidth > 0 && textureHeight > 0) {
       // Fill the canvas and let the extra edges fall outside it.
-      const float scale =
-          std::max(static_cast<float>(kLogicalWidth) / textureWidth,
-                   static_cast<float>(kLogicalHeight) / textureHeight);
-      const float width = textureWidth * scale;
-      const float height = textureHeight * scale;
-      const SDL_FRect frame{(kLogicalWidth - width) * 0.5f,
-                            (kLogicalHeight - height) * 0.5f, width, height};
+      const float artScale =
+          std::max(width / textureWidth, height / textureHeight);
+      const float artWidth = textureWidth * artScale;
+      const float artHeight = textureHeight * artScale;
+      const SDL_FRect frame{left + (width - artWidth) * 0.5f,
+                            top + (height - artHeight) * 0.5f, artWidth,
+                            artHeight};
       SDL_RenderCopyF(renderer, wallpaper, nullptr, &frame);
-      for (int y = 0; y < kLogicalHeight; ++y) {
-        const float t = static_cast<float>(y) / kLogicalHeight;
+      for (int row = 0; row < rows; ++row) {
+        const float t = static_cast<float>(row) / rows;
         const Uint8 alpha = static_cast<Uint8>(202 + 42 * t);
-        fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 1,
-             {4, 8, 20, alpha});
+        fillDevice(renderer, left, top + row, width, 1.0f, {4, 8, 20, alpha});
       }
     }
   } else {
-  for (int y = 0; y < kLogicalHeight; ++y) {
-    const float t = static_cast<float>(y) / kLogicalHeight;
+  for (int row = 0; row < rows; ++row) {
+    const float t = static_cast<float>(row) / rows;
     setColor(renderer, mix(game.top, game.bottom, t));
-    SDL_RenderDrawLine(renderer, 0, y, kLogicalWidth, y);
+    SDL_RenderDrawLineF(renderer, left, top + row + 0.5f, left + width,
+                        top + row + 0.5f);
   }
   const int sunX = 1260 + static_cast<int>(std::sin(time * 0.08f) * 22.0f);
   circle(renderer, sunX, 172, 90,
          {game.accent.r, game.accent.g, game.accent.b, 150});
   setColor(renderer, {15, 27, 57, 175});
-  std::array<SDL_Point, 13> far{{{0, 520},
-                                 {150, 350},
-                                 {270, 455},
-                                 {420, 275},
-                                 {565, 475},
-                                 {725, 325},
-                                 {900, 485},
-                                 {1060, 300},
-                                 {1220, 465},
-                                 {1405, 335},
-                                 {1600, 475},
-                                 {1600, 900},
-                                 {0, 900}}};
-  SDL_RenderDrawLines(renderer, far.data(), 11);
-  for (int y = 520; y < 900; ++y) {
-    const float wave = 70.0f * std::sin((y - 500) * 0.013f);
-    fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 1,
-         {12, 22, 48, static_cast<Uint8>(135 + std::min(90, y - 520) / 2)});
-    if ((y % 34) == 0)
-      fill(renderer, 0, static_cast<float>(y), 770 + wave, 2,
-           {game.accent.r, game.accent.g, game.accent.b, 22});
+  std::array<SDL_FPoint, 13> far{{{deviceX(0.0f), deviceY(520.0f)},
+                                 {deviceX(150.0f), deviceY(350.0f)},
+                                 {deviceX(270.0f), deviceY(455.0f)},
+                                 {deviceX(420.0f), deviceY(275.0f)},
+                                 {deviceX(565.0f), deviceY(475.0f)},
+                                 {deviceX(725.0f), deviceY(325.0f)},
+                                 {deviceX(900.0f), deviceY(485.0f)},
+                                 {deviceX(1060.0f), deviceY(300.0f)},
+                                 {deviceX(1220.0f), deviceY(465.0f)},
+                                 {deviceX(1405.0f), deviceY(335.0f)},
+                                 {deviceX(1600.0f), deviceY(475.0f)},
+                                 {deviceX(1600.0f), deviceY(900.0f)},
+                                 {deviceX(0.0f), deviceY(900.0f)}}};
+  SDL_RenderDrawLinesF(renderer, far.data(), 11);
+  const float waveTop = deviceY(520.0f);
+  for (int row = 0; row < rows; ++row) {
+    const float y = top + row;
+    if (y < waveTop)
+      continue;
+    const float logical = (y - top) / gScale;
+    const float wave = 70.0f * std::sin((logical - 500.0f) * 0.013f);
+    const int shade =
+        std::clamp(135 + (static_cast<int>(logical) - 520) / 2, 135, 180);
+    fillDevice(renderer, left, y, width, 1.0f,
+               {12, 22, 48, static_cast<Uint8>(shade)});
+    if ((static_cast<int>(logical) % 34) == 0) {
+      fillDevice(renderer, left, y, deviceLength(770.0f + wave), 1.0f,
+                 {game.accent.r, game.accent.g, game.accent.b, 22});
+    }
   }
   fill(renderer, 82, 548, 315, 40, {150, 67, 61, 120});
   fill(renderer, 82, 588, 315, 17, {85, 47, 54, 150});
@@ -522,14 +789,15 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
   for (int i = 0; i < 3; ++i)
     fill(renderer, 198.0f + i * 52.0f, 454, 48, 48,
          {game.accent.r, game.accent.g, game.accent.b, 135});
-  for (int y = 0; y < kLogicalHeight; ++y) {
-    const float t = static_cast<float>(y) / kLogicalHeight;
+  for (int row = 0; row < rows; ++row) {
+    const float t = static_cast<float>(row) / rows;
     const Uint8 alpha = static_cast<Uint8>(18 + 185 * t * t);
-    fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 1,
-         {4, 8, 20, alpha});
+    fillDevice(renderer, left, top + row, width, 1.0f, {4, 8, 20, alpha});
   }
-  for (int y = 0; y < kLogicalHeight; y += 4)
-    fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 2,
+  const float scanStep = deviceLength(4.0f);
+  const float scanHeight = std::max(1.0f, deviceLength(2.0f));
+  for (float y = top; y < top + height; y += scanStep)
+    fillDevice(renderer, left, y, width, scanHeight,
          {255, 255, 255, 4});
   }
 }
@@ -606,28 +874,40 @@ SDL_Color focusColor(float opacity) {
 void roundedBand(SDL_Renderer *renderer, float x, float y, float width,
                  float height, float radius, float thickness,
                  SDL_Color color) {
-  radius = std::clamp(radius, 0.0f, std::min(width, height) * 0.5f);
+  const float left = deviceX(x);
+  const float top = deviceY(y);
+  const float boxWidth = deviceLength(width);
+  const float boxHeight = deviceLength(height);
+  radius = deviceLength(radius);
+  radius = std::clamp(radius, 0.0f, std::min(boxWidth, boxHeight) * 0.5f);
+  thickness = std::clamp(deviceLength(thickness), 1.0f,
+                         std::min(boxWidth, boxHeight) * 0.5f);
   const float inner = std::max(0.0f, radius - thickness);
-  for (int row = 0; row < static_cast<int>(height); ++row) {
-    const float distance = std::min(row + 0.5f, height - row - 0.5f);
+  const int rows = std::max(1, static_cast<int>(std::lround(boxHeight)));
+  for (int row = 0; row < rows; ++row) {
+    const float distance =
+        std::min(static_cast<float>(row) + 0.5f,
+                 boxHeight - static_cast<float>(row) - 0.5f);
+    const float line = top + row;
     const float outerY = std::max(0.0f, radius - distance);
     const float outerInset =
         radius - std::sqrt(std::max(0.0f, radius * radius - outerY * outerY));
     if (distance < thickness) {
-      fill(renderer, x + outerInset, y + row, width - 2 * outerInset, 1, color);
+      span(renderer, left + outerInset, left + boxWidth - outerInset, line,
+           color);
       continue;
     }
     const float innerY = std::max(0.0f, inner - (distance - thickness));
     const float innerInset =
         inner - std::sqrt(std::max(0.0f, inner * inner - innerY * innerY));
-    const float leftEdge = x + outerInset;
-    const float leftSpan = (x + thickness + innerInset) - leftEdge;
-    if (leftSpan > 0.0f)
-      fill(renderer, leftEdge, y + row, leftSpan, 1, color);
-    const float rightEdge = x + width - outerInset;
-    const float rightStart = x + width - thickness - innerInset;
+    const float leftEdge = left + outerInset;
+    const float leftEnd = left + thickness + innerInset;
+    if (leftEnd > leftEdge)
+      span(renderer, leftEdge, leftEnd, line, color);
+    const float rightEdge = left + boxWidth - outerInset;
+    const float rightStart = left + boxWidth - thickness - innerInset;
     if (rightEdge > rightStart)
-      fill(renderer, rightStart, y + row, rightEdge - rightStart, 1, color);
+      span(renderer, rightStart, rightEdge, line, color);
   }
 }
 } // namespace

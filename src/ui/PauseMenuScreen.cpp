@@ -107,8 +107,8 @@ void drawPauseMenu(
     rounded(renderer, kCardX + 6, kCardY + 6, kCardWidth - 12, 240, 14,
             {3, 7, 18, 255});
     if (current.thumbnail != nullptr) {
-      const SDL_FRect destination{kCardX + 6.0f, kCardY + 6.0f, 256.0f, 240.0f};
-      SDL_RenderCopyF(renderer, current.thumbnail, nullptr, &destination);
+      drawTexture(renderer, current.thumbnail, kCardX + 6.0f, kCardY + 6.0f,
+                  256.0f, 240.0f);
     }
     if (!current.savedAt.empty()) {
       text(renderer, static_cast<int>(kCardX + 10.0f),

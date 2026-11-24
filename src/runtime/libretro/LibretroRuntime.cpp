@@ -955,17 +955,24 @@ void LibretroRuntime::render(SDL_Renderer *renderer) const {
   SDL_RenderClear(renderer);
   if (!active_ || texture_ == nullptr || width_ == 0 || height_ == 0)
     return;
-  int windowWidth = 0;
-  int windowHeight = 0;
-  SDL_RenderGetLogicalSize(renderer, &windowWidth, &windowHeight);
-  if (windowWidth <= 0 || windowHeight <= 0)
-    SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
-  const Viewport view = computeViewport(static_cast<int>(width_), static_cast<int>(height_), windowWidth, windowHeight,
-                                        video_);
+  // The game is fitted inside the 1600x900 canvas, and the canvas is then
+  // letterboxed into the real framebuffer; drawing straight to the window would
+  // leave the interface and the picture on two different scales.
+  int outputWidth = 0;
+  int outputHeight = 0;
+  SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight);
+  const CanvasTransform frame = fitCanvas(outputWidth, outputHeight);
+  const Viewport view =
+      computeViewport(static_cast<int>(width_), static_cast<int>(height_),
+                      kCanvasWidth, kCanvasHeight, video_);
   if (view.sourceWidth <= 0 || view.sourceHeight <= 0)
     return;
-  const SDL_Rect source{view.sourceX, view.sourceY, view.sourceWidth, view.sourceHeight};
-  const SDL_FRect destination{view.x, view.y, view.width, view.height};
+  const SDL_Rect source{view.sourceX, view.sourceY, view.sourceWidth,
+                        view.sourceHeight};
+  const SDL_FRect destination{frame.offsetX + view.x * frame.scale,
+                              frame.offsetY + view.y * frame.scale,
+                              view.width * frame.scale,
+                              view.height * frame.scale};
   SDL_RenderCopyF(renderer, texture_, &source, &destination);
 }
 

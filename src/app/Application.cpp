@@ -309,8 +309,6 @@ int Application::run(int argc, char **argv) {
     return 1;
   }
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_RenderSetLogicalSize(renderer, ui::kLogicalWidth, ui::kLogicalHeight);
-  SDL_RenderSetIntegerScale(renderer, SDL_FALSE);
 
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
@@ -1602,8 +1600,7 @@ int Application::run(int argc, char **argv) {
                    event.button.button == SDL_BUTTON_LEFT) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           const int choice = ui::powerCycleChoiceAt(x, y);
           if (choice >= 0) {
             pausePowerChoice = choice;
@@ -1650,8 +1647,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             closePauseCoreOptionsPanel();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1703,8 +1699,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             closePauseVideoPanel();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1778,8 +1773,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             resumeGame();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1939,8 +1933,7 @@ int Application::run(int argc, char **argv) {
       case SDL_MOUSEBUTTONDOWN: {
         float x = 0.0f;
         float y = 0.0f;
-        SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &x,
-                                  &y);
+        ui::windowToCanvas(event.button.x, event.button.y, x, y);
         if (quitConfirm) {
           const int choice = ui::quitConfirmChoiceAt(x, y);
           if (event.button.button == SDL_BUTTON_LEFT && choice >= 0) {
@@ -2288,6 +2281,17 @@ int Application::run(int argc, char **argv) {
     }
     // Downloads and decodes finish here, never inside a draw call.
     coverCache.poll(renderer);
+    // The interface draws itself in output pixels, so every frame starts by
+    // telling the UI how big the window's framebuffer is.
+    int outputWidth = 0;
+    int outputHeight = 0;
+    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0)
+      ui::setOutputSize(outputWidth, outputHeight);
+    // Nothing paints the bars around the canvas, so clear the whole
+    // framebuffer; otherwise a window that is not exactly 16:9 shows whatever
+    // the framebuffer held.
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
     if (screen == Screen::Game) {
       if (activeRuntime) {
         // Holding the rewind key stops the clock and walks the snapshots

@@ -15,6 +15,25 @@ inline constexpr int kLogicalHeight = 900;
 bool initializeTextRenderer(const std::string &fontPath);
 void shutdownTextRenderer();
 
+// The interface is laid out on the fixed 1600x900 canvas above but drawn
+// straight into the window at the size the window really has: text is
+// rasterised at device pixels instead of being upscaled from the canvas, which
+// is where the jagged widget text came from. A window that is not 16:9 gets the
+// canvas letterboxed, and every draw call still speaks canvas units.
+void setOutputSize(int outputWidth, int outputHeight);
+// Maps a window coordinate, such as a mouse event, onto the canvas.
+void windowToCanvas(float windowX, float windowY, float &canvasX,
+                    float &canvasY);
+// Where the canvas landed in output pixels, so the console picture can be
+// placed inside the same letterbox as the widgets.
+void canvasRect(float &x, float &y, float &width, float &height);
+
+// Clip rectangles are given in canvas units and converted to output pixels, so
+// a scrolled row clips at the same place whatever the window size is.
+void setClipRect(SDL_Renderer *renderer, float x, float y, float width,
+                 float height);
+void clearClipRect(SDL_Renderer *renderer);
+
 SDL_Color mix(SDL_Color a, SDL_Color b, float t);
 void fill(SDL_Renderer *renderer, float x, float y, float width, float height,
           SDL_Color color);
@@ -22,6 +41,22 @@ void circle(SDL_Renderer *renderer, int centerX, int centerY, int radius,
             SDL_Color color);
 void rounded(SDL_Renderer *renderer, float x, float y, float width,
              float height, float radius, SDL_Color color);
+// Vertical gradient clipped to a rounded rectangle. The rows are walked in
+// output pixels, so a card body fades evenly instead of banding when the canvas
+// is scaled up.
+void gradientRounded(SDL_Renderer *renderer, float x, float y, float width,
+                     float height, float radius, SDL_Color top,
+                     SDL_Color bottom);
+// The same fade, but only the bottom corners are rounded: used for the shade
+// the card titles sit on.
+void fadeBottomRounded(SDL_Renderer *renderer, float x, float y, float width,
+                       float height, float radius, SDL_Color color,
+                       Uint8 strength, float exponent);
+
+// Draws a texture into a canvas-space rectangle; the game picture, box art and
+// save thumbnails all go through here so they follow the same transform.
+void drawTexture(SDL_Renderer *renderer, SDL_Texture *texture, float x, float y,
+                 float width, float height);
 int textWidth(const std::string &value, int scale);
 void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
           int scale, SDL_Color color);

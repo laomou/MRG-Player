@@ -4,6 +4,7 @@
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
 #include <SDL.h>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -135,6 +136,27 @@ int main(int argc, char **argv) {
         "The category rail hit target follows the list");
   check(settingsRowAt(1, 1200, 410 + 2 * 106 + 20) == 2,
         "The display page rows are all clickable");
+
+  // The widgets speak canvas units, but they are drawn in output pixels, so a
+  // window that is wider than 16:9 letterboxes the canvas and the pointer maps
+  // back through the same transform.
+  setOutputSize(2000, 900);
+  float canvasX = 0.0f;
+  float canvasY = 0.0f;
+  windowToCanvas(1000.0f, 450.0f, canvasX, canvasY);
+  check(std::abs(canvasX - 800.0f) < 0.01f &&
+            std::abs(canvasY - 450.0f) < 0.01f,
+        "Window coordinates map back onto the canvas");
+  float canvasLeft = 0.0f;
+  float canvasTop = 0.0f;
+  float canvasWidth = 0.0f;
+  float canvasHeight = 0.0f;
+  canvasRect(canvasLeft, canvasTop, canvasWidth, canvasHeight);
+  check(std::abs(canvasLeft - 200.0f) < 0.5f &&
+            std::abs(canvasWidth - 1600.0f) < 0.5f &&
+            std::abs(canvasHeight - 900.0f) < 0.5f,
+        "A 2000x900 window letterboxes the canvas on both sides");
+  setOutputSize(1600, 900);
 
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);

@@ -146,19 +146,8 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
 // round, because every row is inset by the radius the card already uses.
 void drawTitleScrim(SDL_Renderer *renderer, float x, float y, float width,
                     float height, float radius, Uint8 strength) {
-  const float top = y + height * 0.50f;
-  const float span = y + height - top;
-  for (int row = 0; row < static_cast<int>(span); ++row) {
-    const float t = static_cast<float>(row) / std::max(1.0f, span);
-    const float distance = span - row - 0.5f;
-    const float yy = std::max(0.0f, radius - distance);
-    const float inset =
-        radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
-    const auto shade =
-        static_cast<Uint8>(strength * std::pow(t, 1.6f));
-    fill(renderer, x + inset, top + row, width - 2 * inset, 1,
-         {4, 6, 16, shade});
-  }
+  fadeBottomRounded(renderer, x, y + height * 0.50f, width, height * 0.50f,
+                    radius, {4, 6, 16, 255}, strength, 1.6f);
 }
 
 void drawCard(SDL_Renderer *renderer, float column, bool selected,
@@ -194,21 +183,13 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
     // The art already carries rounded corners, so it can sit under the title
     // plate untouched; the plate hides whatever the crop would show there.
     SDL_SetTextureAlphaMod(art, alpha);
-    const SDL_FRect frame{x, y, width, height};
-    SDL_RenderCopyF(renderer, art, nullptr, &frame);
+    drawTexture(renderer, art, x, y, width, height);
     SDL_SetTextureAlphaMod(art, 255);
   } else {
-    for (int row = 0; row < static_cast<int>(height); ++row) {
-      const float t = static_cast<float>(row) / height;
-      const float distance = std::min(row + 0.5f, height - row - 0.5f);
-      const float yy = std::max(0.0f, radius - distance);
-      const float inset =
-          radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
-      fill(renderer, x + inset, y + row, width - 2 * inset, 1,
-           mix({palette.top.r, palette.top.g, palette.top.b, alpha},
-               {palette.bottom.r, palette.bottom.g, palette.bottom.b, alpha},
-               t));
-    }
+    gradientRounded(renderer, x, y, width, height, radius,
+                    {palette.top.r, palette.top.g, palette.top.b, alpha},
+                    {palette.bottom.r, palette.bottom.g, palette.bottom.b,
+                     alpha});
   }
 
   const float margin = 12.0f * unit;
@@ -371,9 +352,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   // The shelf is a window, not a canvas: a card that sticks out past the row is
   // cut there, which is what turns the eighth card into the half card that
   // shows there is more to the right.
-  SDL_Rect shelfClip{static_cast<int>(kRowLeft), 380,
-                     static_cast<int>(kRowRight - kRowLeft), 320};
-  SDL_RenderSetClipRect(renderer, &shelfClip);
+  setClipRect(renderer, kRowLeft, 380.0f, kRowRight - kRowLeft, 320.0f);
   // Draw one column beyond each edge so a card sliding out and the next one
   // sliding in both stay whole while the row travels.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
@@ -393,7 +372,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   }
   drawCard(renderer, static_cast<float>(selectedGame) - rowOffset, true,
            cardsFocused, focusOpacity, selectedEntry, covers);
-  SDL_RenderSetClipRect(renderer, nullptr);
+  clearClipRect(renderer);
 
   if (selectedEntry != nullptr) {
     centeredText(renderer, 800, 711, fitTitle(selectedEntry->title, 760, 3), 3,
