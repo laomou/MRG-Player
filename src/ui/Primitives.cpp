@@ -6,7 +6,10 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
+#include <string>
+#include <unordered_map>
 
 #include "util/Utf8Path.hpp"
 
@@ -18,6 +21,28 @@ std::array<TTF_Font *, 6> gFonts{};
 std::string gFontPath;
 std::array<TTF_Font *, 6> gLatinFonts{};
 std::string gLatinFontPath;
+
+// Rendered text is cached by content, size, and colour: the UI draws the same
+// two dozen labels every frame, and rasterising each of them through FreeType
+// and uploading a fresh texture was most of the frame cost.
+struct CachedText {
+  SDL_Texture *texture = nullptr;
+  int width = 0;
+  int height = 0;
+  int baseline = 0;
+};
+std::unordered_map<std::string, CachedText> gTextCache;
+SDL_Renderer *gTextRenderer = nullptr;
+constexpr std::size_t kTextCacheLimit = 512;
+
+void clearTextCache() {
+  for (auto &entry : gTextCache) {
+    if (entry.second.texture != nullptr)
+      SDL_DestroyTexture(entry.second.texture);
+  }
+  gTextCache.clear();
+  gTextRenderer = nullptr;
+}
 
 bool requiresUtf8Font(const std::string &value) {
   return std::any_of(value.begin(), value.end(),
@@ -148,6 +173,7 @@ bool initializeTextRenderer(const std::string &fontPath) {
 }
 
 void shutdownTextRenderer() {
+  clearTextCache();
   for (TTF_Font *&font : gFonts) {
     if (font != nullptr)
       TTF_CloseFont(font);
@@ -280,9 +306,29 @@ void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
       begin = end;
       continue;
     }
-    SDL_Surface *surface =
-        font != nullptr ? TTF_RenderUTF8_Blended(font, run.c_str(), color)
-                        : nullptr;
+    if (gTextRenderer != renderer)
+      clearTextCache();
+    gTextRenderer = renderer;
+    char keySuffix[32];
+    std::snprintf(keySuffix, sizeof(keySuffix), "\x1f%d|%u,%u,%u,%u", scale,
+                  static_cast<unsigned>(color.r),
+                  static_cast<unsigned>(color.g),
+                  static_cast<unsigned>(color.b),
+                  static_cast<unsigned>(color.a));
+    std::string key = run;
+    key += keySuffix;
+    const auto cached = gTextCache.find(key);
+    if (cached != gTextCache.end()) {
+      const CachedText &entry = cached->second;
+      const SDL_Rect destination{
+          cursor, y + entry.baseline - TTF_FontAscent(font), entry.width,
+          entry.height};
+      SDL_RenderCopy(renderer, entry.texture, nullptr, &destination);
+      cursor += entry.width;
+      begin = end;
+      continue;
+    }
+    SDL_Surface *surface = TTF_RenderUTF8_Blended(font, run.c_str(), color);
     if (surface != nullptr) {
       SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
       if (texture != nullptr) {
@@ -292,7 +338,9 @@ void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
         const SDL_Rect destination{cursor, y + baseline - TTF_FontAscent(font),
                                    surface->w, surface->h};
         SDL_RenderCopy(renderer, texture, nullptr, &destination);
-        SDL_DestroyTexture(texture);
+        if (gTextCache.size() >= kTextCacheLimit)
+          clearTextCache();
+        gTextCache[key] = CachedText{texture, surface->w, surface->h, baseline};
       }
       cursor += surface->w;
       SDL_FreeSurface(surface);

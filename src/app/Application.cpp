@@ -2396,9 +2396,10 @@ int Application::run(int argc, char **argv) {
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
   clearStateSlots();
+  // Cached text textures belong to this renderer, so drop them first.
+  ui::shutdownTextRenderer();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
-  ui::shutdownTextRenderer();
   SDL_Quit();
   return startupRomFailed ? 1 : 0;
 }
