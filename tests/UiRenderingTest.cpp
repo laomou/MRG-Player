@@ -101,22 +101,30 @@ int main(int argc, char **argv) {
         "A card in the row is clickable");
   check(homeCardAt(500, 200, 7, 0.0f) == -1,
         "Above the row activates nothing");
-  // Seven cards fit, so the row only travels once the library outgrows them.
+  // Seven and a half cards fit: the last one is always half visible so the
+  // shelf shows there is more to the right, and the row never scrolls past its
+  // last card.
   check(homeRowTarget(0, 5) == 0.0f && homeRowTarget(6, 7) == 0.0f,
         "A short library never scrolls");
-  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 3.0f,
-        "A long library keeps the selection on the last visible column");
+  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 2.5f,
+        "A long library stops with the last card flush against the right edge");
   check(homeCardAt(1500, 500, 10, 2.0f) >= 7,
         "Scrolling the row moves the cards under the pointer");
   launcher::config::InputPrompts prompts;
   check(homeActionAt(1500, 828, true, launcher::i18n::Language::English,
-                     prompts) == 2,
+                     prompts) == 1,
         "The last footer entry is the rightmost button");
   check(homeActionAt(700, 828, true, launcher::i18n::Language::English,
                      prompts) == -1,
         "Empty footer space activates nothing");
-  check(homeActionCount(true) == 3 && homeActionCount(false) == 1,
-        "An empty slot only offers to quit");
+  check(homeActionCount(true) == 2 && homeActionCount(false) == 0,
+        "Only a real game offers start and manage");
+  // The settings screen keeps the categories and the page apart: the rail is
+  // where the focus starts, the page is reached with right.
+  check(settingsCategoryAt(200, 389 + 2 * 52 + 10) == 2,
+        "The category rail hit target follows the list");
+  check(settingsRowAt(1, 1200, 410 + 2 * 106 + 20) == 2,
+        "The display page rows are all clickable");
 
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);

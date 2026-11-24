@@ -147,10 +147,11 @@ void drawPauseMenu(
   }
 
   fill(renderer, 1012, 790, 480, 1, {255, 255, 255, 30});
+  // Two keys only: the one that acts and the one that leaves. Which key moves
+  // between the entries is never written down.
   const std::vector<Hint> footer{
-      {tr(TextId::ChangeControl, language), prompts.horizontal, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Back, language), prompts.back, false}};
+      {tr(TextId::ResumeGame, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
 
   if (SDL_GetTicks64() < feedbackUntil && !feedback.empty()) {
@@ -203,9 +204,8 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
                           : SDL_Color{230, 235, 245, 255});
   }
   const std::vector<Hint> footer{
-      {tr(TextId::ChangeControl, language), prompts.horizontal, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Back, language), prompts.back, false}};
+      {tr(TextId::Cancel, language), prompts.back, false}};
   drawHintRow(renderer, kConfirmX + kConfirmWidth - 36.0f,
               kConfirmY + kConfirmHeight - 52.0f, footer,
               {255, 211, 101, 255});
@@ -286,7 +286,6 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
        {165, 181, 204, 255});
 
   const std::vector<Hint> footer{
-      {tr(TextId::ChangeControl, language), prompts.horizontal, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true},
       {tr(TextId::Back, language), prompts.back, false}};
   drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
@@ -369,7 +368,6 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
               {{tr(TextId::ResetCoreOptions, language), "R", false}},
               {255, 211, 101, 255});
   const std::vector<Hint> footer{
-      {tr(TextId::ChangeControl, language), prompts.horizontal, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true},
       {tr(TextId::Back, language), prompts.back, false}};
   drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});

@@ -19,11 +19,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset);
+              int focusedPill, int focusedAction, float rowOffset,
+              float focusOpacity);
 void moveSelection(int &selectedGame, int direction, int count);
 
-// The footer grows and shrinks with the selection: an empty slot has nothing to
-// start or manage, so only the quit entry remains.
+// Two actions when a game is selected, none when the library is empty.
 [[nodiscard]] int homeActionCount(bool hasGame);
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
                                i18n::Language language,

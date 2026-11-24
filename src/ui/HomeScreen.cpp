@@ -33,14 +33,12 @@ struct CardBox {
   float height = 0.0f;
 };
 
-// The shelf never changes its card count: seven fit the width, and a library
-// with more games slides the row instead, leaving the next card hanging off the
-// right edge as the cue that there is more.
-constexpr int kVisibleSlots = 7;
+// The shelf shows seven whole cards plus half of the next one, so the cut-off
+// card at the right edge is always the cue that the row can travel. A library
+// that fits leaves an empty slot there instead of pretending there is more.
+constexpr float kVisibleSlots = 7.5f;
 
-float slotPitch() {
-  return (kRowRight - kRowLeft) / static_cast<float>(kVisibleSlots);
-}
+float slotPitch() { return (kRowRight - kRowLeft) / kVisibleSlots; }
 
 CardBox cardBox(float column, bool selected) {
   const float base =
@@ -72,7 +70,8 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
 }
 
 void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
-              float pulse, const library::GameEntry *entry) {
+              bool focused, float focusOpacity,
+              const library::GameEntry *entry) {
   const Game &style = styleFor(index);
   const CardBox box = cardBox(column, selected);
   const float x = box.x;
@@ -86,22 +85,12 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
   const float unit = width / kMaximumCardWidth;
   const float radius = (selected ? 22.0f : 18.0f) * unit;
 
-  if (selected) {
-    const float glow = std::floor(9.0f * unit);
-    rounded(renderer, x - glow, y - glow, width + glow * 2.0f,
-            height + glow * 2.0f, radius + glow,
-            {style.accent.r, style.accent.g, style.accent.b,
-             static_cast<Uint8>(55 + pulse * 35)});
-    const float ring = 3.0f;
-    rounded(renderer, x - ring, y - ring, width + ring * 2.0f,
-            height + ring * 2.0f, radius + ring,
-            {style.accent.r, style.accent.g, style.accent.b, 255});
-  }
-
   if (entry == nullptr) {
     rounded(renderer, x, y, width, height, radius, {13, 20, 36, 255});
     rounded(renderer, x + 1, y + 1, width - 2, height - 2, radius - 1,
             {19, 28, 48, 255});
+    if (focused)
+      drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
     return;
   }
 
@@ -150,6 +139,10 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
                static_cast<int>(y + height * 0.84f),
                std::string(platform.fileTypeLabel), scale,
                {style.accent.r, style.accent.g, style.accent.b, alpha});
+  // Selection fills the card and scales it up; the ring says the direction keys
+  // are on it, so it fades away when they move to a pill or a footer action.
+  if (focused)
+    drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
 }
 
 // Footer geometry lives here because the drawing and the hit test have to agree
@@ -157,6 +150,8 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
 constexpr float kFooterRight = 1528.0f;
 constexpr float kFooterY = 822.0f;
 
+// Only the two actions live in the footer; leaving the launcher is done by
+// closing the window, the way a console has no "quit" entry on its home row.
 std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
@@ -166,8 +161,6 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
     hints.push_back({i18n::tr(i18n::TextId::ManageGame, language),
                      prompts.manage, false});
   }
-  hints.push_back(
-      {i18n::tr(i18n::TextId::Quit, language), prompts.back, false});
   return hints;
 }
 
@@ -177,7 +170,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset) {
+              int focusedPill, int focusedAction, float rowOffset,
+              float focusOpacity) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -194,14 +188,6 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
   text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
-  // The pills are buttons too, so they take the same ring when the direction
-  // keys are on them.
-  if (focus == HomeFocus::Pills) {
-    const SDL_FRect pill = focusedPill == 0 ? SDL_FRect{1110, 52, 246, 58}
-                                            : SDL_FRect{1372, 52, 156, 58};
-    rounded(renderer, pill.x - 3.0f, pill.y - 3.0f, pill.w + 6.0f,
-            pill.h + 6.0f, 32.0f, style.accent);
-  }
   rounded(renderer, 1110, 52, 246, 58, 29, {4, 10, 26, 145});
   circle(renderer, 1143, 81, 15, style.accent);
   text(renderer, 1136, 66, "+", 2, {18, 18, 33, 255});
@@ -214,6 +200,15 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   text(renderer, 1399, 66, "?", 2, style.accent);
   text(renderer, 1431, 66, tr(TextId::Settings, language), 2,
        {255, 255, 255, 255});
+  // The pills are buttons too, so they take the same ring when the direction
+  // keys are on them. The ring is drawn over the pills rather than under them,
+  // because they are translucent and would tint it.
+  if (focus == HomeFocus::Pills) {
+    const SDL_FRect pill = focusedPill == 0 ? SDL_FRect{1110, 52, 246, 58}
+                                            : SDL_FRect{1372, 52, 156, 58};
+    drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 29.0f,
+                  focusOpacity);
+  }
 
   const TextId sectionTitle =
       libraryEmpty
@@ -229,12 +224,18 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   text(renderer, 72, 251, tr(sectionSubtitle, language), 1,
        {191, 201, 220, 255});
 
-  const float pulse = (std::sin(time * 3.0f) + 1.0f) * 0.5f;
+  const bool cardsFocused = focus == HomeFocus::Cards;
+  // The shelf is a window, not a canvas: a card that sticks out past the row is
+  // cut there, which is what turns the eighth card into the half card that
+  // shows there is more to the right.
+  SDL_Rect shelfClip{static_cast<int>(kRowLeft), 380,
+                     static_cast<int>(kRowRight - kRowLeft), 320};
+  SDL_RenderSetClipRect(renderer, &shelfClip);
   // Draw one column beyond each edge so a card sliding out and the next one
   // sliding in both stay whole while the row travels.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
-  const int lastSlot =
-      std::min(slotCount - 1, firstColumn + kVisibleSlots + 1);
+  const int lastSlot = std::min(
+      slotCount - 1, firstColumn + static_cast<int>(kVisibleSlots) + 1);
   for (int i = std::max(0, firstColumn - 1); i <= lastSlot; ++i) {
     if (i == selectedGame)
       continue;
@@ -242,12 +243,13 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
         i < static_cast<int>(gameLibrary.entries().size())
             ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
             : nullptr;
-    drawCard(renderer, i, static_cast<float>(i) - rowOffset, false, pulse,
-             entry);
+    drawCard(renderer, i, static_cast<float>(i) - rowOffset, false, false,
+             focusOpacity, entry);
   }
   drawCard(renderer, selectedGame,
-           static_cast<float>(selectedGame) - rowOffset, true, pulse,
-           selectedEntry);
+           static_cast<float>(selectedGame) - rowOffset, true, cardsFocused,
+           focusOpacity, selectedEntry);
+  SDL_RenderSetClipRect(renderer, nullptr);
 
   if (selectedEntry != nullptr) {
     centeredText(renderer, 800, 711, fitTitle(selectedEntry->title, 760, 3), 3,
@@ -263,18 +265,17 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   }
 
   fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
-  text(renderer, 72, 828, prompts.horizontal, 1, {168, 184, 207, 255});
   const std::vector<Hint> footer =
       footerHints(selectedEntry != nullptr, language, prompts);
   const int focused =
-      focus == HomeFocus::Actions
+      focus == HomeFocus::Actions && !footer.empty()
           ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
           : -1;
   float cursor =
       kFooterRight - static_cast<float>(hintRowWidth(footer));
   for (int index = 0; index < static_cast<int>(footer.size()); ++index) {
     if (index == focused)
-      drawHintFocus(renderer, cursor, kFooterY, footer[index], style.accent);
+      drawHintFocus(renderer, cursor, kFooterY, footer[index], focusOpacity);
     drawHint(renderer, cursor, kFooterY, footer[index], style.accent);
     cursor += static_cast<float>(hintWidth(footer[index])) + kHintGap;
   }
@@ -286,7 +287,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   }
 }
 
-int homeActionCount(bool hasGame) { return hasGame ? 3 : 1; }
+// Nothing to act on when the library is empty, so the footer is empty too.
+int homeActionCount(bool hasGame) { return hasGame ? 2 : 0; }
 
 int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                  const config::InputPrompts &prompts) {
@@ -317,7 +319,8 @@ int homeCardAt(float x, float y, int count, float rowOffset) {
   // The selected card is drawn a little larger, so accept either size and a
   // click on its rim still counts.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
-  const int lastSlot = std::min(count - 1, firstColumn + kVisibleSlots + 1);
+  const int lastSlot =
+      std::min(count - 1, firstColumn + static_cast<int>(kVisibleSlots) + 1);
   for (int slot = std::max(0, firstColumn - 1); slot <= lastSlot; ++slot) {
     for (const bool selected : {false, true}) {
       const CardBox box = cardBox(static_cast<float>(slot) - rowOffset,
@@ -331,9 +334,14 @@ int homeCardAt(float x, float y, int count, float rowOffset) {
 }
 
 float homeRowTarget(int selectedGame, int count) {
-  const int overflow = std::max(0, count - kVisibleSlots);
-  const int start = std::clamp(selectedGame - kVisibleSlots + 1, 0, overflow);
-  return static_cast<float>(start);
+  // The row stops at the last game instead of wrapping, so the right edge is
+  // flush with the seventh slot once the shelf reaches its end.
+  const float overflow =
+      std::max(0.0f, static_cast<float>(count) - kVisibleSlots);
+  const float start =
+      std::clamp(static_cast<float>(selectedGame) - (kVisibleSlots - 1.5f),
+                 0.0f, overflow);
+  return start;
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

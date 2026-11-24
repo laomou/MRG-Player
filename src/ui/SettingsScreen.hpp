@@ -41,6 +41,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   bool bindingCapture, std::string_view activeControllerName,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
-                  const config::InputPrompts &prompts);
+                  const config::InputPrompts &prompts, bool railFocused,
+                  float focusOpacity);
 
 } // namespace launcher::ui

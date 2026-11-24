@@ -52,16 +52,20 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
 // the top edge where they would compete with the screen title.
 void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
                  const std::vector<Hint> &hints, SDL_Color accent);
-// Draws the ring that shows which legend entry the direction keys are on. It
-// goes down first and the hint paints over it, so the row keeps its spacing.
+// The focus ring never takes the accent of the game or the section on
+// screen: it answers "where do the keys go", which is a property of the
+// system, so it stays one colour everywhere.
+inline constexpr SDL_Color kFocusColor{215, 226, 242, 255};
+
+// Draws the ring that shows which legend entry the direction keys are on.
+// opacity fades the ring in when the focus lands on a new control, and 0
+// skips it entirely.
 void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
-                   SDL_Color accent);
-// The same ring for any other control: the accent edge and a soft halo, drawn
-// before the control fills its rectangle so only the border stays visible.
-// The interior is painted back in with plateColor, so a control keeps the
-// background it had before it was focused and only gains the border.
+                   float opacity);
+// The same ring for any other control: two pixels, three pixels outside the
+// rectangle, no halo. It is drawn last so it never disturbs the control or
+// the background underneath it.
 void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
-                   float height, float radius, SDL_Color accent,
-                   SDL_Color plateColor);
+                   float height, float radius, float opacity);
 
 } // namespace launcher::ui

@@ -409,29 +409,63 @@ void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
   }
 }
 
+namespace {
+SDL_Color focusColor(float opacity) {
+  const float clamped = std::clamp(opacity, 0.0f, 1.0f);
+  return {kFocusColor.r, kFocusColor.g, kFocusColor.b,
+          static_cast<Uint8>(std::lround(clamped * 255.0f))};
+}
+
+// Paints only the border of a rounded rectangle, so a ring can sit outside a
+// control without repainting the control or whatever shows through it. Each
+// row contributes a left and a right span once it is far enough from the
+// corners to have an inside.
+void roundedBand(SDL_Renderer *renderer, float x, float y, float width,
+                 float height, float radius, float thickness,
+                 SDL_Color color) {
+  radius = std::clamp(radius, 0.0f, std::min(width, height) * 0.5f);
+  const float inner = std::max(0.0f, radius - thickness);
+  for (int row = 0; row < static_cast<int>(height); ++row) {
+    const float distance = std::min(row + 0.5f, height - row - 0.5f);
+    const float outerY = std::max(0.0f, radius - distance);
+    const float outerInset =
+        radius - std::sqrt(std::max(0.0f, radius * radius - outerY * outerY));
+    if (distance < thickness) {
+      fill(renderer, x + outerInset, y + row, width - 2 * outerInset, 1, color);
+      continue;
+    }
+    const float innerY = std::max(0.0f, inner - (distance - thickness));
+    const float innerInset =
+        inner - std::sqrt(std::max(0.0f, inner * inner - innerY * innerY));
+    const float leftEdge = x + outerInset;
+    const float leftSpan = (x + thickness + innerInset) - leftEdge;
+    if (leftSpan > 0.0f)
+      fill(renderer, leftEdge, y + row, leftSpan, 1, color);
+    const float rightEdge = x + width - outerInset;
+    const float rightStart = x + width - thickness - innerInset;
+    if (rightEdge > rightStart)
+      fill(renderer, rightStart, y + row, rightEdge - rightStart, 1, color);
+  }
+}
+} // namespace
+
 void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
-                   float height, float radius, SDL_Color accent,
-                   SDL_Color plateColor) {
-  rounded(renderer, x - 8.0f, y - 8.0f, width + 16.0f, height + 16.0f,
-          radius + 8.0f,
-          {accent.r, accent.g, accent.b, 60});
-  rounded(renderer, x - 3.0f, y - 3.0f, width + 6.0f, height + 6.0f,
-          radius + 3.0f, accent);
-  // The interior is filled back in so the accent reads as a border rather than
-  // a block, and so focusing a control never changes its background.
-  rounded(renderer, x, y, width, height, radius, plateColor);
+                   float height, float radius, float opacity) {
+  if (opacity <= 0.0f)
+    return;
+  // Three pixels clear of the control, two pixels thick, no halo: a line that
+  // says where the keys are without re-reading as a filled plate.
+  roundedBand(renderer, x - 3.0f, y - 3.0f, width + 6.0f, height + 6.0f,
+              radius + 3.0f, 2.0f, focusColor(opacity));
 }
 
 void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
-                   SDL_Color accent) {
-  // Two nested boxes keep the ring out of the row's own metrics: the outer one
-  // is the accent edge, the inner one restores the dark plate behind the hint.
-  rounded(renderer, x - 12.0f, y - 7.0f,
-          static_cast<float>(hintWidth(hint)) + 24.0f,
-          kHintChipHeight + 14.0f, 11.0f, accent);
-  rounded(renderer, x - 10.0f, y - 5.0f,
-          static_cast<float>(hintWidth(hint)) + 20.0f,
-          kHintChipHeight + 10.0f, 9.0f, {13, 21, 37, 245});
+                   float opacity) {
+  if (opacity <= 0.0f)
+    return;
+  const float width = static_cast<float>(hintWidth(hint));
+  roundedBand(renderer, x - 9.0f, y - 6.0f, width + 18.0f,
+              kHintChipHeight + 12.0f, 11.0f, 2.0f, focusColor(opacity));
 }
 
 } // namespace launcher::ui

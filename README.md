@@ -123,12 +123,12 @@ Select a populated card and press **M** or keyboard **X**, controller **X**, or 
 |---|---|---|
 | Move between the pills, the shelf, and the footer | Up / Down | D-pad up / down |
 | Browse carousel | Left / Right | D-pad / left stick |
-| Import game | Click **+ Game Library** or drag a file | Y / Start on the library pill |
+| Page the shelf by a screenful | Page Up / Page Down | L / R |
+| Import game | Click **+ Game Library** or drag a file | Focus the library pill, A |
 | Start selected game | Enter / Space or click | A |
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |
-| Open settings | S / Tab | Y / Start |
-| Back / exit | Escape | B / Back |
+| Open settings | Click **? Settings** | Focus the settings pill, A |
 | Fullscreen | F11 | — |
 
 ### Controls
@@ -204,9 +204,9 @@ The same three options can be overridden for a single game from **Display** in t
 
 Open **Settings → Controller** to choose the UI prompt mode (**Auto**, **Keyboard & Mouse**, or **Controller**), controller label style (**Auto**, Xbox, Nintendo Switch, PlayStation, or Generic), and the active controller when multiple devices are connected. These choices change presentation only: keyboard, mouse, and controllers remain usable together. Auto mode follows the most recent meaningful input and ignores analog movement inside the configured dead zone; it falls back to keyboard prompts when no controller is available. The preferred controller is restored by SDL controller GUID after hotplug or restart.
 
-The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused. Every clickable control on the settings screen draws the same focus ring, which only adds a border around the row: the plate underneath keeps its colour as the selection moves. The cores page re-reads the installed cores whenever the settings screen is opened, so it lists them without a click.
+The knobs on this screen follow the console convention: the category rail and the page next to it are two halves of one screen, so enter the screen on the rail, move the focus between the rail and the page with Left and Right, and press Enter on a category to step into its page. Back/Escape returns to the rail and, from there, to the home screen. The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused. Every clickable control on the settings screen draws the same focus ring, which only adds a border around the row: the plate underneath keeps its colour as the selection moves. The cores page re-reads the installed cores whenever the settings screen is opened, so it lists them without a click.
 
-The shelf always shows seven cards, whether the library holds three games or thirty. Once there are more than seven, the row slides as the selection moves so the highlighted card stays in view, and the next card hangs off the right edge to show there is more to the right; the row settles into place when the screen is opened rather than sliding in from the first game.
+The shelf always shows seven and a half cards: seven whole ones and a half card at the right edge, so a library that continues past the screen says so on its own. Once there are more than seven games, the row slides as the selection moves so the highlighted card stays in view and the half card is always the next one; the row stops at the last game instead of wrapping, and settles into place when the screen is opened rather than sliding in from the first game.
 
 ## libretro cores
 
