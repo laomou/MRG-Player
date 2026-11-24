@@ -457,12 +457,16 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
   // action to its right, the way a console legend is written.
   const float chipX = x;
   const float width = chipWidth(hint);
-  text(renderer, static_cast<int>(chipX + width + kHintLabelGap),
-       static_cast<int>(y) + 6, hint.label, 1, {143, 163, 181, 255});
+  // Scale-one runs land their ink centre three pixels below the top of a
+  // 26 pixel chip when drawn from y + 6, so the row is lifted to sit on the
+  // chip's middle instead.
+  const int textY = static_cast<int>(y) + 3;
+  text(renderer, static_cast<int>(chipX + width + kHintLabelGap), textY,
+       hint.label, 1, {143, 163, 181, 255});
   rounded(renderer, chipX, y, width, kHintChipHeight, 8,
           hint.accent ? accent : SDL_Color{255, 255, 255, 26});
-  centeredText(renderer, static_cast<int>(chipX + width * 0.5f),
-               static_cast<int>(y) + 6, hint.key, 1,
+  centeredText(renderer, static_cast<int>(chipX + width * 0.5f), textY,
+               hint.key, 1,
                hint.accent ? SDL_Color{20, 24, 35, 255}
                            : SDL_Color{232, 238, 247, 255});
 }
