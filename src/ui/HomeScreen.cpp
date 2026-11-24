@@ -419,6 +419,11 @@ void drawQuitConfirm(SDL_Renderer *renderer, int choice,
                  tr(labels[static_cast<std::size_t>(option)], language), 2,
                  selected ? SDL_Color{24, 24, 39, 255}
                           : SDL_Color{230, 235, 245, 255});
+    if (selected) {
+      drawFocusRing(renderer, xs[static_cast<std::size_t>(option)],
+                    kQuitButtonY, kQuitButtonWidth, kQuitButtonHeight, 18.0f,
+                    1.0f);
+    }
   }
   const std::vector<Hint> footer{
       {tr(TextId::ConfirmControl, language), prompts.confirm, true},

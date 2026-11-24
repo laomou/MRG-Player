@@ -1481,7 +1481,8 @@ int Application::run(int argc, char **argv) {
         // The dialog is modal: while it is open nothing else sees the keys.
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
           const SDL_Keycode key = event.key.keysym.sym;
-          if (key == SDLK_LEFT || key == SDLK_RIGHT) {
+          if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP ||
+              key == SDLK_DOWN) {
             quitChoice = 1 - quitChoice;
           } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
             if (quitChoice == 1)
@@ -1495,7 +1496,9 @@ int Application::run(int argc, char **argv) {
         }
         if (event.type == SDL_CONTROLLERBUTTONDOWN) {
           if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
-              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
             quitChoice = 1 - quitChoice;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             if (quitChoice == 1)
@@ -1574,7 +1577,8 @@ int Application::run(int argc, char **argv) {
           const SDL_Keycode key = event.key.keysym.sym;
           if (key == SDLK_ESCAPE || key == SDLK_b)
             pauseConfirmingPower = false;
-          else if (key == SDLK_LEFT || key == SDLK_RIGHT)
+          else if (key == SDLK_LEFT || key == SDLK_RIGHT ||
+                   key == SDLK_UP || key == SDLK_DOWN)
             pausePowerChoice = 1 - pausePowerChoice;
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
             confirmPausePower();
@@ -1584,7 +1588,9 @@ int Application::run(int argc, char **argv) {
               button == SDL_CONTROLLER_BUTTON_BACK)
             pauseConfirmingPower = false;
           else if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
-                   button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+                   button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
+                   button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
+                   button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
             pausePowerChoice = 1 - pausePowerChoice;
           else if (button == SDL_CONTROLLER_BUTTON_A)
             confirmPausePower();
