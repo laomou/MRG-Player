@@ -99,6 +99,8 @@ enum class TextId {
   Cancel,
   CancelDescription,
   ChooseManagementAction,
+  QuitConfirmTitle,
+  QuitConfirmBody,
   Managed,
   SaveData,
   SaveDataPresent,

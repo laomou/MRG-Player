@@ -35,4 +35,10 @@ void moveSelection(int &selectedGame, int direction, int count);
 // 0 is the library pill, 1 is the settings pill; -1 when neither was hit.
 [[nodiscard]] int homePillAt(float x, float y);
 
+// The launcher asks before it closes: 0 is the cancel button, 1 the quit one.
+void drawQuitConfirm(SDL_Renderer *renderer, int choice,
+                     i18n::Language language,
+                     const config::InputPrompts &prompts, SDL_Color accent);
+[[nodiscard]] int quitConfirmChoiceAt(float x, float y);
+
 } // namespace launcher::ui

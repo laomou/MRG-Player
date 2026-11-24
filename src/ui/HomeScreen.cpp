@@ -150,6 +150,18 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
 constexpr float kFooterRight = 1528.0f;
 constexpr float kFooterY = 822.0f;
 
+// The quit confirmation is centred on the logical canvas so it covers the
+// shelf no matter which part of it has focus.
+constexpr float kQuitDialogWidth = 760.0f;
+constexpr float kQuitDialogHeight = 290.0f;
+constexpr float kQuitDialogX = (1600.0f - kQuitDialogWidth) * 0.5f;
+constexpr float kQuitDialogY = 300.0f;
+constexpr float kQuitButtonWidth = 220.0f;
+constexpr float kQuitButtonHeight = 64.0f;
+constexpr float kQuitButtonY = 452.0f;
+constexpr float kQuitCancelX = 520.0f;
+constexpr float kQuitConfirmX = 860.0f;
+
 // Only the two actions live in the footer; leaving the launcher is done by
 // closing the window, the way a console has no "quit" entry on its home row.
 std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
@@ -344,6 +356,53 @@ float homeRowTarget(int selectedGame, int count) {
       std::clamp(static_cast<float>(selectedGame) - (kVisibleSlots - 1.5f),
                  0.0f, overflow);
   return start;
+}
+
+void drawQuitConfirm(SDL_Renderer *renderer, int choice,
+                     i18n::Language language,
+                     const config::InputPrompts &prompts, SDL_Color accent) {
+  using i18n::TextId;
+  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 160});
+  rounded(renderer, kQuitDialogX + 8, kQuitDialogY + 10, kQuitDialogWidth,
+          kQuitDialogHeight, 28, {0, 0, 0, 70});
+  rounded(renderer, kQuitDialogX, kQuitDialogY, kQuitDialogWidth,
+          kQuitDialogHeight, 28, {12, 21, 37, 245});
+  rounded(renderer, kQuitDialogX + 36, kQuitDialogY + 40, 4, 32, 2, accent);
+  text(renderer, kQuitDialogX + 56, kQuitDialogY + 42,
+       tr(TextId::QuitConfirmTitle, language), 2, accent);
+  text(renderer, kQuitDialogX + 36, kQuitDialogY + 106,
+       tr(TextId::QuitConfirmBody, language), 2, {206, 216, 232, 255});
+
+  const std::array<TextId, 2> labels{TextId::Cancel, TextId::Quit};
+  const std::array<float, 2> xs{kQuitCancelX, kQuitConfirmX};
+  for (int option = 0; option < 2; ++option) {
+    const bool selected = option == choice;
+    rounded(renderer, xs[static_cast<std::size_t>(option)], kQuitButtonY,
+            kQuitButtonWidth, kQuitButtonHeight, 18,
+            selected ? accent : SDL_Color{255, 255, 255, 18});
+    centeredText(renderer,
+                 static_cast<int>(xs[static_cast<std::size_t>(option)] +
+                                  kQuitButtonWidth / 2.0f),
+                 static_cast<int>(kQuitButtonY + 22),
+                 tr(labels[static_cast<std::size_t>(option)], language), 2,
+                 selected ? SDL_Color{24, 24, 39, 255}
+                          : SDL_Color{230, 235, 245, 255});
+  }
+  const std::vector<Hint> footer{
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
+      {tr(TextId::Cancel, language), prompts.back, false}};
+  drawHintRow(renderer, kQuitDialogX + kQuitDialogWidth - 36.0f,
+              kQuitDialogY + kQuitDialogHeight - 46.0f, footer, accent);
+}
+
+int quitConfirmChoiceAt(float x, float y) {
+  if (y < kQuitButtonY || y > kQuitButtonY + kQuitButtonHeight)
+    return -1;
+  if (x >= kQuitCancelX && x <= kQuitCancelX + kQuitButtonWidth)
+    return 0;
+  if (x >= kQuitConfirmX && x <= kQuitConfirmX + kQuitButtonWidth)
+    return 1;
+  return -1;
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

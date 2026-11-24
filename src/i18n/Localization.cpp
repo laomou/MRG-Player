@@ -105,6 +105,8 @@ constexpr Entry kText[]{
     {"CANCEL", "取消"},
     {"RETURN TO THE GAME LIBRARY", "返回游戏库"},
     {"CHOOSE AN ACTION FOR THIS GAME", "选择要对当前游戏执行的操作"},
+    {"QUIT MRG PLAYER?", "退出 MRG PLAYER？"},
+    {"THE GAME LIBRARY AND YOUR SAVES STAY AS THEY ARE", "游戏库和存档都会保留"},
     {"MANAGED ROM", "托管 ROM"},
     {"SAVE DATA", "保存数据"},
     {"AVAILABLE", "存在"},

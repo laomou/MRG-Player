@@ -410,6 +410,7 @@ int Application::run(int argc, char **argv) {
   bool smokeSettingsController = false;
   bool smokeHomePills = false;
   bool smokeHomeActions = false;
+  bool smokeHomeQuit = false;
   bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
   bool smokeSettingsAbout = false;
@@ -424,6 +425,10 @@ int Application::run(int argc, char **argv) {
   int coreRemovePendingRow = -1;
   Uint64 coreRemovePendingUntil = 0;
   bool bindingCapture = false;
+  // Closing the launcher asks first, the way a console does; 0 keeps the
+  // cancel button focused so a stray key never ends the session.
+  bool quitConfirm = false;
+  int quitChoice = 0;
   int managementAction = 0;
   int confirmationChoice = 0;
   ui::ManagementDialog managementDialog = ui::ManagementDialog::Menu;
@@ -1356,7 +1361,12 @@ int Application::run(int argc, char **argv) {
       }
 
       if (event.type == SDL_QUIT) {
-        running = false;
+        if (quitConfirm) {
+          running = false;
+        } else {
+          quitConfirm = true;
+          quitChoice = 0;
+        }
         continue;
       }
       if (event.type == SDL_DROPFILE) {
@@ -1465,6 +1475,39 @@ int Application::run(int argc, char **argv) {
           (screen == Screen::Game || screen == Screen::Pause)) {
         toggleMute();
         continue;
+      }
+
+      if (quitConfirm) {
+        // The dialog is modal: while it is open nothing else sees the keys.
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+          const SDL_Keycode key = event.key.keysym.sym;
+          if (key == SDLK_LEFT || key == SDLK_RIGHT) {
+            quitChoice = 1 - quitChoice;
+          } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (key == SDLK_ESCAPE || key == SDLK_b) {
+            quitConfirm = false;
+          }
+          continue;
+        }
+        if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+            quitChoice = 1 - quitChoice;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            quitConfirm = false;
+          }
+          continue;
+        }
       }
 
       if (screen == Screen::Game) {
@@ -1801,6 +1844,10 @@ int Application::run(int argc, char **argv) {
             (void)openManagement(ui::ManagementDialog::ConfirmRemoveRom);
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
             (void)startSelected();
+          else if (key == SDLK_ESCAPE) {
+            quitConfirm = true;
+            quitChoice = 0;
+          }
         } else if (screen == Screen::Settings) {
           const int rowCount = ui::settingRowCount(settingCategory);
           if (key == SDLK_ESCAPE || key == SDLK_b) {
@@ -1884,6 +1931,19 @@ int Application::run(int argc, char **argv) {
         float y = 0.0f;
         SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &x,
                                   &y);
+        if (quitConfirm) {
+          const int choice = ui::quitConfirmChoiceAt(x, y);
+          if (event.button.button == SDL_BUTTON_LEFT && choice >= 0) {
+            quitChoice = choice;
+            if (choice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (event.button.button == SDL_BUTTON_RIGHT) {
+            quitConfirm = false;
+          }
+          break;
+        }
         if (screen == Screen::Home) {
           const int clickedCard = ui::homeCardAt(
               x, y, static_cast<int>(gameLibrary.slotCount()), homeRow);
@@ -2028,6 +2088,10 @@ int Application::run(int argc, char **argv) {
             }
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_X) {
             (void)openManagement(ui::ManagementDialog::Menu);
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            quitConfirm = true;
+            quitChoice = 0;
           } else if (event.cbutton.button ==
                          SDL_CONTROLLER_BUTTON_LEFTSHOULDER ||
                      event.cbutton.button ==
@@ -2254,6 +2318,13 @@ int Application::run(int argc, char **argv) {
           saveDataPresent, currentLanguage(), prompts);
     }
 
+    if (quitConfirm) {
+      const Game &quitStyle = games()[static_cast<std::size_t>(
+          selectedGame % static_cast<int>(kGameCount))];
+      ui::drawQuitConfirm(renderer, quitChoice, currentLanguage(), prompts,
+                          quitStyle.accent);
+    }
+
     if ((screen == Screen::Game || screen == Screen::Pause ||
          screen == Screen::Settings) &&
         !bannerMessage.empty() && SDL_GetTicks64() < bannerUntil) {
@@ -2288,8 +2359,14 @@ int Application::run(int argc, char **argv) {
         smokeHomeActions = true;
         homeFocus = ui::HomeFocus::Actions;
         homeAction = 1;
-      } else {
+      } else if (!smokeHomeQuit) {
         captureFrame(renderer, "home-actions-screenshot.bmp");
+        smokeHomeQuit = true;
+        quitConfirm = true;
+        quitChoice = 0;
+      } else {
+        captureFrame(renderer, "home-quit-screenshot.bmp");
+        quitConfirm = false;
         smokeHomeDone = true;
       }
     }

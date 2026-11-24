@@ -129,6 +129,7 @@ Select a populated card and press **M** or keyboard **X**, controller **X**, or 
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |
 | Open settings | Click **? Settings** | Focus the settings pill, A |
+| Quit the launcher | Esc, then confirm | B, then confirm |
 | Fullscreen | F11 | — |
 
 ### Controls
