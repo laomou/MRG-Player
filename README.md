@@ -90,6 +90,17 @@ SDL2 and SDL2_ttf are pinned Git submodules. The bundled `DroidSansFallbackFull.
 
 Windows builds with MSVC or MinGW through the same CMake invocation; install zlib (for example with vcpkg) so `.zip` cores can be unpacked, otherwise the installer reports that it cannot unpack the archive. SDL2 has neither an HTTP client nor a file dialog, so the launcher uses the Win32 common dialog for imports and WinHTTP for core downloads and needs no curl on the machine. Cores are loaded with `SDL_LoadObject`, which wraps `LoadLibrary` there, and `cores/` beside `mrg-player.exe` is searched as a portable layout. Windows, macOS (x86-64 and arm64), and Linux (x86-64 and aarch64) each resolve their own buildbot directory.
 
+### Releases
+
+Pushing a tag that starts with `v` (for example `git tag v1.0.1 && git push origin v1.0.1`) makes `.github/workflows/release.yml` build and publish that tag:
+
+- `mrg-player-<version>-linux-x86_64.tar.gz`, unpacked into `bin/` and `share/` — the binary, the fonts, and nothing else
+- `mrg-player-<version>-windows-x64.zip`, the same layout with `mrg-player.exe` in `bin/`
+- `mrg-player-<version>-macos-arm64.zip`, containing `mrg-player.app`
+- `SHA256SUMS.txt` covering all three
+
+The tag without its leading `v` is passed in as `MRG_VERSION_STRING`, so the About page of a packaged build reports the version it was cut from; a plain checkout keeps the project version from `CMakeLists.txt`. zlib, `libstdc++`, and the C library are the only shared libraries an archive needs.
+
 ## Game library
 
 Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the file is copied to its managed directory: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
