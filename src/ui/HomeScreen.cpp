@@ -234,9 +234,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   // Draw one column beyond each edge so a card sliding out and the next one
   // sliding in both stay whole while the row travels.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
-  const int lastSlot = std::min(
-      slotCount - 1, firstColumn + static_cast<int>(kVisibleSlots) + 1);
-  for (int i = std::max(0, firstColumn - 1); i <= lastSlot; ++i) {
+  // Always fill the window, including the half column at the right edge: an
+  // empty shelf still shows half a placeholder there, so the row reads as a
+  // shelf that continues rather than one that simply stops.
+  const int lastColumn = firstColumn + static_cast<int>(std::ceil(kVisibleSlots));
+  for (int i = std::max(0, firstColumn - 1); i <= lastColumn; ++i) {
     if (i == selectedGame)
       continue;
     const library::GameEntry *entry =
