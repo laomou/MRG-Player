@@ -21,6 +21,7 @@
 #include "library/GameLibrary.hpp"
 #include "runtime/VideoViewport.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
 namespace {
@@ -47,7 +48,7 @@ constexpr std::array<unsigned, config::kCoreActionCount> kLibretroButtons{
     RETRO_DEVICE_ID_JOYPAD_LEFT,   RETRO_DEVICE_ID_JOYPAD_RIGHT};
 
 bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::size_t limit = kMaximumRomSize) {
-  std::ifstream input(path, std::ios::binary | std::ios::ate);
+  std::ifstream input(paths::fromUtf8(path), std::ios::binary | std::ios::ate);
   if (!input)
     return false;
   const std::streamoff size = input.tellg();
@@ -67,7 +68,8 @@ std::string trim(const std::string &value) {
 }
 
 void writeTextFile(const std::string &path, const std::string &text) {
-  std::ofstream output(path, std::ios::binary | std::ios::trunc);
+  std::ofstream output(paths::fromUtf8(path),
+                       std::ios::binary | std::ios::trunc);
   if (output)
     output.write(text.data(), static_cast<std::streamsize>(text.size()));
 }
@@ -108,21 +110,25 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   name_ = core_.libraryName();
   if (!core_.libraryVersion().empty())
     name_ += " " + core_.libraryVersion();
-  const std::string coreStem = fs::path(corePath).stem().string();
+  const std::string coreStem = paths::toUtf8(paths::fromUtf8(corePath).stem());
   optionsPath_ =
-      (fs::path(config::dataSubdirectory("core-options", "")) / (coreStem + ".tsv")).string();
+      paths::toUtf8(paths::fromUtf8(config::dataSubdirectory("core-options", "")) /
+                    (coreStem + ".tsv"));
   loadCoreOptionValues();
   platform_ = game.platform;
   gameId_ = game.id;
   gamePath_ = game.filePath;
   renderer_ = renderer;
   const std::string directory = std::string(game::platformDescriptor(game.platform).managedDirectory);
-  savePath_ = (fs::path(config::dataSubdirectory("saves", directory)) / (game.id + ".srm")).string();
+  savePath_ =
+      paths::toUtf8(paths::fromUtf8(config::dataSubdirectory("saves", directory)) /
+                    (game.id + ".srm"));
   stateDirectory_ = config::dataSubdirectory("states", directory);
-  systemDirectory_ = (fs::path(config::dataRoot()) / "system").string();
+  systemDirectory_ =
+      paths::toUtf8(paths::fromUtf8(config::dataRoot()) / "system");
   {
     std::error_code ignored;
-    fs::create_directories(systemDirectory_, ignored);
+    fs::create_directories(paths::fromUtf8(systemDirectory_), ignored);
   }
   saveDirectory_ = config::dataSubdirectory("saves", directory);
 
@@ -228,7 +234,8 @@ void LibretroRuntime::restoreSaveRam() {
   const std::size_t size = core_.memorySize(RETRO_MEMORY_SAVE_RAM);
   if (data == nullptr || size == 0 || size > kMaximumSaveRamSize)
     return;
-  std::ifstream input(savePath_, std::ios::binary | std::ios::ate);
+  std::ifstream input(paths::fromUtf8(savePath_),
+                      std::ios::binary | std::ios::ate);
   if (!input)
     return;
   const std::streamoff bytes = input.tellg();
@@ -245,7 +252,7 @@ void LibretroRuntime::writeSaveRam() const {
   const std::size_t size = core_.memorySize(RETRO_MEMORY_SAVE_RAM);
   if (data == nullptr || size == 0 || size > kMaximumSaveRamSize)
     return;
-  std::ofstream output(savePath_, std::ios::binary | std::ios::trunc);
+  std::ofstream output(paths::fromUtf8(savePath_), std::ios::binary | std::ios::trunc);
   if (output)
     output.write(static_cast<const char *>(data), static_cast<std::streamsize>(size));
 }
@@ -910,7 +917,10 @@ void LibretroRuntime::render(SDL_Renderer *renderer) const {
 std::string LibretroRuntime::statePath(int slot) const {
   if (slot < 0 || slot > 2 || stateDirectory_.empty() || !active_ || gameId_.empty())
     return {};
-  return (fs::path(stateDirectory_) / (gameId_ + "-slot" + std::to_string(slot + 1) + ".mrgstate")).string();
+  const fs::path file =
+      paths::fromUtf8(stateDirectory_) /
+      (gameId_ + "-slot" + std::to_string(slot + 1) + ".mrgstate");
+  return paths::toUtf8(file);
 }
 
 bool LibretroRuntime::statePresent(int slot) const noexcept {
@@ -918,7 +928,7 @@ bool LibretroRuntime::statePresent(int slot) const noexcept {
   if (path.empty())
     return false;
   std::error_code error;
-  return fs::is_regular_file(path, error) && !error;
+  return fs::is_regular_file(paths::fromUtf8(path), error) && !error;
 }
 
 StateStatus LibretroRuntime::saveState(int slot, std::string &error) {
@@ -943,7 +953,8 @@ StateStatus LibretroRuntime::saveState(int slot, std::string &error) {
   const std::string head = header.str();
   const std::string temporary = path + ".tmp";
   {
-    std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
+    std::ofstream output(paths::fromUtf8(temporary),
+                         std::ios::binary | std::ios::trunc);
     if (output) {
       output.write(head.data(), static_cast<std::streamsize>(head.size()));
       output.write(reinterpret_cast<const char *>(stateBuffer_.data()),
@@ -956,18 +967,20 @@ StateStatus LibretroRuntime::saveState(int slot, std::string &error) {
       return StateStatus::Failed;
     }
   }
+  const fs::path temporaryPath = paths::fromUtf8(temporary);
+  const fs::path statePathValue = paths::fromUtf8(path);
   std::error_code renameError;
-  fs::rename(temporary, path, renameError);
+  fs::rename(temporaryPath, statePathValue, renameError);
   if (renameError) {
     std::error_code ignored;
-    fs::remove(path, ignored);
+    fs::remove(statePathValue, ignored);
     renameError.clear();
-    fs::rename(temporary, path, renameError);
+    fs::rename(temporaryPath, statePathValue, renameError);
   }
   if (renameError) {
     error = "Cannot finish save state: " + renameError.message();
     std::error_code ignored;
-    fs::remove(temporary, ignored);
+    fs::remove(temporaryPath, ignored);
     return StateStatus::Failed;
   }
   writeStateMetadata(path);
@@ -996,12 +1009,12 @@ StateInfo LibretroRuntime::stateInfo(int slot) const {
   if (path.empty())
     return info;
   std::error_code error;
-  info.present = fs::is_regular_file(path, error) && !error;
+  info.present = fs::is_regular_file(paths::fromUtf8(path), error) && !error;
   if (!info.present)
     return info;
   std::uint64_t epoch = 0;
   std::uint64_t frames = 0;
-  std::ifstream meta(path + ".meta");
+  std::ifstream meta(paths::fromUtf8(path + ".meta"));
   std::string line;
   while (std::getline(meta, line)) {
     const std::size_t separator = line.find('=');
@@ -1032,7 +1045,7 @@ StateInfo LibretroRuntime::stateInfo(int slot) const {
     info.playTime = playTime.str();
   }
   error.clear();
-  if (fs::is_regular_file(path + ".bmp", error) && !error)
+  if (fs::is_regular_file(paths::fromUtf8(path + ".bmp"), error) && !error)
     info.thumbnailPath = path + ".bmp";
   return info;
 }
@@ -1242,7 +1255,7 @@ void LibretroRuntime::loadCoreOptionValues() {
   storedOptions_.clear();
   if (optionsPath_.empty())
     return;
-  std::ifstream input(optionsPath_);
+  std::ifstream input(paths::fromUtf8(optionsPath_));
   if (!input)
     return;
   std::string line;
@@ -1297,7 +1310,7 @@ void LibretroRuntime::resetCoreOptions() {
   storedOptions_.clear();
   if (!optionsPath_.empty()) {
     std::error_code ignored;
-    fs::remove(optionsPath_, ignored);
+    fs::remove(paths::fromUtf8(optionsPath_), ignored);
   }
   optionsChanged_ = true;
 }

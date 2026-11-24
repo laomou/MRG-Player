@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "config/AppPaths.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::library {
 namespace {
@@ -56,7 +57,7 @@ bool isHexSuffix(std::string_view value) {
 }
 
 std::string displayTitle(const fs::path &path) {
-  std::string title = path.stem().string();
+  std::string title = paths::toUtf8(path.stem());
   const std::size_t separator = title.rfind("__");
   if (separator != std::string::npos &&
       isHexSuffix(std::string_view(title).substr(separator + 2)))
@@ -65,7 +66,7 @@ std::string displayTitle(const fs::path &path) {
 }
 
 std::string safeStem(const fs::path &path) {
-  std::string stem = path.stem().string();
+  std::string stem = paths::toUtf8(path.stem());
   for (char &c : stem) {
     const unsigned char byte = static_cast<unsigned char>(c);
     if (byte < 0x80 &&
@@ -77,7 +78,7 @@ std::string safeStem(const fs::path &path) {
 
 bool readGame(const fs::path &path, game::GamePlatform platform,
               std::vector<std::uint8_t> &bytes, std::string &error) {
-  if (!game::validateGameFile(platform, path.string(), error))
+  if (!game::validateGameFile(platform, paths::toUtf8(path), error))
     return false;
   std::error_code ec;
   const std::uintmax_t size = fs::file_size(path, ec);
@@ -173,10 +174,10 @@ bool GameLibrary::initialize() {
       error_ = "Cannot locate MRG Player data directory";
       return false;
     }
-    directory_ = (fs::path(root) / "library").string();
+    directory_ = paths::toUtf8(paths::fromUtf8(root) / "library");
   }
   std::error_code ec;
-  fs::create_directories(directory_, ec);
+  fs::create_directories(paths::fromUtf8(directory_), ec);
   if (ec) {
     error_ = "Cannot create game library directory: " + ec.message();
     return false;
@@ -192,7 +193,7 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
   if (directory_.empty() && !initialize())
     return ImportStatus::Failed;
 
-  const fs::path source(sourcePath);
+  const fs::path source = paths::fromUtf8(sourcePath);
   const game::GamePlatform platform = game::platformFromExtension(sourcePath);
   if (platform == game::GamePlatform::Unknown) {
     error_ = "No installed runtime supports this game format";
@@ -210,9 +211,9 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
     }
   }
 
-  const std::string extension = lowerAscii(source.extension().string());
+  const std::string extension = lowerAscii(paths::toUtf8(source.extension()));
   const fs::path platformDirectory =
-      fs::path(directory_) /
+      paths::fromUtf8(directory_) /
       game::platformDescriptor(platform).managedDirectory;
   std::error_code directoryError;
   fs::create_directories(platformDirectory, directoryError);
@@ -222,8 +223,10 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
     return ImportStatus::Failed;
   }
   const fs::path destination =
-      platformDirectory / (safeStem(source) + "__" + suffix + extension);
-  const fs::path temporary = destination.string() + ".tmp";
+      platformDirectory /
+      paths::fromUtf8(safeStem(source) + "__" + suffix + extension);
+  fs::path temporary = destination;
+  temporary += fs::path(".tmp");
   {
     std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
     if (!output || !output.write(reinterpret_cast<const char *>(bytes.data()),
@@ -245,7 +248,7 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
   }
   if (!refresh())
     return ImportStatus::Failed;
-  lastImportedIndex_ = indexOfPath(destination.string());
+  lastImportedIndex_ = indexOfPath(paths::toUtf8(destination));
   return ImportStatus::Imported;
 }
 
@@ -256,9 +259,9 @@ bool GameLibrary::removeGame(std::size_t index) {
     error_ = "Selected game is not in the managed library";
     return false;
   }
-  const fs::path gamePath(entries_[index].filePath);
+  const fs::path gamePath = paths::fromUtf8(entries_[index].filePath);
   const fs::path expectedDirectory =
-      fs::path(directory_) /
+      paths::fromUtf8(directory_) /
       game::platformDescriptor(entries_[index].platform).managedDirectory;
   if (gamePath.parent_path() != expectedDirectory) {
     error_ = "Refusing to remove a game outside the managed library";
@@ -389,7 +392,7 @@ std::string GameLibrary::metadataKey(const std::string &id,
 
 bool GameLibrary::loadMetadata() {
   metadata_.clear();
-  std::ifstream input(fs::path(directory_) / "metadata.tsv");
+  std::ifstream input(paths::fromUtf8(directory_) / "metadata.tsv");
   if (!input)
     return true;
   std::string line;
@@ -437,8 +440,9 @@ bool GameLibrary::loadMetadata() {
 }
 
 bool GameLibrary::saveMetadata() {
-  const fs::path destination = fs::path(directory_) / "metadata.tsv";
-  const fs::path temporary = destination.string() + ".tmp";
+  const fs::path destination = paths::fromUtf8(directory_) / "metadata.tsv";
+  fs::path temporary = destination;
+  temporary += fs::path(".tmp");
   {
     std::ofstream output(temporary, std::ios::trunc);
     if (!output) {
@@ -490,7 +494,7 @@ bool GameLibrary::saveMetadata() {
 bool GameLibrary::refresh() {
   entries_.clear();
   std::error_code ec;
-  fs::recursive_directory_iterator iterator(directory_, ec);
+  fs::recursive_directory_iterator iterator(paths::fromUtf8(directory_), ec);
   if (ec) {
     error_ = "Cannot scan game library: " + ec.message();
     return false;
@@ -500,14 +504,14 @@ bool GameLibrary::refresh() {
       ec.clear();
       continue;
     }
+    const std::string entryPath = paths::toUtf8(item.path());
     const game::GamePlatform platform =
-        game::platformFromExtension(item.path().string());
+        game::platformFromExtension(entryPath);
     std::string validationError;
     if (platform == game::GamePlatform::Unknown ||
-        !game::validateGameFile(platform, item.path().string(),
-                                validationError))
+        !game::validateGameFile(platform, entryPath, validationError))
       continue;
-    std::string id = item.path().stem().string();
+    std::string id = paths::toUtf8(item.path().stem());
     const std::size_t separator = id.rfind("__");
     id = separator == std::string::npos ? std::string{}
                                         : id.substr(separator + 2);
@@ -518,7 +522,7 @@ bool GameLibrary::refresh() {
     const std::string title = details.customTitle.empty()
                                   ? displayTitle(item.path())
                                   : details.customTitle;
-    entries_.push_back({std::move(id), title, item.path().string(), platform,
+    entries_.push_back({std::move(id), title, entryPath, platform,
                         details.favorite, details.playSeconds,
                         details.lastPlayed});
   }

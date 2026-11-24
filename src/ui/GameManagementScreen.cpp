@@ -11,6 +11,7 @@
 #include "game/GamePlatform.hpp"
 #include "i18n/Localization.hpp"
 #include "ui/Primitives.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::ui {
 namespace {
@@ -149,7 +150,7 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
   rounded(renderer, 369, 362, 862, 86, 18, {255, 255, 255, 14});
   text(renderer, 394, 382, tr(TextId::File, language), 1, {132, 145, 169, 255});
   text(renderer, 394, 411,
-       fitLine(std::filesystem::path(entry.filePath).filename().string(), 650,
+       fitLine(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 650,
                2),
        2, {255, 255, 255, 255});
   rounded(renderer, 369, 470, 862, 82, 18,
@@ -215,7 +216,7 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
        {255, 220, 114, 255});
   text(renderer, 415, 337, tr(TextId::File, language), 1, {132, 145, 169, 255});
   text(renderer, 415, 365,
-       fitLine(std::filesystem::path(entry.filePath).filename().string(), 760,
+       fitLine(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 760,
                2),
        2, {235, 239, 247, 255});
 

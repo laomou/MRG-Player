@@ -1,6 +1,7 @@
 #include "config/Settings.hpp"
 
 #include "config/AppPaths.hpp"
+#include "util/Utf8Path.hpp"
 
 #include <algorithm>
 #include <array>
@@ -32,11 +33,11 @@ std::string settingsPath() {
   (void)config::migrateLegacyData(migrationError);
   const std::string root = config::dataRoot();
   return root.empty() ? "mrg-player.ini"
-                      : (std::filesystem::path(root) / "settings.ini").string();
+                      : paths::toUtf8(paths::fromUtf8(root) / "settings.ini");
 }
 
 void loadSettings(AppSettings &settings) {
-  std::ifstream input(settingsPath());
+  std::ifstream input(paths::fromUtf8(settingsPath()));
   std::string line;
   while (std::getline(input, line)) {
     const std::size_t separator = line.find('=');
@@ -106,7 +107,7 @@ void loadSettings(AppSettings &settings) {
 }
 
 void saveSettings(const AppSettings &settings) {
-  std::ofstream output(settingsPath(), std::ios::trunc);
+  std::ofstream output(paths::fromUtf8(settingsPath()), std::ios::trunc);
   if (!output)
     return;
   output << "language=" << settings.language << '\n'

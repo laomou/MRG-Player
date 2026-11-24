@@ -4,6 +4,8 @@
 #include <fstream>
 #include <vector>
 
+#include "util/Utf8Path.hpp"
+
 namespace launcher::util {
 namespace {
 
@@ -105,7 +107,7 @@ std::string sha256Hex(const std::uint8_t *data, std::size_t size) {
 }
 
 std::string sha256File(const std::string &path) {
-  std::ifstream input(path, std::ios::binary | std::ios::ate);
+  std::ifstream input(paths::fromUtf8(path), std::ios::binary | std::ios::ate);
   if (!input)
     return {};
   const std::streamoff size = input.tellg();

@@ -4,6 +4,8 @@
 
 #include <filesystem>
 
+#include "util/Utf8Path.hpp"
+
 namespace launcher::config {
 namespace {
 namespace fs = std::filesystem;
@@ -48,8 +50,8 @@ std::string legacyDataRoot() { return preferenceRoot("NESPlayerLauncher"); }
 
 bool migrateLegacyData(std::string &error) {
   error.clear();
-  const fs::path current(dataRoot());
-  const fs::path legacy(legacyDataRoot());
+  const fs::path current(paths::fromUtf8(dataRoot()));
+  const fs::path legacy(paths::fromUtf8(legacyDataRoot()));
   if (current.empty()) {
     error = std::string("Cannot locate MRG Player data directory: ") +
             SDL_GetError();
@@ -73,11 +75,11 @@ std::string dataSubdirectory(std::string_view first, std::string_view second) {
   std::string migrationError;
   (void)migrateLegacyData(migrationError);
   const std::string root = dataRoot();
-  const fs::path base = root.empty() ? fs::path(".") : fs::path(root);
+  const fs::path base = root.empty() ? fs::path(".") : paths::fromUtf8(root);
   const fs::path directory = base / std::string(first) / std::string(second);
   std::error_code ec;
   fs::create_directories(directory, ec);
-  return directory.string();
+  return paths::toUtf8(directory);
 }
 
 } // namespace launcher::config
