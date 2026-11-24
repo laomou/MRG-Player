@@ -22,6 +22,8 @@ std::string gFontPath;
 std::array<TTF_Font *, 6> gLatinFonts{};
 std::string gLatinFontPath;
 
+void releaseGearTexture();
+
 // Rendered text is cached by content, size, and colour: the UI draws the same
 // two dozen labels every frame, and rasterising each of them through FreeType
 // and uploading a fresh texture was most of the frame cost.
@@ -36,12 +38,78 @@ SDL_Renderer *gTextRenderer = nullptr;
 constexpr std::size_t kTextCacheLimit = 512;
 
 void clearTextCache() {
+  releaseGearTexture();
   for (auto &entry : gTextCache) {
     if (entry.second.texture != nullptr)
       SDL_DestroyTexture(entry.second.texture);
   }
   gTextCache.clear();
   gTextRenderer = nullptr;
+}
+
+// One gear silhouette, rasterised at four times the size the header asks for
+// and tinted per call. Building it costs a few thousand samples, so it lives
+// for as long as the renderer does.
+SDL_Texture *gGearTexture = nullptr;
+SDL_Renderer *gGearRenderer = nullptr;
+constexpr int kGearTextureSize = 64;
+
+void buildGearTexture(SDL_Renderer *renderer) {
+  SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(
+      0, kGearTextureSize, kGearTextureSize, 32, SDL_PIXELFORMAT_RGBA32);
+  if (surface == nullptr)
+    return;
+  auto *pixels = static_cast<std::uint32_t *>(surface->pixels);
+  const float center = kGearTextureSize * 0.5f;
+  const float outer = center - 1.0f;
+  const float body = outer * 0.72f;
+  const float hole = outer * 0.26f;
+  constexpr int kTeeth = 8;
+  constexpr float kToothStart = 0.32f;
+  constexpr float kToothEnd = 0.68f;
+  constexpr int kSamples = 4;
+  for (int y = 0; y < kGearTextureSize; ++y) {
+    for (int x = 0; x < kGearTextureSize; ++x) {
+      int covered = 0;
+      for (int sy = 0; sy < kSamples; ++sy) {
+        for (int sx = 0; sx < kSamples; ++sx) {
+          const float px = static_cast<float>(x) + (sx + 0.5f) / kSamples -
+                           center;
+          const float py = static_cast<float>(y) + (sy + 0.5f) / kSamples -
+                           center;
+          const float distance = std::sqrt(px * px + py * py);
+          float angle = std::atan2(py, px) + kPi * 0.5f;
+          if (angle < 0.0f)
+            angle += 2.0f * kPi;
+          const float sector = 2.0f * kPi / kTeeth;
+          const float offset = std::fmod(angle, sector) / sector;
+          const float limit =
+              (offset > kToothStart && offset < kToothEnd) ? outer : body;
+          if (distance <= limit && distance >= hole)
+            ++covered;
+        }
+      }
+      const std::uint8_t alpha = static_cast<std::uint8_t>(
+          covered * 255 / (kSamples * kSamples));
+      pixels[static_cast<std::size_t>(y) * (surface->pitch / 4) +
+             static_cast<std::size_t>(x)] =
+          (static_cast<std::uint32_t>(alpha) << 24) | 0x00FFFFFFu;
+    }
+  }
+  gGearTexture = SDL_CreateTextureFromSurface(renderer, surface);
+  SDL_FreeSurface(surface);
+  if (gGearTexture != nullptr) {
+    SDL_SetTextureBlendMode(gGearTexture, SDL_BLENDMODE_BLEND);
+    SDL_SetTextureScaleMode(gGearTexture, SDL_ScaleModeLinear);
+  }
+  gGearRenderer = renderer;
+}
+
+void releaseGearTexture() {
+  if (gGearTexture != nullptr)
+    SDL_DestroyTexture(gGearTexture);
+  gGearTexture = nullptr;
+  gGearRenderer = nullptr;
 }
 
 bool requiresUtf8Font(const std::string &value) {
@@ -203,6 +271,25 @@ void fill(SDL_Renderer *renderer, float x, float y, float width, float height,
   setColor(renderer, color);
   const SDL_FRect rect{x, y, width, height};
   SDL_RenderFillRectF(renderer, &rect);
+}
+
+void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
+              float radius, SDL_Color color) {
+  if (renderer == nullptr || radius <= 0.0f)
+    return;
+  if (gGearTexture == nullptr || gGearRenderer != renderer) {
+    releaseGearTexture();
+    buildGearTexture(renderer);
+  }
+  if (gGearTexture == nullptr)
+    return;
+  SDL_SetTextureColorMod(gGearTexture, color.r, color.g, color.b);
+  SDL_SetTextureAlphaMod(gGearTexture, color.a);
+  const SDL_FRect box{centerX - radius, centerY - radius, radius * 2.0f,
+                      radius * 2.0f};
+  SDL_RenderCopyF(renderer, gGearTexture, nullptr, &box);
+  SDL_SetTextureColorMod(gGearTexture, 255, 255, 255);
+  SDL_SetTextureAlphaMod(gGearTexture, 255);
 }
 
 void circle(SDL_Renderer *renderer, int centerX, int centerY, int radius,

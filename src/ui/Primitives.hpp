@@ -73,4 +73,10 @@ void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
 void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
                    float height, float radius, float opacity);
 
+// A gear, drawn from geometry rather than a glyph: neither bundled font ships
+// a symbol for "settings", and the question mark it replaces read as help.
+// The silhouette is rasterised once and tinted per call.
+void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
+              float radius, SDL_Color color);
+
 } // namespace launcher::ui

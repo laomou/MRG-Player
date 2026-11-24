@@ -239,8 +239,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
           settingsPill.h, 29, {4, 10, 26, 175});
   circle(renderer, settingsPill.x + 33, 81, 15, {255, 255, 255, 45});
-  text(renderer, static_cast<int>(settingsPill.x) + 27, 66, "?", 2,
-       style.accent);
+  gearIcon(renderer, settingsPill.x + 33.0f, 81.0f, 13.0f, style.accent);
   text(renderer, static_cast<int>(settingsPill.x) + 59, 66,
        tr(TextId::Settings, language), 2, {255, 255, 255, 255});
   // The pills are buttons too, so they take the same ring when the direction
