@@ -19,5 +19,10 @@ namespace launcher::runtime::libretro {
 [[nodiscard]] std::string findCore(game::GamePlatform platform);
 // True when a libretro core, rather than a built-in runtime, serves the platform.
 [[nodiscard]] bool servedByCore(game::GamePlatform platform) noexcept;
+// Deletes the installed core for a platform together with the archive it came
+// from and any copy unpacked from one, so the platform goes back to being
+// uninstalled. Returns false and fills error when nothing could be removed.
+[[nodiscard]] bool removeInstalledCore(game::GamePlatform platform,
+                                     std::string &error);
 
 } // namespace launcher::runtime::libretro

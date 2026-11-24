@@ -69,6 +69,20 @@ constexpr game::GamePlatform kInstallerPlatforms[] = {
     game::GamePlatform::Snes,  game::GamePlatform::GameBoy,
     game::GamePlatform::Genesis};
 
+// A core library is a few megabytes, so one decimal keeps the installer line
+// readable without the row growing with the download.
+std::string formatCoreSize(std::uintmax_t bytes) {
+  constexpr double kBytesPerKib = 1024.0;
+  char buffer[32] = {};
+  if (bytes >= 1024U * 1024U)
+    std::snprintf(buffer, sizeof(buffer), "%.1f MB",
+                  static_cast<double>(bytes) / (kBytesPerKib * kBytesPerKib));
+  else
+    std::snprintf(buffer, sizeof(buffer), "%.0f KB",
+                  static_cast<double>(bytes) / kBytesPerKib);
+  return buffer;
+}
+
 struct ControllerCandidate {
   int deviceIndex = -1;
   SDL_JoystickID instanceId = -1;
@@ -387,6 +401,8 @@ int Application::run(int argc, char **argv) {
   std::string coreInstallMessage;
   SDL_Thread *coreInstallThread = nullptr;
   int coreInstallRow = 0;
+  int coreRemovePendingRow = -1;
+  Uint64 coreRemovePendingUntil = 0;
   bool bindingCapture = false;
   int managementAction = 0;
   int confirmationChoice = 0;
@@ -591,8 +607,14 @@ int Application::run(int argc, char **argv) {
         entry.core = candidates.front();
       const std::string installed = runtime::libretro::findCore(platform);
       entry.installed = !installed.empty();
-      if (entry.installed)
+      if (entry.installed) {
         entry.core = std::filesystem::path(installed).filename().string();
+        std::error_code sizeError;
+        const std::uintmax_t bytes =
+            std::filesystem::file_size(installed, sizeError);
+        if (!sizeError && bytes > 0)
+          entry.size = formatCoreSize(bytes);
+      }
       const bool downloading =
           coreInstallBusy && coreInstallRow == static_cast<int>(coreRows.size());
       entry.status = i18n::tr(
@@ -796,10 +818,41 @@ int Application::run(int argc, char **argv) {
     pauseFeedback = i18n::tr(id, currentLanguage());
     pauseFeedbackUntil = SDL_GetTicks64() + 2600;
   };
-  auto showBanner = [&](const std::string &message) {
+  auto showBanner = [&](const std::string &message, Uint64 duration = 1600) {
     bannerMessage = message;
-    bannerUntil = SDL_GetTicks64() + 1600;
+    bannerUntil = SDL_GetTicks64() + duration;
   };
+  // Deleting a core asks for a confirmation press first, so a stray Delete
+  // on the page never costs a multi-megabyte download.
+  auto removeCoreRow = [&](int row) {
+    if (coreInstallBusy || row < 0 ||
+        row >= static_cast<int>(std::size(kInstallerPlatforms))) {
+      return;
+    }
+    const bool confirmed = coreRemovePendingRow == row &&
+                           SDL_GetTicks64() < coreRemovePendingUntil;
+    if (!confirmed) {
+      coreRemovePendingRow = row;
+      coreRemovePendingUntil = SDL_GetTicks64() + 2500;
+      showBanner(i18n::tr(i18n::TextId::CoreRemoveConfirm, currentLanguage()),
+                 2500);
+      return;
+    }
+    coreRemovePendingRow = -1;
+    std::string error;
+    if (!runtime::libretro::removeInstalledCore(kInstallerPlatforms[row],
+                                               error)) {
+      std::fprintf(stderr, "core removal: %s\n", error.c_str());
+      showBanner(
+          i18n::tr(i18n::TextId::CoreRemoveFailedBanner, currentLanguage()),
+          3000);
+      return;
+    }
+    showBanner(i18n::tr(i18n::TextId::CoreRemovedBanner, currentLanguage()),
+               3000);
+    refreshCoreRows();
+  };
+
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
   auto saveScreenshot = [&]() -> std::string {
@@ -1236,8 +1289,10 @@ int Application::run(int argc, char **argv) {
       coreInstallBusy = false;
       if (!coreInstallOk)
         std::fprintf(stderr, "core install: %s\n", coreInstallMessage.c_str());
-      showToast(coreInstallOk ? i18n::TextId::CoreInstalledBanner
-                              : i18n::TextId::CoreInstallFailedBanner);
+      showBanner(i18n::tr(coreInstallOk ? i18n::TextId::CoreInstalledBanner
+                                        : i18n::TextId::CoreInstallFailedBanner,
+                          currentLanguage()),
+                 3000);
       refreshCoreRows();
     }
     SDL_Event event{};
@@ -1684,6 +1739,8 @@ int Application::run(int argc, char **argv) {
           } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
                      settingCategory == 5) {
             startCoreInstall(settingRow);
+          } else if (key == SDLK_DELETE && settingCategory == 5) {
+            removeCoreRow(settingRow);
           } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
                      settingCategory == 3 && settingRow >= 4 &&
                      settingRow < 4 + static_cast<int>(
@@ -1879,7 +1936,11 @@ int Application::run(int argc, char **argv) {
               startCoreInstall(settingRow);
             else
               applySetting(1);
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
+                     settingCategory == 5) {
+            removeCoreRow(settingRow);
+          } else if (event.cbutton.button ==
+                     SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
             changeCategory(-1);
           else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)
             changeCategory(1);
@@ -2008,7 +2069,8 @@ int Application::run(int argc, char **argv) {
           saveDataPresent, currentLanguage(), prompts);
     }
 
-    if ((screen == Screen::Game || screen == Screen::Pause) &&
+    if ((screen == Screen::Game || screen == Screen::Pause ||
+         screen == Screen::Settings) &&
         !bannerMessage.empty() && SDL_GetTicks64() < bannerUntil) {
       const int bannerWidth = ui::textWidth(bannerMessage, 1) + 44;
       const float bannerX =

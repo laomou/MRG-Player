@@ -502,6 +502,36 @@ int main(int, char **) {
   setTestEnvironment("MRG_CORES_DIR", corruptCores, 1);
   expect(launcher::runtime::libretro::findCore(launcher::game::GamePlatform::Gba).empty(),
          "a corrupt archive is accepted as a core");
+
+  // Removal deletes the library itself, so the platform reads as uninstalled
+  // and a second removal reports that there is nothing left to delete.
+  const fs::path removalCores = fs::path(home) / "removal-cores";
+  fs::create_directories(removalCores, zipError);
+  {
+    std::ofstream copy(removalCores / coreFileName,
+                       std::ios::binary | std::ios::trunc);
+    copy.write(reinterpret_cast<const char *>(coreBytes.data()),
+               static_cast<std::streamsize>(coreBytes.size()));
+  }
+  setTestEnvironment("MRG_CORES_DIR", removalCores, 1);
+  expect(launcher::runtime::libretro::findCore(
+             launcher::game::GamePlatform::Gba) ==
+             (removalCores / coreFileName).string(),
+         "the copied core is not discovered before removal");
+  std::string removalError;
+  expect(launcher::runtime::libretro::removeInstalledCore(
+             launcher::game::GamePlatform::Gba, removalError),
+         "cannot remove an installed core: " + removalError);
+  expect(!fs::exists(removalCores / coreFileName, zipError),
+         "the removed core is still on disk");
+  expect(launcher::runtime::libretro::findCore(
+             launcher::game::GamePlatform::Gba).empty(),
+         "a removed core is still discovered");
+  removalError.clear();
+  expect(!launcher::runtime::libretro::removeInstalledCore(
+             launcher::game::GamePlatform::Gba, removalError),
+         "removing a missing core reports success");
+  expect(!removalError.empty(), "a failed removal explains nothing");
   restoreDirectory("MRG_CORES_DIR", previousSaves);
 #endif
 

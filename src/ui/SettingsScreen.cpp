@@ -405,7 +405,9 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     for (std::size_t index = 0; index < cores.size() && index < 5; ++index) {
       const CoreRow &entry = cores[index];
       const std::string value =
-          entry.core + "  " + entry.status;
+          entry.size.empty()
+              ? entry.core + "  " + entry.status
+              : entry.core + "  " + entry.size + "  " + entry.status;
       drawCompactRow(renderer, kTrackX, kCompactStartY + 8 +
                                          static_cast<int>(index) * 56,
                      kTrackWidth, row == static_cast<int>(index),
@@ -415,6 +417,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
          {144, 165, 184, 255});
     drawHintRow(renderer, 1528.0f, 784.0f,
                 {{tr(TextId::InstallCore, language), prompts.confirm, false},
+                 {tr(TextId::RemoveCore, language), "DEL", false},
                  {tr(TextId::RefreshCores, language), "R", false}},
                 game.accent);
   } else if (category == 4) {
