@@ -25,6 +25,9 @@ int settingRowCount(int category);
 // -1 when the point misses every row. The binding list is two columns wide, so
 // hit testing has to know the exact geometry the page draws with.
 int controllerPageRowAt(int x, int y);
+// Same idea for the general page, whose rows are shorter than the others so
+// the rewind and runahead options fit above the footer.
+int generalPageRowAt(int x, int y);
 void changeSetting(AppSettings &settings, int category, int row, int direction);
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   int category, int row, int selectedGame, float time,

@@ -59,6 +59,15 @@ public:
   // frame, so the pause menu can scrub the picture without resuming.
   virtual void setSlowMotion(bool enabled) noexcept { (void)enabled; }
   virtual void stepFrame() {}
+  // Rewind keeps a rolling window of machine snapshots while the player plays
+  // and walks back through them on demand. Runtimes that cannot snapshot the
+  // machine ignore the request, and rewindStep() then reports false.
+  virtual void setRewindEnabled(bool enabled) noexcept { (void)enabled; }
+  [[nodiscard]] virtual bool rewindStep() noexcept { return false; }
+  // Runahead hides one or more frames between the input and the picture: the
+  // frame on screen comes from an older input state, so the game reacts
+  // sooner. Zero disables it.
+  virtual void setRunaheadFrames(int frames) noexcept { (void)frames; }
   virtual void setVideoOptions(const VideoOptions &options) noexcept {
     (void)options;
   }

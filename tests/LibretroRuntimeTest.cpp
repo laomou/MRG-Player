@@ -329,6 +329,57 @@ int main(int, char **) {
   expect(readFirst && readSecond, "cannot read the saved states");
   expect(first == second, "a reloaded state does not reproduce itself");
 
+  // Rewind: stepping back has to restore an earlier picture, and the window has
+  // to end instead of stepping past its oldest snapshot.
+  const auto visibleFrame = [&]() -> int {
+    std::uint32_t pixel = 0;
+    const SDL_Rect centre{160, 120, 1, 1};
+    if (SDL_RenderReadPixels(renderer, &centre, SDL_PIXELFORMAT_ARGB8888,
+                             &pixel, sizeof(pixel)) != 0) {
+      expect(false, "cannot read the rendered frame");
+      return -1;
+    }
+    // The stub paints the frame counter into the blue channel.
+    return static_cast<int>(pixel & 0xFFU);
+  };
+  runtime->setRewindEnabled(true);
+  for (int frame = 0; frame < 10; ++frame)
+    runtime->stepFrame();
+  runtime->render(renderer);
+  const int rewoundFrom = visibleFrame();
+  expect(runtime->rewindStep(), "rewind did not step back");
+  runtime->render(renderer);
+  const int rewoundTo = visibleFrame();
+  expect(rewoundFrom >= 0 && rewoundTo >= 0 && rewoundTo != rewoundFrom,
+         "rewind did not restore an earlier frame");
+  int rewoundSteps = 1;
+  while (runtime->rewindStep())
+    ++rewoundSteps;
+  expect(rewoundSteps > 1, "the rewind window only held a single snapshot");
+  expect(rewoundSteps < 10, "rewind kept more snapshots than frames were run");
+  runtime->setRewindEnabled(false);
+  expect(!runtime->rewindStep(), "rewind steps with the feature turned off");
+
+  // Runahead: the picture shown has to be the one the core produces a few frames
+  // beyond the state it keeps, which is what hides the core's own input lag.
+  runtime->setRunaheadFrames(0);
+  runtime->stepFrame();
+  runtime->render(renderer);
+  const int plainFrame = visibleFrame();
+  runtime->setRunaheadFrames(2);
+  runtime->stepFrame();
+  runtime->render(renderer);
+  const int aheadFrame = visibleFrame();
+  expect(plainFrame >= 0 && aheadFrame >= 0 &&
+             aheadFrame == (plainFrame + 3) % 256,
+         "runahead did not show a frame two frames past the kept state");
+  runtime->setRunaheadFrames(0);
+  runtime->stepFrame();
+  runtime->render(renderer);
+  const int backToPlain = visibleFrame();
+  expect(backToPlain >= 0 && backToPlain == (plainFrame + 2) % 256,
+         "turning runahead off did not resume the normal frame sequence");
+
   runtime->powerCycle();
   expect(runtime->loadState(0, error) == launcher::runtime::StateStatus::Loaded,
          "load state after a power cycle failed: " + error);

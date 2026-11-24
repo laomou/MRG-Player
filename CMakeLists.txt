@@ -258,6 +258,8 @@ if(BUILD_TESTING)
     src/ui/Primitives.cpp
     src/ui/PauseMenuScreen.cpp
     src/ui/GameManagementScreen.cpp
+    src/ui/SettingsScreen.cpp
+    src/model/Game.cpp
     src/i18n/Localization.cpp
   )
   target_include_directories(ui-rendering-test PRIVATE src)

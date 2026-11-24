@@ -22,6 +22,11 @@ struct AppSettings {
   bool videoIntegerScale = false;
   // Pixels cropped on every edge, in the 0..16 range.
   int videoOverscan = 0;
+  // Rewind keeps a rolling window of machine snapshots behind the playhead so
+  // the player can scrub back over a mistake.
+  bool rewind = true;
+  // Frames the picture is allowed to run ahead of the input, 0 to 3.
+  int runahead = 0;
   int selectedGame = 2;
   config::PromptDeviceMode promptDevice = config::PromptDeviceMode::Auto;
   config::ControllerStyle controllerStyle = config::ControllerStyle::Auto;
