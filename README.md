@@ -206,6 +206,8 @@ Open **Settings → Controller** to choose the UI prompt mode (**Auto**, **Keybo
 
 The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused.
 
+The shelf always shows seven cards, whether the library holds three games or thirty. Once there are more than seven, the row slides as the selection moves so the highlighted card stays in view, and the next card hangs off the right edge to show there is more to the right; the row settles into place when the screen is opened rather than sliding in from the first game.
+
 ## libretro cores
 
 Every platform runs through a libretro core that must already be on the machine; MRG Player bundles none. Copy the core's shared library into `cores/` in the data root and it is picked up on the next launch:

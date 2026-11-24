@@ -19,7 +19,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction);
+              int focusedPill, int focusedAction, float rowOffset);
 void moveSelection(int &selectedGame, int direction, int count);
 
 // The footer grows and shrinks with the selection: an empty slot has nothing to
@@ -28,7 +28,10 @@ void moveSelection(int &selectedGame, int direction, int count);
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
                                i18n::Language language,
                                const config::InputPrompts &prompts);
-[[nodiscard]] int homeCardAt(float x, float y, int count);
+[[nodiscard]] int homeCardAt(float x, float y, int count, float rowOffset);
+// How far the shelf has to slide for the selection to stay on screen. It is a
+// fraction while the row is travelling, so callers can animate towards it.
+[[nodiscard]] float homeRowTarget(int selectedGame, int count);
 // 0 is the library pill, 1 is the settings pill; -1 when neither was hit.
 [[nodiscard]] int homePillAt(float x, float y);
 

@@ -33,15 +33,22 @@ struct CardBox {
   float height = 0.0f;
 };
 
-CardBox cardBox(int slot, int count, bool selected) {
-  const float slots = static_cast<float>(std::max(1, count));
-  const float pitch = (kRowRight - kRowLeft) / slots;
-  const float base = std::min(kMaximumCardWidth,
-                              std::max(96.0f, pitch - kCardGap));
+// The shelf never changes its card count: seven fit the width, and a library
+// with more games slides the row instead, leaving the next card hanging off the
+// right edge as the cue that there is more.
+constexpr int kVisibleSlots = 7;
+
+float slotPitch() {
+  return (kRowRight - kRowLeft) / static_cast<float>(kVisibleSlots);
+}
+
+CardBox cardBox(float column, bool selected) {
+  const float base =
+      std::min(kMaximumCardWidth, slotPitch() - kCardGap);
   const float scale = selected ? 1.04f : 1.0f;
   const float width = base * scale;
   const float height = base * kCardAspect * scale;
-  const float centre = kRowLeft + pitch * (static_cast<float>(slot) + 0.5f);
+  const float centre = kRowLeft + slotPitch() * (column + 0.5f);
   return {centre - width * 0.5f, kRowBottom - height, width, height};
 }
 
@@ -64,11 +71,10 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
   return title + suffix;
 }
 
-void drawCard(SDL_Renderer *renderer, int index, int slot, int count,
-              bool selected, float pulse,
-              const library::GameEntry *entry) {
+void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
+              float pulse, const library::GameEntry *entry) {
   const Game &style = styleFor(index);
-  const CardBox box = cardBox(slot, count, selected);
+  const CardBox box = cardBox(column, selected);
   const float x = box.x;
   const float y = box.y - (selected ? pulse * 3.0f : 0.0f);
   const float width = box.width;
@@ -168,7 +174,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction) {
+              int focusedPill, int focusedAction, float rowOffset) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -221,16 +227,23 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
        {191, 201, 220, 255});
 
   const float pulse = (std::sin(time * 3.0f) + 1.0f) * 0.5f;
-  for (int i = 0; i < slotCount; ++i) {
+  // Draw one column beyond each edge so a card sliding out and the next one
+  // sliding in both stay whole while the row travels.
+  const int firstColumn = static_cast<int>(std::floor(rowOffset));
+  const int lastSlot =
+      std::min(slotCount - 1, firstColumn + kVisibleSlots + 1);
+  for (int i = std::max(0, firstColumn - 1); i <= lastSlot; ++i) {
     if (i == selectedGame)
       continue;
     const library::GameEntry *entry =
         i < static_cast<int>(gameLibrary.entries().size())
             ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
             : nullptr;
-    drawCard(renderer, i, i, slotCount, false, pulse, entry);
+    drawCard(renderer, i, static_cast<float>(i) - rowOffset, false, pulse,
+             entry);
   }
-  drawCard(renderer, selectedGame, selectedGame, slotCount, true, pulse,
+  drawCard(renderer, selectedGame,
+           static_cast<float>(selectedGame) - rowOffset, true, pulse,
            selectedEntry);
 
   if (selectedEntry != nullptr) {
@@ -297,18 +310,27 @@ int homePillAt(float x, float y) {
   return -1;
 }
 
-int homeCardAt(float x, float y, int count) {
+int homeCardAt(float x, float y, int count, float rowOffset) {
   // The selected card is drawn a little larger, so accept either size and a
   // click on its rim still counts.
-  for (int slot = 0; slot < std::max(1, count); ++slot) {
+  const int firstColumn = static_cast<int>(std::floor(rowOffset));
+  const int lastSlot = std::min(count - 1, firstColumn + kVisibleSlots + 1);
+  for (int slot = std::max(0, firstColumn - 1); slot <= lastSlot; ++slot) {
     for (const bool selected : {false, true}) {
-      const CardBox box = cardBox(slot, count, selected);
+      const CardBox box = cardBox(static_cast<float>(slot) - rowOffset,
+                                  selected);
       if (x >= box.x && x <= box.x + box.width && y >= box.y &&
           y <= box.y + box.height)
         return slot;
     }
   }
   return -1;
+}
+
+float homeRowTarget(int selectedGame, int count) {
+  const int overflow = std::max(0, count - kVisibleSlots);
+  const int start = std::clamp(selectedGame - kVisibleSlots + 1, 0, overflow);
+  return static_cast<float>(start);
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <cmath>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -385,6 +386,8 @@ int Application::run(int argc, char **argv) {
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
   int homeAction = 0;
+  float homeRow = 0.0f;
+  bool homeRowSettled = false;
   selectedGame = std::clamp(selectedGame, 0,
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
@@ -1848,8 +1851,8 @@ int Application::run(int argc, char **argv) {
         SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &x,
                                   &y);
         if (screen == Screen::Home) {
-          const int clickedCard =
-              ui::homeCardAt(x, y, static_cast<int>(gameLibrary.slotCount()));
+          const int clickedCard = ui::homeCardAt(
+              x, y, static_cast<int>(gameLibrary.slotCount()), homeRow);
           const int clickedAction =
               ui::homeActionAt(x, y, selectedEntryAvailable(),
                                currentLanguage(), currentPrompts());
@@ -2081,6 +2084,23 @@ int Application::run(int argc, char **argv) {
     const float time =
         static_cast<float>((SDL_GetPerformanceCounter() - start) / frequency);
     const config::InputPrompts prompts = currentPrompts();
+    if (screen == Screen::Home) {
+      // The shelf eases towards the column that keeps the selection on screen,
+      // so a card sliding past never jumps.
+      const float rowTarget = ui::homeRowTarget(
+          selectedGame, static_cast<int>(gameLibrary.slotCount()));
+      // Coming back from another screen should show the shelf where it belongs
+      // instead of sliding in from the start.
+      if (!homeRowSettled) {
+        homeRow = rowTarget;
+        homeRowSettled = true;
+      }
+      homeRow += (rowTarget - homeRow) * 0.35f;
+      if (std::abs(rowTarget - homeRow) < 0.002f)
+        homeRow = rowTarget;
+    } else {
+      homeRowSettled = false;
+    }
     if (screen == Screen::Game) {
       if (activeRuntime) {
         // Holding the rewind key stops the clock and walks the snapshots
@@ -2114,7 +2134,7 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeAction);
+                   prompts, homeFocus, homePill, homeAction, homeRow);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        selectedGame % static_cast<int>(kGameCount), time,
@@ -2123,7 +2143,7 @@ int Application::run(int argc, char **argv) {
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeAction);
+                   prompts, homeFocus, homePill, homeAction, homeRow);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],

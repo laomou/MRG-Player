@@ -80,8 +80,17 @@ int main(int argc, char **argv) {
   check(homePillAt(1200, 80) == 0, "Library pill target preserved");
   check(homePillAt(1450, 80) == 1, "Settings pill target preserved");
   check(homePillAt(700, 80) == -1, "Empty header space activates nothing");
-  check(homeCardAt(500, 500, 7) >= 0, "A card in the row is clickable");
-  check(homeCardAt(500, 200, 7) == -1, "Above the row activates nothing");
+  check(homeCardAt(500, 500, 7, 0.0f) >= 0,
+        "A card in the row is clickable");
+  check(homeCardAt(500, 200, 7, 0.0f) == -1,
+        "Above the row activates nothing");
+  // Seven cards fit, so the row only travels once the library outgrows them.
+  check(homeRowTarget(0, 5) == 0.0f && homeRowTarget(6, 7) == 0.0f,
+        "A short library never scrolls");
+  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 3.0f,
+        "A long library keeps the selection on the last visible column");
+  check(homeCardAt(1500, 500, 10, 2.0f) >= 7,
+        "Scrolling the row moves the cards under the pointer");
   launcher::config::InputPrompts prompts;
   check(homeActionAt(1500, 828, true, launcher::i18n::Language::English,
                      prompts) == 2,
