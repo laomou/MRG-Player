@@ -111,6 +111,7 @@ add_executable(mrg-player
   src/app/Application.cpp
   src/app/LaunchOptions.cpp
   src/config/Settings.cpp
+  src/i18n/CoreOptionText.cpp
   src/i18n/Localization.cpp
   src/library/GameLibrary.cpp
   src/runtime/RuntimeRegistry.cpp
@@ -180,6 +181,13 @@ if(BUILD_TESTING)
   target_compile_features(sha256-test PRIVATE cxx_std_17)
   target_compile_options(sha256-test PRIVATE ${MRG_WARNING_FLAGS})
   add_test(NAME sha256 COMMAND sha256-test)
+
+  add_executable(core-option-text-test tests/CoreOptionTextTest.cpp
+    src/i18n/CoreOptionText.cpp)
+  target_include_directories(core-option-text-test PRIVATE src)
+  target_compile_features(core-option-text-test PRIVATE cxx_std_17)
+  target_compile_options(core-option-text-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME core-option-text COMMAND core-option-text-test)
 
   add_executable(input-bindings-test tests/InputBindingsTest.cpp)
   target_include_directories(input-bindings-test PRIVATE src)
@@ -283,6 +291,7 @@ if(BUILD_TESTING)
     src/ui/SettingsScreen.cpp
     src/model/Game.cpp
     src/library/GameLibrary.cpp
+    src/i18n/CoreOptionText.cpp
     src/i18n/Localization.cpp
   )
   target_include_directories(ui-rendering-test PRIVATE src)

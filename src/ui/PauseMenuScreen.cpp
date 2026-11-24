@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "i18n/CoreOptionText.hpp"
 #include "i18n/Localization.hpp"
 #include "ui/Primitives.hpp"
 
@@ -346,13 +347,17 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
       rounded(renderer, kActionX, y, kActionWidth, kOptionRowHeight, 14,
               selected ? SDL_Color{255, 211, 101, 255}
                        : SDL_Color{255, 255, 255, 16});
+      const std::string label =
+          i18n::coreOptionLabel(option.key, option.label, language);
       text(renderer, 1032, static_cast<int>(y + 15),
-           fitLine(option.label, 240, 2), 2,
+           fitLine(label, 240, 2), 2,
            selected ? SDL_Color{24, 24, 39, 255}
                     : SDL_Color{241, 245, 251, 255});
       std::string value;
-      if (option.selected < option.values.size())
-        value = option.values[option.selected].label;
+      if (option.selected < option.values.size()) {
+        const runtime::CoreOptionValue &entry = option.values[option.selected];
+        value = i18n::coreOptionValue(entry.value, entry.label, language);
+      }
       value = fitLine(value, 190, 2);
       text(renderer, 1472 - textWidth(value, 2), static_cast<int>(y + 15),
            value, 2,
