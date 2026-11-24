@@ -22,6 +22,8 @@
 #include "runtime/RuntimeRegistry.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "runtime/libretro/CoreInstaller.hpp"
+#include "util/ImageFile.hpp"
+#include "util/Utf8Path.hpp"
 
 #if defined(MRG_HAVE_ZLIB)
 #include <zlib.h>
@@ -560,6 +562,59 @@ int main(int, char **) {
     expect(nesRuntime->saveState(0, nesError) == launcher::runtime::StateStatus::Saved,
            "NES save state failed: " + nesError);
     nesRuntime->stop();
+  }
+
+  // A game whose path is not ASCII also has to load, snapshot and save its
+  // battery RAM, all of which reach the filesystem as strings.
+  {
+    const fs::path unicodeRom =
+        homeDirectory / launcher::paths::fromUtf8("超级马里奥.gba");
+    {
+      std::ofstream rom(unicodeRom, std::ios::binary | std::ios::trunc);
+      rom << "STUBGBA0";
+    }
+    launcher::library::GameEntry unicodeGame;
+    unicodeGame.id = "超级马里奥";
+    unicodeGame.title = "超级马里奥";
+    unicodeGame.filePath = launcher::paths::toUtf8(unicodeRom);
+    unicodeGame.platform = launcher::game::GamePlatform::Gba;
+    std::unique_ptr<launcher::runtime::IGameRuntime> unicodeRuntime =
+        registry.create(launcher::game::GamePlatform::Gba);
+    expect(unicodeRuntime != nullptr,
+           "no runtime can be created for a non-ASCII game");
+    if (unicodeRuntime != nullptr) {
+      std::string unicodeError;
+      expect(unicodeRuntime->load(unicodeGame, renderer, 80),
+             "loading a non-ASCII path failed: " +
+                 std::string(unicodeRuntime->error()));
+      unicodeRuntime->stepFrame();
+      unicodeRuntime->render(renderer);
+      expect(unicodeRuntime->saveState(0, unicodeError) ==
+                 launcher::runtime::StateStatus::Saved,
+             "saving a non-ASCII state failed: " + unicodeError);
+      const launcher::runtime::StateInfo unicodeInfo =
+          unicodeRuntime->stateInfo(0);
+      expect(unicodeInfo.present, "the non-ASCII state slot is not present");
+      expect(!unicodeInfo.thumbnailPath.empty() &&
+                 fs::is_regular_file(
+                     launcher::paths::fromUtf8(unicodeInfo.thumbnailPath)),
+             "the non-ASCII state thumbnail is missing");
+      SDL_Surface *unicodeThumbnail =
+          launcher::io::loadSurfaceBmp(unicodeInfo.thumbnailPath);
+      expect(unicodeThumbnail != nullptr,
+             "the non-ASCII state thumbnail cannot be decoded");
+      if (unicodeThumbnail != nullptr)
+        SDL_FreeSurface(unicodeThumbnail);
+      expect(unicodeRuntime->loadState(0, unicodeError) ==
+                 launcher::runtime::StateStatus::Loaded,
+             "loading a non-ASCII state failed: " + unicodeError);
+      unicodeRuntime->stop();
+      const fs::path unicodeBattery =
+          fs::path(launcher::config::dataSubdirectory("saves", "gba")) /
+          launcher::paths::fromUtf8("超级马里奥.srm");
+      expect(fs::is_regular_file(unicodeBattery),
+             "the non-ASCII battery save is missing");
+    }
   }
 
   // The installer resolves a core name against a base URL; nothing touches the

@@ -74,6 +74,8 @@ add_library(mrg-platform STATIC
   src/config/AppPaths.cpp
   src/config/InputBindings.cpp
   src/game/GamePlatform.cpp
+  src/util/ImageFile.cpp
+  src/util/Utf8Path.cpp
 )
 target_include_directories(mrg-platform PUBLIC src)
 target_compile_features(mrg-platform PUBLIC cxx_std_17)
@@ -172,7 +174,8 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME game-library COMMAND game-library-test)
 
-  add_executable(sha256-test tests/Sha256Test.cpp src/util/Sha256.cpp)
+  add_executable(sha256-test tests/Sha256Test.cpp src/util/Sha256.cpp
+    src/util/Utf8Path.cpp)
   target_include_directories(sha256-test PRIVATE src)
   target_compile_features(sha256-test PRIVATE cxx_std_17)
   target_compile_options(sha256-test PRIVATE ${MRG_WARNING_FLAGS})
@@ -292,7 +295,8 @@ if(BUILD_TESTING)
   set_tests_properties(ui-rendering PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
 
   if(ZLIB_FOUND)
-    add_executable(png-writer-test tests/PngWriterTest.cpp src/util/PngWriter.cpp)
+    add_executable(png-writer-test tests/PngWriterTest.cpp src/util/PngWriter.cpp
+      src/util/Utf8Path.cpp)
     target_include_directories(png-writer-test PRIVATE src)
     target_compile_features(png-writer-test PRIVATE cxx_std_17)
     target_compile_options(png-writer-test PRIVATE ${MRG_WARNING_FLAGS})

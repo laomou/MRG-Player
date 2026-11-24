@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <filesystem>
 
+#include "util/Utf8Path.hpp"
+
 namespace launcher::ui {
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
@@ -140,9 +142,8 @@ bool initializeTextRenderer(const std::string &fontPath) {
   if (TTF_WasInit() == 0 && TTF_Init() != 0)
     return false;
   gFontPath = fontPath;
-  gLatinFontPath =
-      (std::filesystem::path(fontPath).parent_path() / "DejaVuSans.ttf")
-          .string();
+  gLatinFontPath = paths::toUtf8(
+      paths::fromUtf8(fontPath).parent_path() / "DejaVuSans.ttf");
   return fontForScale(2) != nullptr;
 }
 

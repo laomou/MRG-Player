@@ -15,6 +15,7 @@
 #include "game/GamePlatform.hpp"
 #include "library/GameLibrary.hpp"
 #include "runtime/RuntimeRegistry.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace {
 namespace fs = std::filesystem;
@@ -401,6 +402,48 @@ int main() {
       check(keyboardPrompts.confirm == "ENTER" &&
                 keyboardPrompts.manage == "X" && keyboardPrompts.back == "ESC",
             "keyboard prompt set matches launcher controls");
+
+  // A ROM whose name is not ASCII has to survive import, rescan and metadata
+  // reload. Windows would otherwise read these bytes in the ANSI code page.
+  const fs::path unicodeManaged = root / "unicode-managed";
+  const fs::path unicodeRom =
+      sources / launcher::paths::fromUtf8("超级马里奥.nes");
+  ok &= check(writeBytes(unicodeRom, makeRom(0x33)),
+              "write a ROM whose name is not ASCII");
+  {
+    GameLibrary unicodeLibrary(unicodeManaged.string());
+    ok &= check(unicodeLibrary.initialize(),
+                "initialize the library for non-ASCII names");
+    ok &= check(unicodeLibrary.importGame(
+                    launcher::paths::toUtf8(unicodeRom)) ==
+                    ImportStatus::Imported,
+                "import a ROM whose name is not ASCII");
+    const auto unicodeEntry = std::find_if(
+        unicodeLibrary.entries().begin(), unicodeLibrary.entries().end(),
+        [](const launcher::library::GameEntry &entry) {
+          return entry.title == "超级马里奥";
+        });
+    ok &= check(unicodeEntry != unicodeLibrary.entries().end(),
+                "the non-ASCII title is kept in the library");
+    if (unicodeEntry != unicodeLibrary.entries().end()) {
+      const fs::path managed =
+          launcher::paths::fromUtf8(unicodeEntry->filePath);
+      ok &= check(readBytes(managed) == makeRom(0x33),
+                  "the managed copy of a non-ASCII ROM is readable");
+    }
+  }
+  {
+    GameLibrary unicodeReload(unicodeManaged.string());
+    ok &= check(unicodeReload.initialize(),
+                "reload the library holding non-ASCII names");
+    const auto reloaded = std::find_if(
+        unicodeReload.entries().begin(), unicodeReload.entries().end(),
+        [](const launcher::library::GameEntry &entry) {
+          return entry.title == "超级马里奥";
+        });
+    ok &= check(reloaded != unicodeReload.entries().end(),
+                "the non-ASCII entry survives a restart");
+  }
 
   fs::remove_all(root, ec);
   ok &= check(!ec, "remove temporary test directory");

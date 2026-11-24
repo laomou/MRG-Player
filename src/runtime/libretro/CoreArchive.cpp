@@ -10,6 +10,8 @@
 #include <zlib.h>
 #endif
 
+#include "util/Utf8Path.hpp"
+
 namespace launcher::runtime::libretro {
 namespace {
 
@@ -43,7 +45,8 @@ bool inRange(std::size_t offset, std::size_t length, std::size_t size) {
 
 bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::string &error) {
   std::error_code code;
-  const std::uint64_t size = fs::file_size(path, code);
+  const fs::path filePath = paths::fromUtf8(path);
+  const std::uint64_t size = fs::file_size(filePath, code);
   if (code || size == 0) {
     error = "cannot read " + path;
     return false;
@@ -52,7 +55,7 @@ bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::st
     error = "the archive is larger than 128 MiB";
     return false;
   }
-  std::ifstream input(path, std::ios::binary);
+  std::ifstream input(filePath, std::ios::binary);
   if (!input) {
     error = "cannot open " + path;
     return false;
@@ -217,26 +220,27 @@ bool writeAtomically(const fs::path &target, const std::vector<std::uint8_t> &co
   std::error_code code;
   fs::create_directories(target.parent_path(), code);
   if (code) {
-    error = "cannot create " + target.parent_path().string();
+    error = "cannot create " + paths::toUtf8(target.parent_path());
     return false;
   }
-  const fs::path temporary = target.string() + ".part";
+  fs::path temporary = target;
+  temporary += fs::path(".part");
   {
     std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
     if (!output) {
-      error = "cannot write " + temporary.string();
+      error = "cannot write " + paths::toUtf8(temporary);
       return false;
     }
     output.write(reinterpret_cast<const char *>(content.data()), static_cast<std::streamsize>(content.size()));
     if (!output) {
-      error = "cannot write " + temporary.string();
+      error = "cannot write " + paths::toUtf8(temporary);
       return false;
     }
   }
   fs::rename(temporary, target, code);
   if (code) {
     fs::remove(temporary, code);
-    error = "cannot place " + target.string();
+    error = "cannot place " + paths::toUtf8(target);
     return false;
   }
   return true;
@@ -271,16 +275,17 @@ bool unpackCoreFromZip(const std::string &zipPath, const std::string &expectedFi
   std::vector<std::uint8_t> content;
   if (!extract(bytes, entry, content, error))
     return false;
-  const fs::path target = fs::path(destinationDirectory) / expectedFileName;
+  const fs::path target =
+      paths::fromUtf8(destinationDirectory) / expectedFileName;
   // Rewriting an unchanged core would only bump its timestamp, and timestamps
   // are too coarse to tell whether the archive changed.
   if (holdsContent(target, content)) {
-    extractedPath = target.string();
+    extractedPath = paths::toUtf8(target);
     return true;
   }
   if (!writeAtomically(target, content, error))
     return false;
-  extractedPath = target.string();
+  extractedPath = paths::toUtf8(target);
   return true;
 }
 

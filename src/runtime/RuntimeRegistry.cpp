@@ -9,6 +9,7 @@
 #include "runtime/IGameRuntime.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "runtime/libretro/LibretroRuntime.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::runtime {
 namespace {
@@ -21,7 +22,8 @@ std::string batterySavePath(const library::GameEntry &game, std::string_view dir
                                     ? config::dataSubdirectory(
                                           "saves", std::string(game::platformDescriptor(game.platform).managedDirectory))
                                     : std::string(directoryOverride);
-  return (fs::path(directory) / (game.id + ".srm")).string();
+  return paths::toUtf8(paths::fromUtf8(directory) /
+                       paths::fromUtf8(game.id + ".srm"));
 }
 
 } // namespace

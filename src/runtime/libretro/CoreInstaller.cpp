@@ -17,6 +17,7 @@
 #include "runtime/libretro/CoreArchive.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "util/Sha256.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
 namespace {
@@ -183,7 +184,7 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
     }
   }
   std::error_code code;
-  written = fs::file_size(target, code);
+  written = fs::file_size(paths::fromUtf8(target), code);
   if (code) {
     error = "The downloaded core was not written";
     return false;
@@ -221,17 +222,18 @@ InstallOutcome installCore(const CorePackage &package, const std::string &coresD
     return outcome;
   }
   std::error_code code;
-  fs::create_directories(coresDirectory, code);
+  fs::create_directories(paths::fromUtf8(coresDirectory), code);
   if (code) {
     outcome.message = "Cannot create " + coresDirectory;
     return outcome;
   }
   const std::string library = coreLibraryName(package);
-  const fs::path archive = fs::path(coresDirectory) / (library + ".zip");
+  const fs::path archive = paths::fromUtf8(coresDirectory) / (library + ".zip");
   fs::remove(archive, code);
   std::uint64_t bytes = 0;
   std::string downloadError;
-  if (!downloadFile(coreArchiveUrl(package), archive.string(), bytes, downloadError)) {
+  if (!downloadFile(coreArchiveUrl(package), paths::toUtf8(archive), bytes,
+                    downloadError)) {
     fs::remove(archive, code);
     outcome.message = downloadError;
     return outcome;
@@ -242,10 +244,11 @@ InstallOutcome installCore(const CorePackage &package, const std::string &coresD
     return outcome;
   }
   std::fprintf(stderr, "core %s: %llu bytes, sha256 %s\n", package.core, static_cast<unsigned long long>(bytes),
-               util::sha256File(archive.string()).c_str());
+               util::sha256File(paths::toUtf8(archive)).c_str());
   std::string extracted;
   std::string unpackError;
-  const bool unpacked = unpackCoreFromZip(archive.string(), library, coresDirectory, extracted, unpackError);
+  const bool unpacked = unpackCoreFromZip(paths::toUtf8(archive), library,
+                                          coresDirectory, extracted, unpackError);
   fs::remove(archive, code);
   if (!unpacked) {
     outcome.message = unpackError;

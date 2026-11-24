@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <fstream>
 
+#include "util/Utf8Path.hpp"
+
 namespace launcher::game {
 namespace {
 namespace fs = std::filesystem;
@@ -56,7 +58,8 @@ const PlatformDescriptor &platformDescriptor(GamePlatform platform) noexcept {
 }
 
 GamePlatform platformFromExtension(const std::string &path) noexcept {
-  const std::string extension = lowerAscii(fs::path(path).extension().string());
+  const std::string extension =
+      lowerAscii(paths::toUtf8(paths::fromUtf8(path).extension()));
   for (const ExtensionMap &entry : kExtensions) {
     if (entry.extension == extension)
       return entry.platform;
@@ -79,8 +82,9 @@ bool validateGameFile(GamePlatform platform, const std::string &path, std::strin
     return false;
   }
 
+  const fs::path gamePath = paths::fromUtf8(path);
   std::error_code ec;
-  const std::uintmax_t size = fs::file_size(path, ec);
+  const std::uintmax_t size = fs::file_size(gamePath, ec);
   if (ec) {
     error = "Cannot read game file size: " + ec.message();
     return false;
@@ -101,7 +105,7 @@ bool validateGameFile(GamePlatform platform, const std::string &path, std::strin
   }
 
   std::array<std::uint8_t, 4> magic{};
-  std::ifstream input(path, std::ios::binary);
+  std::ifstream input(gamePath, std::ios::binary);
   if (!input || !input.read(reinterpret_cast<char *>(magic.data()), static_cast<std::streamsize>(magic.size()))) {
     error = "Cannot read game file";
     return false;

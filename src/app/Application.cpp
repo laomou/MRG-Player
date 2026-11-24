@@ -28,6 +28,8 @@
 #include "runtime/RuntimeRegistry.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "runtime/libretro/CoreInstaller.hpp"
+#include "util/ImageFile.hpp"
+#include "util/Utf8Path.hpp"
 #include "ui/GameManagementScreen.hpp"
 #include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
@@ -188,7 +190,7 @@ std::string saveFrameToFile(SDL_Renderer *renderer, std::string &error) {
 
   std::error_code ec;
   const std::filesystem::path directory =
-      std::filesystem::path(config::dataRoot()) / "screenshots";
+      paths::fromUtf8(config::dataRoot()) / "screenshots";
   std::filesystem::create_directories(directory, ec);
   if (ec) {
     error = ec.message();
@@ -219,7 +221,7 @@ std::string saveFrameToFile(SDL_Renderer *renderer, std::string &error) {
         target += 4;
       }
     }
-    const std::string path = (directory / (base + ".png")).string();
+    const std::string path = paths::toUtf8(directory / (base + ".png"));
     if (io::writePngRgba(path, width, height, rgba.data(),
                          static_cast<std::size_t>(width) * 4U)) {
       SDL_FreeSurface(capture);
@@ -228,7 +230,7 @@ std::string saveFrameToFile(SDL_Renderer *renderer, std::string &error) {
     error = "PNG encoding failed";
   }
 
-  const std::string path = (directory / (base + ".bmp")).string();
+  const std::string path = paths::toUtf8(directory / (base + ".bmp"));
   const bool saved = SDL_SaveBMP(capture, path.c_str()) == 0;
   if (!saved && error.empty())
     error = SDL_GetError();
@@ -457,7 +459,7 @@ int Application::run(int argc, char **argv) {
       stateSlots[static_cast<std::size_t>(slot)].playTime = info.playTime;
       if (info.thumbnailPath.empty())
         continue;
-      SDL_Surface *surface = SDL_LoadBMP(info.thumbnailPath.c_str());
+      SDL_Surface *surface = io::loadSurfaceBmp(info.thumbnailPath);
       if (surface == nullptr)
         continue;
       stateSlots[static_cast<std::size_t>(slot)].thumbnail =
@@ -608,10 +610,10 @@ int Application::run(int argc, char **argv) {
       const std::string installed = runtime::libretro::findCore(platform);
       entry.installed = !installed.empty();
       if (entry.installed) {
-        entry.core = std::filesystem::path(installed).filename().string();
+        entry.core = paths::toUtf8(paths::fromUtf8(installed).filename());
         std::error_code sizeError;
         const std::uintmax_t bytes =
-            std::filesystem::file_size(installed, sizeError);
+            std::filesystem::file_size(paths::fromUtf8(installed), sizeError);
         if (!sizeError && bytes > 0)
           entry.size = formatCoreSize(bytes);
       }
@@ -644,7 +646,7 @@ int Application::run(int argc, char **argv) {
       return;
     }
     auto *job = new CoreInstallJob{
-        *chosen, (std::filesystem::path(root) / "cores").string(),
+        *chosen, paths::toUtf8(paths::fromUtf8(root) / "cores"),
         &coreInstallDone, &coreInstallOk, &coreInstallMessage};
     coreInstallBusy = true;
     coreInstallDone = false;
@@ -1202,7 +1204,7 @@ int Application::run(int argc, char **argv) {
     }
   } else if (!options.romPath.empty()) {
     const library::GameEntry smokeGame{
-        std::filesystem::path(options.romPath).stem().string(), "Smoke Test",
+        paths::toUtf8(paths::fromUtf8(options.romPath).stem()), "Smoke Test",
         options.romPath, game::platformFromExtension(options.romPath)};
     startupRomFailed = !startGame(smokeGame);
     if (!startupRomFailed && options.smokePause && activeRuntime) {

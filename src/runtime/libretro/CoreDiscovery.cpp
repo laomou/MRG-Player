@@ -9,6 +9,7 @@
 
 #include "config/AppPaths.hpp"
 #include "runtime/libretro/CoreArchive.hpp"
+#include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
 namespace {
@@ -57,7 +58,7 @@ fs::path unpackedCoreDirectory() {
   const std::string root = config::dataRoot();
   if (root.empty())
     return {};
-  return fs::path(root) / "cores-unpacked";
+  return paths::fromUtf8(root) / "cores-unpacked";
 }
 
 } // namespace
@@ -70,11 +71,11 @@ std::vector<std::string> coreSearchPaths() {
     return {custom};
   const std::string root = config::dataRoot();
   if (!root.empty())
-    paths.push_back((fs::path(root) / "cores").string());
+    paths.push_back(paths::toUtf8(paths::fromUtf8(root) / "cores"));
 #if defined(_WIN32)
   // A portable Windows copy keeps its cores next to the executable.
   if (char *base = SDL_GetBasePath(); base != nullptr) {
-    paths.push_back((fs::path(base) / "cores").string());
+    paths.push_back(paths::toUtf8(paths::fromUtf8(base) / "cores"));
     SDL_free(base);
   }
   return paths;
@@ -82,8 +83,11 @@ std::vector<std::string> coreSearchPaths() {
   for (const char *systemDirectory : {"/usr/lib/libretro", "/usr/lib64/libretro", "/usr/lib/x86_64-linux-gnu/libretro",
                                       "/usr/local/lib/libretro"})
     paths.emplace_back(systemDirectory);
-  if (const char *home = std::getenv("HOME"); home != nullptr && home[0] != '\0')
-    paths.push_back((fs::path(home) / ".local" / "lib" / "libretro").string());
+  if (const char *home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
+    const fs::path localCoreDirectory =
+        paths::fromUtf8(home) / ".local" / "lib" / "libretro";
+    paths.push_back(paths::toUtf8(localCoreDirectory));
+  }
   return paths;
 #endif
 }
@@ -108,21 +112,24 @@ std::string findCore(game::GamePlatform platform) {
   for (const std::string &directory : coreSearchPaths()) {
     for (const std::string &candidate : candidates) {
       std::error_code error;
-      const fs::path path = fs::path(directory) / candidate;
+      const fs::path path = paths::fromUtf8(directory) / candidate;
       if (fs::is_regular_file(path, error) && !error)
-        return path.string();
+        return paths::toUtf8(path);
       if (unpackRoot.empty())
         continue;
       // The buildbot publishes <name>.so.zip, so accept an unpacked archive in
       // the same place the extracted library would have been.
-      const fs::path archive = fs::path(directory) / (candidate + ".zip");
+      const fs::path archive =
+          paths::fromUtf8(directory) / (candidate + ".zip");
       if (!fs::is_regular_file(archive, error) || error)
         continue;
       std::string extracted;
       std::string message;
-      if (unpackCoreFromZip(archive.string(), candidate, unpackRoot.string(), extracted, message))
+      if (unpackCoreFromZip(paths::toUtf8(archive), candidate,
+                            paths::toUtf8(unpackRoot), extracted, message))
         return extracted;
-      std::fprintf(stderr, "core archive %s: %s\n", archive.string().c_str(), message.c_str());
+      std::fprintf(stderr, "core archive %s: %s\n",
+                   paths::toUtf8(archive).c_str(), message.c_str());
     }
   }
   return {};
@@ -138,7 +145,7 @@ bool removeInstalledCore(game::GamePlatform platform, std::string &error) {
     error = "no core is installed for this platform";
     return false;
   }
-  const fs::path library(installed);
+  const fs::path library = paths::fromUtf8(installed);
   std::error_code failure;
   if (!fs::remove(library, failure) || failure) {
     error = "cannot remove " + installed + ": " +
@@ -153,10 +160,10 @@ bool removeInstalledCore(game::GamePlatform platform, std::string &error) {
   const fs::path unpackRoot = unpackedCoreDirectory();
   if (!unpackRoot.empty())
     fs::remove(unpackRoot / library.filename(), ignored);
-  const std::string archiveName = library.filename().string() + ".zip";
+  const std::string archiveName = paths::toUtf8(library.filename()) + ".zip";
   fs::remove(library.parent_path() / archiveName, ignored);
   for (const std::string &directory : coreSearchPaths())
-    fs::remove(fs::path(directory) / archiveName, ignored);
+    fs::remove(paths::fromUtf8(directory) / archiveName, ignored);
   return true;
 }
 

@@ -1,11 +1,14 @@
 #include "util/PngWriter.hpp"
 
 #include <cstdio>
+#include <filesystem>
 #include <vector>
 
 #if defined(MRG_HAVE_ZLIB)
 #include <zlib.h>
 #endif
+
+#include "util/Utf8Path.hpp"
 
 namespace launcher::io {
 namespace {
@@ -84,7 +87,11 @@ bool writePngRgba(const std::string &path, int width, int height,
   putChunk(png, "IDAT", compressed);
   putChunk(png, "IEND", {});
 
+#if defined(_WIN32)
+  std::FILE *file = _wfopen(paths::fromUtf8(path).wstring().c_str(), L"wb");
+#else
   std::FILE *file = std::fopen(path.c_str(), "wb");
+#endif
   if (file == nullptr)
     return false;
   const std::size_t written = std::fwrite(png.data(), 1, png.size(), file);
