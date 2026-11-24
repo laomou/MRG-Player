@@ -24,6 +24,8 @@ retro_video_refresh_t video = nullptr;
 retro_audio_sample_batch_t audioBatch = nullptr;
 retro_input_state_t inputState = nullptr;
 retro_input_poll_t inputPoll = nullptr;
+retro_core_option_v2_definition optionDefinitions[3] = {};
+retro_core_option_v2_category optionCategories[2] = {};
 std::vector<std::uint32_t> framebuffer;
 std::vector<std::uint8_t> rom;
 std::uint16_t saveRam[kSaveRamSize] = {};
@@ -36,6 +38,56 @@ void pokeEnvironment() {
     return;
   retro_pixel_format format = RETRO_PIXEL_FORMAT_XRGB8888;
   environment(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format);
+}
+
+// Declares two options the way a real core does, so the front end can be
+// tested for collecting them, answering GET_VARIABLE and flagging updates.
+void declareOptions() {
+  if (environment == nullptr)
+    return;
+  std::memset(optionDefinitions, 0, sizeof(optionDefinitions));
+  std::memset(optionCategories, 0, sizeof(optionCategories));
+  optionCategories[0].key = "audio";
+  optionCategories[0].desc = "Audio";
+  optionCategories[0].info = "Sound related choices.";
+  optionDefinitions[0].key = "stub_brightness";
+  optionDefinitions[0].desc = "Brightness";
+  optionDefinitions[0].info = "How bright the test frame is.";
+  optionDefinitions[0].values[0].value = "low";
+  optionDefinitions[0].values[0].label = "Low";
+  optionDefinitions[0].values[1].value = "medium";
+  optionDefinitions[0].values[1].label = "Medium";
+  optionDefinitions[0].values[2].value = "high";
+  optionDefinitions[0].values[2].label = "High";
+  optionDefinitions[0].default_value = "medium";
+  optionDefinitions[1].key = "stub_audio";
+  optionDefinitions[1].desc = "Audio tone";
+  optionDefinitions[1].info = "Pitch of the generated tone.";
+  optionDefinitions[1].category_key = "audio";
+  optionDefinitions[1].values[0].value = "low";
+  optionDefinitions[1].values[0].label = "Low";
+  optionDefinitions[1].values[1].value = "high";
+  optionDefinitions[1].values[1].label = "High";
+  optionDefinitions[1].default_value = "high";
+  retro_core_options_v2 options = {};
+  options.categories = optionCategories;
+  options.definitions = optionDefinitions;
+  environment(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, &options);
+}
+
+// Reads the option the front end reports, and whether it was just changed, so
+// the runtime test can see the values reach the core.
+void observeOptions() {
+  if (environment == nullptr)
+    return;
+  retro_variable variable = {"stub_brightness", nullptr};
+  if (environment(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) &&
+      variable.value != nullptr)
+    saveRam[0] = static_cast<std::uint16_t>(
+        static_cast<unsigned char>(variable.value[0]));
+  bool updated = false;
+  if (environment(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated)
+    saveRam[1] = 1;
 }
 
 } // namespace
@@ -83,6 +135,7 @@ void retro_reset(void) {
 
 bool retro_load_game(const struct retro_game_info *game) {
   pokeEnvironment();
+  declareOptions();
   // Real cores read retro_game_info::path, so a front end that leaves it null
   // crashes them; failing here keeps that regression visible to the tests.
   if (game == nullptr || game->path == nullptr)
@@ -105,6 +158,7 @@ unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
 void retro_run(void) {
   if (!loaded)
     return;
+  observeOptions();
   if (inputPoll != nullptr)
     inputPoll();
   lastInput = 0;

@@ -52,6 +52,14 @@ bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::si
   return static_cast<bool>(input.read(reinterpret_cast<char *>(bytes.data()), size));
 }
 
+std::string trim(const std::string &value) {
+  const std::size_t first = value.find_first_not_of(" \t");
+  if (first == std::string::npos)
+    return {};
+  const std::size_t last = value.find_last_not_of(" \t");
+  return value.substr(first, last - first + 1);
+}
+
 void writeTextFile(const std::string &path, const std::string &text) {
   std::ofstream output(path, std::ios::binary | std::ios::trunc);
   if (output)
@@ -94,6 +102,10 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   name_ = core_.libraryName();
   if (!core_.libraryVersion().empty())
     name_ += " " + core_.libraryVersion();
+  const std::string coreStem = fs::path(corePath).stem().string();
+  optionsPath_ =
+      (fs::path(config::dataSubdirectory("core-options", "")) / (coreStem + ".tsv")).string();
+  loadCoreOptionValues();
   platform_ = game.platform;
   gameId_ = game.id;
   gamePath_ = game.filePath;
@@ -175,6 +187,10 @@ void LibretroRuntime::stop() {
   romBytes_.clear();
   frame_.clear();
   stateBuffer_.clear();
+  options_.clear();
+  optionsPath_.clear();
+  storedOptions_.clear();
+  optionsChanged_ = false;
   name_.clear();
   platform_ = game::GamePlatform::Unknown;
   width_ = 0;
@@ -493,12 +509,45 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
     case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE: {
       if (data == nullptr)
         return false;
-      *static_cast<bool *>(data) = false;
+      *static_cast<bool *>(data) = optionsChanged_;
+      optionsChanged_ = false;
       return true;
     }
-    case RETRO_ENVIRONMENT_GET_VARIABLE:
-      // No core options are offered, so every core keeps its defaults.
+    case RETRO_ENVIRONMENT_GET_VARIABLE: {
+      auto *variable = static_cast<retro_variable *>(data);
+      if (variable == nullptr || variable->key == nullptr)
+        return false;
+      for (const CoreOption &option : options_) {
+        if (option.key.compare(variable->key) != 0 || option.values.empty())
+          continue;
+        const std::size_t index = std::min(option.selected, option.values.size() - 1);
+        variable->value = option.values[index].value.c_str();
+        return true;
+      }
+      // An unknown key is answered with undefined, never with a guess.
       return false;
+    }
+    case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION: {
+      if (data == nullptr)
+        return false;
+      *static_cast<unsigned *>(data) = 2;
+      return true;
+    }
+    case RETRO_ENVIRONMENT_SET_VARIABLES:
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
+      return declareCoreOptionsV1(static_cast<const retro_variable *>(data));
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2:
+      return declareCoreOptionsV2(static_cast<const retro_core_options_v2 *>(data));
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL: {
+      const auto *intl = static_cast<const retro_core_options_v2_intl *>(data);
+      return intl != nullptr && intl->us != nullptr && declareCoreOptionsV2(intl->us);
+    }
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_INTL: {
+      const auto *intl = static_cast<const retro_core_options_intl *>(data);
+      return intl != nullptr && intl->us != nullptr && declareCoreOptionsV1Definitions(intl->us);
+    }
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY:
+      return data != nullptr;
     case RETRO_ENVIRONMENT_GET_LOG_INTERFACE: {
       if (data == nullptr)
         return false;
@@ -510,7 +559,6 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
     case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
     case RETRO_ENVIRONMENT_SET_SUPPORT_NO_GAME:
     case RETRO_ENVIRONMENT_SET_MEMORY_MAPS:
-    case RETRO_ENVIRONMENT_SET_VARIABLES:
     case RETRO_ENVIRONMENT_SET_MESSAGE:
     case RETRO_ENVIRONMENT_SET_MESSAGE_EXT:
     case RETRO_ENVIRONMENT_SET_SERIALIZATION_QUIRKS:
@@ -929,6 +977,215 @@ StateStatus LibretroRuntime::loadState(int slot, std::string &error) {
   discardAudio();
   nextFrame_ = SDL_GetPerformanceCounter();
   return StateStatus::Loaded;
+}
+
+CoreOption *LibretroRuntime::findCoreOption(std::string_view key) {
+  for (CoreOption &option : options_) {
+    if (option.key.compare(key) == 0)
+      return &option;
+  }
+  return nullptr;
+}
+
+bool LibretroRuntime::declareCoreOptionsV1Definitions(const retro_core_option_definition *definitions) {
+  if (definitions == nullptr)
+    return false;
+  options_.clear();
+  for (const retro_core_option_definition *definition = definitions; definition->key != nullptr;
+       ++definition) {
+    CoreOption option;
+    option.key = definition->key;
+    option.label = definition->desc != nullptr ? definition->desc : definition->key;
+    if (definition->info != nullptr)
+      option.info = definition->info;
+    for (const retro_core_option_value *value = definition->values; value != nullptr && value->value != nullptr;
+         ++value) {
+      CoreOptionValue entry;
+      entry.value = value->value;
+      entry.label = value->label != nullptr ? value->label : value->value;
+      option.values.push_back(std::move(entry));
+    }
+    if (option.values.empty())
+      continue;
+    if (definition->default_value != nullptr) {
+      for (std::size_t index = 0; index < option.values.size(); ++index) {
+        if (option.values[index].value == definition->default_value) {
+          option.defaultSelected = index;
+          break;
+        }
+      }
+    }
+    option.selected = option.defaultSelected;
+    options_.push_back(std::move(option));
+  }
+  applyStoredCoreOptions();
+  return !options_.empty();
+}
+
+bool LibretroRuntime::declareCoreOptionsV1(const retro_variable *variables) {
+  if (variables == nullptr)
+    return false;
+  options_.clear();
+  for (const retro_variable *variable = variables; variable->key != nullptr; ++variable) {
+    CoreOption option;
+    option.key = variable->key;
+    const std::string description = variable->value != nullptr ? variable->value : "";
+    const std::size_t separator = description.find(';');
+    if (separator == std::string::npos) {
+      // A version 1 entry without a value list is a boolean in disguise.
+      option.label = trim(description);
+      option.values.push_back({option.label, option.label});
+    } else {
+      option.label = trim(description.substr(0, separator));
+      const std::string rest = description.substr(separator + 1);
+      std::size_t start = 0;
+      while (start <= rest.size()) {
+        const std::size_t end = rest.find('|', start);
+        const std::string value =
+            trim(rest.substr(start, end == std::string::npos ? std::string::npos : end - start));
+        if (!value.empty())
+          option.values.push_back({value, value});
+        if (end == std::string::npos)
+          break;
+        start = end + 1;
+      }
+    }
+    if (option.key.empty() || option.values.empty())
+      continue;
+    options_.push_back(std::move(option));
+  }
+  applyStoredCoreOptions();
+  return !options_.empty();
+}
+
+bool LibretroRuntime::declareCoreOptionsV2(const retro_core_options_v2 *definitions) {
+  if (definitions == nullptr)
+    return false;
+  std::vector<std::pair<std::string, std::string>> categories;
+  for (const retro_core_option_v2_category *category = definitions->categories;
+       category != nullptr && category->key != nullptr; ++category) {
+    const std::string desc = category->desc != nullptr ? category->desc : category->key;
+    categories.emplace_back(category->key, desc);
+  }
+  options_.clear();
+  for (const retro_core_option_v2_definition *definition = definitions->definitions;
+       definition != nullptr && definition->key != nullptr; ++definition) {
+    CoreOption option;
+    option.key = definition->key;
+    option.label = definition->desc != nullptr ? definition->desc : definition->key;
+    if (definition->info != nullptr)
+      option.info = definition->info;
+    if (definition->category_key != nullptr) {
+      for (const auto &entry : categories) {
+        if (entry.first == definition->category_key) {
+          option.category = entry.second;
+          break;
+        }
+      }
+    }
+    for (const retro_core_option_value *value = definition->values;
+         value != nullptr && value->value != nullptr; ++value) {
+      CoreOptionValue entry;
+      entry.value = value->value;
+      entry.label = value->label != nullptr ? value->label : value->value;
+      option.values.push_back(std::move(entry));
+    }
+    if (option.values.empty())
+      continue;
+    option.defaultSelected = 0;
+    if (definition->default_value != nullptr) {
+      for (std::size_t index = 0; index < option.values.size(); ++index) {
+        if (option.values[index].value == definition->default_value) {
+          option.defaultSelected = index;
+          break;
+        }
+      }
+    }
+    option.selected = option.defaultSelected;
+    options_.push_back(std::move(option));
+  }
+  applyStoredCoreOptions();
+  return !options_.empty();
+}
+
+void LibretroRuntime::applyStoredCoreOptions() {
+  for (CoreOption &option : options_) {
+    for (const auto &entry : storedOptions_) {
+      if (entry.first != option.key)
+        continue;
+      for (std::size_t index = 0; index < option.values.size(); ++index) {
+        if (option.values[index].value == entry.second) {
+          option.selected = index;
+          break;
+        }
+      }
+      break;
+    }
+  }
+}
+
+void LibretroRuntime::loadCoreOptionValues() {
+  storedOptions_.clear();
+  if (optionsPath_.empty())
+    return;
+  std::ifstream input(optionsPath_);
+  if (!input)
+    return;
+  std::string line;
+  while (std::getline(input, line)) {
+    if (line.empty() || line.front() == '#')
+      continue;
+    const std::size_t tab = line.find('\t');
+    if (tab == std::string::npos)
+      continue;
+    storedOptions_.emplace_back(line.substr(0, tab), line.substr(tab + 1));
+  }
+}
+
+void LibretroRuntime::saveCoreOptionValues() const {
+  if (optionsPath_.empty())
+    return;
+  std::string text;
+  for (const auto &entry : storedOptions_)
+    text += entry.first + "\t" + entry.second + "\n";
+  writeTextFile(optionsPath_, text);
+}
+
+bool LibretroRuntime::setCoreOption(std::string_view key, std::string_view value) {
+  CoreOption *option = findCoreOption(key);
+  if (option == nullptr)
+    return false;
+  for (std::size_t index = 0; index < option->values.size(); ++index) {
+    const CoreOptionValue &entry = option->values[index];
+    if (entry.value != value)
+      continue;
+    option->selected = index;
+    bool stored = false;
+    for (auto &candidate : storedOptions_) {
+      if (candidate.first == option->key) {
+        candidate.second = entry.value;
+        stored = true;
+        break;
+      }
+    }
+    if (!stored)
+      storedOptions_.emplace_back(option->key, entry.value);
+    saveCoreOptionValues();
+    optionsChanged_ = true;
+    return true;
+  }
+  return false;
+}
+
+void LibretroRuntime::resetCoreOptions() {
+  for (CoreOption &option : options_)
+    option.selected = option.defaultSelected;
+  storedOptions_.clear();
+  if (!optionsPath_.empty()) {
+    std::error_code ignored;
+    fs::remove(optionsPath_, ignored);
+  }
+  optionsChanged_ = true;
 }
 
 } // namespace launcher::runtime::libretro

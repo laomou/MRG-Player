@@ -18,6 +18,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - 4× fast-forward while Tab or the controller's right shoulder button is held, with a configurable audio policy (silent, or audible without backlog)
 - Half-speed slow motion and single-frame stepping from the pause menu
 - Display options: square, 4:3, or 8:7 aspect ratio, integer scaling, and 0-16 px overscan crop, globally or per game
+- Core options: every option a libretro core declares is collected and editable from the pause menu, saved per core
 - In-game screenshots: **F12** writes a PNG of the current picture to the data root's `screenshots/` directory
 - Audio options: master volume, a mute toggle with a keyboard hotkey, and the fast-forward audio policy
 - Persistent game metadata: favorites, custom titles, total play time, and last-played time
@@ -66,6 +67,7 @@ MRGPlayer/
 ├── states/
 │   ├── nes/
 │   └── gba/
+├── core-options/             # one `<core>.tsv` of chosen values per core
 └── screenshots/              # F12 captures
 ```
 
@@ -139,7 +141,7 @@ Every platform uses the same keyboard and controller mapping. The eight console 
 
 Holding **Turbo A** or **Turbo B** repeats that button: the console sees it pressed for two frames and released for two, which is fifteen presses per second at the NTSC field rate. Turbo is a front-end feature and never reaches the emulator as a button of its own, so it works for any game that rewards rapid tapping, and a normal A or B press still wins while the turbo key is held.
 
-The pause menu provides **Continue**, **Save State**, **Load State**, **Reset Console**, **Power Cycle**, **Display**, and **Return Home**. Use Left/Right, the D-pad, or the left stick to choose one of three slots and navigate actions. Enter/A activates the selected action; Escape/B resumes. Press **.** (period) or the right shoulder button to advance exactly one frame while paused. The focused slot shows a preview card with its thumbnail, save time, and the play time at capture, so a slot can be recognised before it is loaded. State files are stored under `states/<platform>/` in the MRG Player data root, with a `.meta` description and a `.bmp` thumbnail beside each one.
+The pause menu provides **Continue**, **Save State**, **Load State**, **Reset Console**, **Power Cycle**, **Display**, **Core Options**, and **Return Home**. Use Left/Right, the D-pad, or the left stick to choose one of three slots and navigate actions. Enter/A activates the selected action; Escape/B resumes. Press **.** (period) or the right shoulder button to advance exactly one frame while paused. The focused slot shows a preview card with its thumbnail, save time, and the play time at capture, so a slot can be recognised before it is loaded. State files are stored under `states/<platform>/` in the MRG Player data root, with a `.meta` description and a `.bmp` thumbnail beside each one.
 
 Holding **Left Shift** or the left shoulder button halves the frame rate to 0.5× for precise play. Slow motion and fast-forward are mutually exclusive: the last input wins, and both stop as soon as the button or key is released.
 
@@ -156,6 +158,20 @@ If a snapshot cannot be restored, the runtime reloads the core and reports that 
 ### Display options
 
 Open **Settings → Display** to control how the picture fills the window. **Aspect ratio** cycles through square pixels, the 4:3 screen shape of a CRT, and the 8:7 pixel grid of the NES and Game Boy; **Integer scaling** snaps the picture to whole multiples of the cropped source and falls back to fractional scaling when the window is smaller than one source pixel; **Overscan crop** removes 0-16 source pixels from every edge to imitate the hidden border of a television. Rendering stays nearest-neighbour and centred, with black letterboxing, and every change applies immediately and is written to `settings.ini`.
+
+### Core options
+
+Cores describe their own settings through the libretro environment callbacks, and MRG Player exposes them rather than hiding
+them behind compiled-in defaults. **Core Options** in the pause menu lists everything the running core declared — through
+both the original `SET_VARIABLES` form and the categorised `SET_CORE_OPTIONS_V2` form — with the core's own labels and
+values. Move with Up/Down, change the focused value with Left/Right or Enter, and press **R** (or the left shoulder button)
+to restore the declared defaults.
+
+Changes reach the core immediately through `GET_VARIABLE` and `GET_VARIABLE_UPDATE`, so an option such as a video filter
+or an overclock can be judged on the running picture while the panel is open. Selections are written to
+`core-options/<core>.tsv` in the data root, one file per core, and are reloaded the next time that core starts; deleting
+the file is the same as restoring the defaults. A core that declares nothing shows an empty panel instead of inventing
+settings, and keys the core never asked about are reported as undefined.
 
 The same three options can be overridden for a single game from **Display** in the pause menu, which is useful when only one title looks wrong at the global ratio. Every change previews on the running picture while the panel is open; **Use global defaults** decides whether the values are stored with that game. Turning it off writes the current values into the library metadata and keeps them for that game only; turning it back on discards the override and follows `settings.ini` again. Leaving the panel without an override restores the picture that was there before.
 
@@ -225,4 +241,4 @@ Every platform needs a core, including the NES, so the game-path smoke tests are
 
 The `--smoke-test-*` flags are a developer tool and are compiled out by default: a build without `-DMRG_ENABLE_SMOKE_TESTS=ON` reports them as unknown options, so a released binary carries neither the flags nor the frame-capture code they drive. CI configures with the option on.
 
-Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, and cores pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures both the pause card and the per-game display panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, unpacking the same core from stored and deflated zips, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.
+Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, and cores pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, and the core options panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, unpacking the same core from stored and deflated zips, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.

@@ -7,6 +7,7 @@
 
 #include "config/InputBindings.hpp"
 #include "game/GamePlatform.hpp"
+#include "runtime/CoreOptions.hpp"
 #include "runtime/VideoOptions.hpp"
 
 namespace launcher::library {
@@ -68,6 +69,20 @@ public:
     (void)player;
     (void)instanceId;
   }
+  // Settings a core declares for itself. Runtimes without such settings
+  // report an empty list, which hides the pause-menu panel.
+  [[nodiscard]] virtual const CoreOptionList &coreOptions() const noexcept {
+    static const CoreOptionList empty;
+    return empty;
+  }
+  virtual bool setCoreOption(std::string_view key, std::string_view value) {
+    (void)key;
+    (void)value;
+    return false;
+  }
+  // Drops the saved values and returns every option to the core's default.
+  virtual void resetCoreOptions() {}
+
   virtual StateStatus saveState(int slot, std::string &error) = 0;
   virtual StateStatus loadState(int slot, std::string &error) = 0;
   [[nodiscard]] virtual bool statePresent(int slot) const noexcept = 0;

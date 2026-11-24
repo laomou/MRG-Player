@@ -177,6 +177,9 @@ enum class TextId {
   CoreInstalledBanner,
   CoreInstallFailedBanner,
   CoreSnapshotNote,
+  CoreOptions,
+  CoreOptionsEmpty,
+  ResetCoreOptions,
   Count
 };
 

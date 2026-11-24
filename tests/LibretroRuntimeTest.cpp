@@ -273,6 +273,40 @@ int main(int, char **) {
     runtime->stepFrame();
   runtime->render(renderer);
 
+  // Core options: the stub declares two, the defaults are selected, and only
+  // declared keys and values are accepted.
+  const auto selectedOptionValue = [](const launcher::runtime::IGameRuntime &source,
+                                      const std::string &key) {
+    for (const auto &option : source.coreOptions()) {
+      if (option.key == key && option.selected < option.values.size())
+        return option.values[option.selected].value;
+    }
+    return std::string();
+  };
+  expect(runtime->coreOptions().size() == 2,
+         "the core options were not collected");
+  expect(selectedOptionValue(*runtime, "stub_brightness") == "medium",
+         "the declared default is not selected");
+  expect(selectedOptionValue(*runtime, "stub_audio") == "high",
+         "the second option default is not selected");
+  expect(runtime->setCoreOption("stub_brightness", "high"),
+         "a declared option value is rejected");
+  expect(selectedOptionValue(*runtime, "stub_brightness") == "high",
+         "the selected value is not reported back");
+  expect(!runtime->setCoreOption("stub_brightness", "purple"),
+         "an undeclared value is accepted");
+  expect(!runtime->setCoreOption("no_such_option", "x"),
+         "an undeclared option is accepted");
+  const fs::path optionFile =
+      fs::path(launcher::config::dataSubdirectory("core-options", "")) /
+      (fs::path(launcher::runtime::libretro::findCore(game.platform))
+           .stem()
+           .string() +
+       ".tsv");
+  std::error_code optionError;
+  expect(fs::is_regular_file(optionFile, optionError),
+         "the option value was not written to disk");
+
   expect(!runtime->stateInfo(0).present, "slot 0 starts empty");
   expect(runtime->loadState(2, error) == launcher::runtime::StateStatus::Missing, "an empty slot reports Missing");
   expect(runtime->saveState(0, error) == launcher::runtime::StateStatus::Saved, "save state failed: " + error);
@@ -305,6 +339,47 @@ int main(int, char **) {
   expect(fs::is_regular_file(battery, batteryError) && !batteryError,
          "stopping the game did not write its battery save");
   expect(fs::file_size(battery, batteryError) == 128, "the battery save has the size the core reported");
+
+  // The stored choice survives a reload and reaches the core through
+  // GET_VARIABLE; resetting drops it and returns to the declared default.
+  std::unique_ptr<launcher::runtime::IGameRuntime> resumed =
+      registry.create(launcher::game::GamePlatform::Gba);
+  expect(resumed != nullptr, "a second runtime can be created");
+  if (resumed != nullptr) {
+    expect(resumed->load(game, renderer, 80), "the second load failed");
+    expect(selectedOptionValue(*resumed, "stub_brightness") == "high",
+           "the stored option value was not restored");
+    expect(resumed->setCoreOption("stub_audio", "low"),
+           "a second option could not be changed");
+    resumed->stepFrame();
+    resumed->stop();
+    std::vector<std::uint8_t> batteryBytes;
+    expect(readAll(battery.string(), batteryBytes),
+           "cannot read the battery save again");
+    expect(batteryBytes.size() == 128, "the battery save changed size");
+    expect(batteryBytes.size() > 1 &&
+               batteryBytes[0] == static_cast<std::uint8_t>('h'),
+           "the core did not receive the stored option value");
+    // saveRam is an array of 16-bit words: byte 2 is the low half of the
+    // flag the stub raises when GET_VARIABLE_UPDATE reports a change.
+    expect(batteryBytes.size() > 2 && batteryBytes[2] == 1,
+           "the core was not told that the options changed");
+
+    expect(resumed->load(game, renderer, 80), "the third load failed");
+    resumed->resetCoreOptions();
+    expect(selectedOptionValue(*resumed, "stub_brightness") == "medium",
+           "resetting did not restore the declared default");
+    resumed->stop();
+  }
+  std::unique_ptr<launcher::runtime::IGameRuntime> fresh =
+      registry.create(launcher::game::GamePlatform::Gba);
+  expect(fresh != nullptr, "a third runtime can be created");
+  if (fresh != nullptr) {
+    expect(fresh->load(game, renderer, 80), "the fourth load failed");
+    expect(selectedOptionValue(*fresh, "stub_brightness") == "medium",
+           "the reset values were not persisted");
+    fresh->stop();
+  }
 
   // Without a core the same platform must fail with a message a player can act
   // on instead of a crash.
