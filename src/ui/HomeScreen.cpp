@@ -203,18 +203,19 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
                  {18, 18, 33, alpha});
   }
 
-  // One line of title on a plate; the console name became a corner badge, so
-  // the plate can be shorter and the title keeps the room it had.
-  const float panelY = y + height * 0.70f;
+  // One line of title on a plate that hugs it; a share of the card height made
+  // the band look like a footer rather than a label.
+  const float plateHeight = 58.0f * unit;
+  const float panelY = y + height - margin - plateHeight;
   // Art is busy, so the title plate over it has to be nearly solid; the drawn
   // gradient cards keep their translucent plate.
   const Uint8 panelAlpha =
       art != nullptr ? 244 : static_cast<Uint8>(alpha * 0.78f);
-  rounded(renderer, x + margin, panelY, width - margin * 2.0f,
-          height * 0.30f - margin, 12.0f * unit, {6, 9, 26, panelAlpha});
+  rounded(renderer, x + margin, panelY, width - margin * 2.0f, plateHeight,
+          12.0f * unit, {6, 9, 26, panelAlpha});
   const int scale = selected && width >= 240.0f ? 3 : 2;
   centeredGlyph(renderer, static_cast<int>(x + width * 0.5f),
-                static_cast<int>(panelY + (height * 0.30f - margin) * 0.5f),
+                static_cast<int>(panelY + plateHeight * 0.5f),
                 fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
                          scale),
                 scale, {255, 255, 255, alpha});
