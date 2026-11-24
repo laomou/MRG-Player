@@ -19,6 +19,7 @@ enum class TextId {
   MinutesPlayed,
   Start,
   Back,
+  Quit,
   Browse,
   ChooseRom,
   System,

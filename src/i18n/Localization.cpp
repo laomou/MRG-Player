@@ -22,6 +22,7 @@ constexpr Entry kText[]{
     {"MINUTES PLAYED", "分钟游戏时间"},
     {"START", "开始"},
     {"BACK", "返回"},
+    {"QUIT", "退出"},
     {"BROWSE", "浏览"},
     {"DROP A GAME FILE INTO THE WINDOW", "将游戏文件拖入窗口"},
     {"SYSTEM", "系统"},

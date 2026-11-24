@@ -17,13 +17,32 @@ const Game &styleFor(int index) {
   return games()[static_cast<std::size_t>(index) % kGameCount];
 }
 
-int wrappedDelta(int index, int selected, int count) {
-  int delta = index - selected;
-  if (delta > count / 2)
-    delta -= count;
-  if (delta < -count / 2)
-    delta += count;
-  return delta;
+// The row never moves: every slot keeps its place and only the highlight
+// travels, so the first game always sits against the left edge.
+constexpr float kRowLeft = 72.0f;
+constexpr float kRowRight = 1528.0f;
+constexpr float kRowBottom = 678.0f;
+constexpr float kCardAspect = 314.0f / 226.0f;
+constexpr float kCardGap = 20.0f;
+constexpr float kMaximumCardWidth = 226.0f;
+
+struct CardBox {
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+};
+
+CardBox cardBox(int slot, int count, bool selected) {
+  const float slots = static_cast<float>(std::max(1, count));
+  const float pitch = (kRowRight - kRowLeft) / slots;
+  const float base = std::min(kMaximumCardWidth,
+                              std::max(96.0f, pitch - kCardGap));
+  const float scale = selected ? 1.04f : 1.0f;
+  const float width = base * scale;
+  const float height = base * kCardAspect * scale;
+  const float centre = kRowLeft + pitch * (static_cast<float>(slot) + 0.5f);
+  return {centre - width * 0.5f, kRowBottom - height, width, height};
 }
 
 std::string fitTitle(std::string title, int maxWidth, int scale) {
@@ -45,24 +64,38 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
   return title + suffix;
 }
 
-void drawCard(SDL_Renderer *renderer, int index, int delta, bool selected,
-              float pulse, const library::GameEntry *entry) {
+void drawCard(SDL_Renderer *renderer, int index, int slot, int count,
+              bool selected, float pulse,
+              const library::GameEntry *entry) {
   const Game &style = styleFor(index);
-  const float width = selected ? 302.0f : 226.0f;
-  const float height = selected ? 382.0f : 314.0f;
-  const float x = kLogicalWidth * 0.5f - width * 0.5f + delta * 286.0f;
-  const float y = selected ? 296.0f - pulse * 3.0f
-                           : 330.0f + std::min(18, std::abs(delta) * 8);
-  const Uint8 alpha =
-      selected ? 255
-               : static_cast<Uint8>(std::max(58, 205 - std::abs(delta) * 55));
+  const CardBox box = cardBox(slot, count, selected);
+  const float x = box.x;
+  const float y = box.y - (selected ? pulse * 3.0f : 0.0f);
+  const float width = box.width;
+  const float height = box.height;
+  const Uint8 alpha = selected ? 255 : 150;
+  const float unit = width / kMaximumCardWidth;
+  const float radius = (selected ? 22.0f : 18.0f) * unit;
 
   if (selected) {
-    rounded(renderer, x - 7, y - 7, width + 14, height + 14, 27,
+    const float glow = std::floor(9.0f * unit);
+    rounded(renderer, x - glow, y - glow, width + glow * 2.0f,
+            height + glow * 2.0f, radius + glow,
             {style.accent.r, style.accent.g, style.accent.b,
-             static_cast<Uint8>(135 + pulse * 55)});
+             static_cast<Uint8>(55 + pulse * 35)});
+    const float ring = 3.0f;
+    rounded(renderer, x - ring, y - ring, width + ring * 2.0f,
+            height + ring * 2.0f, radius + ring,
+            {style.accent.r, style.accent.g, style.accent.b, 255});
   }
-  const float radius = selected ? 22.0f : 18.0f;
+
+  if (entry == nullptr) {
+    rounded(renderer, x, y, width, height, radius, {13, 20, 36, 255});
+    rounded(renderer, x + 1, y + 1, width - 2, height - 2, radius - 1,
+            {19, 28, 48, 255});
+    return;
+  }
+
   for (int row = 0; row < static_cast<int>(height); ++row) {
     const float t = static_cast<float>(row) / height;
     const float distance = std::min(row + 0.5f, height - row - 0.5f);
@@ -74,37 +107,39 @@ void drawCard(SDL_Renderer *renderer, int index, int delta, bool selected,
              {style.bottom.r, style.bottom.g, style.bottom.b, alpha}, t));
   }
 
-  if (entry == nullptr)
-    return;
-
+  const float margin = 12.0f * unit;
   if (entry->favorite) {
-    circle(renderer, static_cast<int>(x + width - 28), static_cast<int>(y + 28),
-           16, {255, 220, 114, static_cast<Uint8>(alpha * 0.9f)});
-    centeredText(renderer, static_cast<int>(x + width - 28),
-                 static_cast<int>(y + 21), "*", 2, {18, 18, 33, alpha});
+    const float badge = 28.0f * unit;
+    circle(renderer, static_cast<int>(x + width - badge),
+           static_cast<int>(y + badge), 16.0f * unit,
+           {255, 220, 114, static_cast<Uint8>(alpha * 0.9f)});
+    centeredText(renderer, static_cast<int>(x + width - badge),
+                 static_cast<int>(y + badge - 7.0f * unit), "*", 2,
+                 {18, 18, 33, alpha});
   }
 
   const float panelY = y + height * 0.60f;
-  rounded(renderer, x + 12, panelY, width - 24, height * 0.40f - 12, 12,
+  rounded(renderer, x + margin, panelY, width - margin * 2.0f,
+          height * 0.40f - margin, 12.0f * unit,
           {6, 9, 26, static_cast<Uint8>(alpha * 0.78f)});
   circle(renderer, static_cast<int>(x + width * 0.5f),
-         static_cast<int>(y + height * 0.32f), selected ? 43 : 34,
+         static_cast<int>(y + height * 0.32f), width * 0.142f,
          {style.accent.r, style.accent.g, style.accent.b,
           static_cast<Uint8>(alpha * 0.85f)});
   const auto &platform = game::platformDescriptor(entry->platform);
+  const int scale = selected && width >= 240.0f ? 3 : 2;
   centeredText(renderer, static_cast<int>(x + width * 0.5f),
                static_cast<int>(y + height * 0.29f),
-               std::string(platform.displayName), selected ? 3 : 2,
-               {8, 14, 30, alpha});
+               std::string(platform.displayName), scale, {8, 14, 30, alpha});
 
-  const int titleScale = selected ? 3 : 2;
   centeredText(renderer, static_cast<int>(x + width * 0.5f),
                static_cast<int>(y + height * 0.70f),
-               fitTitle(entry->title, static_cast<int>(width - 28), titleScale),
-               titleScale, {255, 255, 255, alpha});
+               fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
+                        scale),
+               scale, {255, 255, 255, alpha});
   centeredText(renderer, static_cast<int>(x + width * 0.5f),
                static_cast<int>(y + height * 0.84f),
-               std::string(platform.fileTypeLabel), 2,
+               std::string(platform.fileTypeLabel), scale,
                {style.accent.r, style.accent.g, style.accent.b, alpha});
 }
 
@@ -158,19 +193,17 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
        {191, 201, 220, 255});
 
   const float pulse = (std::sin(time * 3.0f) + 1.0f) * 0.5f;
-  for (int distance = 3; distance >= 1; --distance) {
-    for (int i = 0; i < slotCount; ++i) {
-      const int delta = wrappedDelta(i, selectedGame, slotCount);
-      if (std::abs(delta) == distance) {
-        const library::GameEntry *entry =
-            i < static_cast<int>(gameLibrary.entries().size())
-                ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
-                : nullptr;
-        drawCard(renderer, i, delta, false, pulse, entry);
-      }
-    }
+  for (int i = 0; i < slotCount; ++i) {
+    if (i == selectedGame)
+      continue;
+    const library::GameEntry *entry =
+        i < static_cast<int>(gameLibrary.entries().size())
+            ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
+            : nullptr;
+    drawCard(renderer, i, i, slotCount, false, pulse, entry);
   }
-  drawCard(renderer, selectedGame, 0, true, pulse, selectedEntry);
+  drawCard(renderer, selectedGame, selectedGame, slotCount, true, pulse,
+           selectedEntry);
 
   if (selectedEntry != nullptr) {
     centeredText(renderer, 800, 711, fitTitle(selectedEntry->title, 760, 3), 3,
@@ -187,11 +220,12 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
 
   fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
   text(renderer, 72, 828, prompts.horizontal, 1, {168, 184, 207, 255});
-  std::vector<Hint> footer{
-      {tr(TextId::Start, language), prompts.confirm, true}};
-  if (selectedEntry != nullptr)
+  std::vector<Hint> footer;
+  if (selectedEntry != nullptr) {
+    footer.push_back({tr(TextId::Start, language), prompts.confirm, true});
     footer.push_back({tr(TextId::ManageGame, language), prompts.manage, false});
-  footer.push_back({tr(TextId::Back, language), prompts.back, false});
+  }
+  footer.push_back({tr(TextId::Quit, language), prompts.back, false});
   drawHintRow(renderer, 1528.0f, 822.0f, footer, style.accent);
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
