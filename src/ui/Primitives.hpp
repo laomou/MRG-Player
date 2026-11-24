@@ -32,7 +32,10 @@ void centeredText(SDL_Renderer *renderer, int centerX, int y,
 // instead of a hand-tuned offset.
 void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
                    const std::string &value, int scale, SDL_Color color);
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time);
+// wallpaper, when present, replaces the drawn skyline with a soft version of
+// the selected game's cover, dimmed so the shelf stays readable.
+void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+                    SDL_Texture *wallpaper = nullptr);
 
 // One footer legend entry: what the control does, then the control itself, the
 // way a console writes "Back  B". Reading left to right gives the action first

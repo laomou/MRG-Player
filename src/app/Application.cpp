@@ -31,6 +31,7 @@
 #include "runtime/libretro/CoreInstaller.hpp"
 #include "util/ImageFile.hpp"
 #include "util/Utf8Path.hpp"
+#include "ui/CoverCache.hpp"
 #include "ui/GameManagementScreen.hpp"
 #include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
@@ -379,6 +380,9 @@ int Application::run(int argc, char **argv) {
     std::fprintf(stderr, "Game library unavailable: %s\n",
                  std::string(gameLibrary.error()).c_str());
   }
+  // Box art lives next to the saves, beside a names.json the player can edit.
+  ui::CoverCache coverCache;
+  coverCache.initialize(config::dataSubdirectory("covers", ""));
   bool running = true;
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;
@@ -2273,6 +2277,8 @@ int Application::run(int argc, char **argv) {
     } else {
       homeRowSettled = false;
     }
+    // Downloads and decodes finish here, never inside a draw call.
+    coverCache.poll(renderer);
     if (screen == Screen::Game) {
       if (activeRuntime) {
         // Holding the rewind key stops the clock and walks the snapshots
@@ -2307,7 +2313,7 @@ int Application::run(int argc, char **argv) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity);
+                   focusOpacity, &coverCache);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        selectedGame % static_cast<int>(kGameCount), time,
@@ -2318,7 +2324,7 @@ int Application::run(int argc, char **argv) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity);
+                   focusOpacity, &coverCache);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],
@@ -2481,7 +2487,8 @@ int Application::run(int argc, char **argv) {
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
   clearStateSlots();
-  // Cached text textures belong to this renderer, so drop them first.
+  // Cached textures belong to this renderer, so drop them first.
+  coverCache.shutdown();
   ui::shutdownTextRenderer();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);

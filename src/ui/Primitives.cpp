@@ -460,7 +460,31 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
   text(renderer, centerX - width / 2, top, value, scale, color);
 }
 
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time) {
+void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+                    SDL_Texture *wallpaper) {
+  if (wallpaper != nullptr) {
+    int textureWidth = 0;
+    int textureHeight = 0;
+    if (SDL_QueryTexture(wallpaper, nullptr, nullptr, &textureWidth,
+                         &textureHeight) == 0 &&
+        textureWidth > 0 && textureHeight > 0) {
+      // Fill the canvas and let the extra edges fall outside it.
+      const float scale =
+          std::max(static_cast<float>(kLogicalWidth) / textureWidth,
+                   static_cast<float>(kLogicalHeight) / textureHeight);
+      const float width = textureWidth * scale;
+      const float height = textureHeight * scale;
+      const SDL_FRect frame{(kLogicalWidth - width) * 0.5f,
+                            (kLogicalHeight - height) * 0.5f, width, height};
+      SDL_RenderCopyF(renderer, wallpaper, nullptr, &frame);
+      for (int y = 0; y < kLogicalHeight; ++y) {
+        const float t = static_cast<float>(y) / kLogicalHeight;
+        const Uint8 alpha = static_cast<Uint8>(202 + 42 * t);
+        fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 1,
+             {4, 8, 20, alpha});
+      }
+    }
+  } else {
   for (int y = 0; y < kLogicalHeight; ++y) {
     const float t = static_cast<float>(y) / kLogicalHeight;
     setColor(renderer, mix(game.top, game.bottom, t));
@@ -507,6 +531,7 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time) {
   for (int y = 0; y < kLogicalHeight; y += 4)
     fill(renderer, 0, static_cast<float>(y), kLogicalWidth, 2,
          {255, 255, 255, 4});
+  }
 }
 
 namespace {

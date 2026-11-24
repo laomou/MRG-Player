@@ -13,8 +13,59 @@
 namespace launcher::ui {
 namespace {
 
-const Game &styleFor(int index) {
-  return games()[static_cast<std::size_t>(index) % kGameCount];
+// Card colours follow the console rather than the shelf position, so a game
+// keeps its card when the library order changes and a large library never
+// cycles back to a colour it has already used.
+struct CardPalette {
+  SDL_Color top;
+  SDL_Color bottom;
+  SDL_Color accent;
+};
+
+CardPalette paletteFor(game::GamePlatform platform) {
+  switch (platform) {
+  case game::GamePlatform::Nes:
+    return {{31, 42, 68, 255}, {9, 17, 36, 255}, {86, 223, 202, 255}};
+  case game::GamePlatform::Gba:
+    return {{35, 43, 70, 255}, {9, 17, 36, 255}, {95, 181, 255, 255}};
+  case game::GamePlatform::Snes:
+    return {{42, 39, 69, 255}, {10, 17, 37, 255}, {181, 135, 255, 255}};
+  case game::GamePlatform::GameBoy:
+    return {{36, 47, 66, 255}, {9, 18, 35, 255}, {153, 224, 92, 255}};
+  case game::GamePlatform::Genesis:
+    return {{45, 40, 65, 255}, {11, 17, 36, 255}, {255, 136, 92, 255}};
+  case game::GamePlatform::Unknown:
+    break;
+  }
+  return {{39, 42, 68, 255}, {9, 17, 38, 255}, {214, 224, 241, 255}};
+}
+
+Game paletteStyle(game::GamePlatform platform) {
+  const CardPalette palette = paletteFor(platform);
+  Game style{};
+  style.top = palette.top;
+  style.bottom = palette.bottom;
+  style.accent = palette.accent;
+  return style;
+}
+
+// Two or three letters, so the badge fits the narrowest card.
+const char *platformBadge(game::GamePlatform platform) {
+  switch (platform) {
+  case game::GamePlatform::Nes:
+    return "NES";
+  case game::GamePlatform::Gba:
+    return "GBA";
+  case game::GamePlatform::Snes:
+    return "SNES";
+  case game::GamePlatform::GameBoy:
+    return "GB";
+  case game::GamePlatform::Genesis:
+    return "MD";
+  case game::GamePlatform::Unknown:
+    break;
+  }
+  return "?";
 }
 
 // The row never moves: every slot keeps its place and only the highlight
@@ -90,10 +141,12 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
   return title + suffix;
 }
 
-void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
+void drawCard(SDL_Renderer *renderer, float column, bool selected,
               bool focused, float focusOpacity,
-              const library::GameEntry *entry) {
-  const Game &style = styleFor(index);
+              const library::GameEntry *entry, CoverSource *covers) {
+  const game::GamePlatform platform =
+      entry != nullptr ? entry->platform : game::GamePlatform::Unknown;
+  const CardPalette palette = paletteFor(platform);
   const CardBox box = cardBox(column, selected);
   const float x = box.x;
   // The selected card sits still: the highlight does the work. A vertical
@@ -115,51 +168,73 @@ void drawCard(SDL_Renderer *renderer, int index, float column, bool selected,
     return;
   }
 
-  for (int row = 0; row < static_cast<int>(height); ++row) {
-    const float t = static_cast<float>(row) / height;
-    const float distance = std::min(row + 0.5f, height - row - 0.5f);
-    const float yy = std::max(0.0f, radius - distance);
-    const float inset =
-        radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
-    fill(renderer, x + inset, y + row, width - 2 * inset, 1,
-         mix({style.top.r, style.top.g, style.top.b, alpha},
-             {style.bottom.r, style.bottom.g, style.bottom.b, alpha}, t));
+  SDL_Texture *art =
+      covers != nullptr ? covers->cover(renderer, *entry) : nullptr;
+  if (art != nullptr) {
+    // The art already carries rounded corners, so it can sit under the title
+    // plate untouched; the plate hides whatever the crop would show there.
+    SDL_SetTextureAlphaMod(art, alpha);
+    const SDL_FRect frame{x, y, width, height};
+    SDL_RenderCopyF(renderer, art, nullptr, &frame);
+    SDL_SetTextureAlphaMod(art, 255);
+  } else {
+    for (int row = 0; row < static_cast<int>(height); ++row) {
+      const float t = static_cast<float>(row) / height;
+      const float distance = std::min(row + 0.5f, height - row - 0.5f);
+      const float yy = std::max(0.0f, radius - distance);
+      const float inset =
+          radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
+      fill(renderer, x + inset, y + row, width - 2 * inset, 1,
+           mix({palette.top.r, palette.top.g, palette.top.b, alpha},
+               {palette.bottom.r, palette.bottom.g, palette.bottom.b, alpha},
+               t));
+    }
   }
 
   const float margin = 12.0f * unit;
+  // The console badge owns the top-right corner, so the favourite marker moves
+  // to the left where it never fights with it.
   if (entry->favorite) {
     const float badge = 28.0f * unit;
-    circle(renderer, static_cast<int>(x + width - badge),
-           static_cast<int>(y + badge), 16.0f * unit,
-           {255, 220, 114, static_cast<Uint8>(alpha * 0.9f)});
-    centeredText(renderer, static_cast<int>(x + width - badge),
+    circle(renderer, static_cast<int>(x + badge), static_cast<int>(y + badge),
+           16.0f * unit, {255, 220, 114, static_cast<Uint8>(alpha * 0.9f)});
+    centeredText(renderer, static_cast<int>(x + badge),
                  static_cast<int>(y + badge - 7.0f * unit), "*", 2,
                  {18, 18, 33, alpha});
   }
 
-  const float panelY = y + height * 0.60f;
+  // One line of title on a plate; the console name became a corner badge, so
+  // the plate can be shorter and the title keeps the room it had.
+  const float panelY = y + height * 0.70f;
+  // Art is busy, so the title plate over it has to be nearly solid; the drawn
+  // gradient cards keep their translucent plate.
+  const Uint8 panelAlpha =
+      art != nullptr ? 244 : static_cast<Uint8>(alpha * 0.78f);
   rounded(renderer, x + margin, panelY, width - margin * 2.0f,
-          height * 0.40f - margin, 12.0f * unit,
-          {6, 9, 26, static_cast<Uint8>(alpha * 0.78f)});
-  circle(renderer, static_cast<int>(x + width * 0.5f),
-         static_cast<int>(y + height * 0.32f), width * 0.142f,
-         {style.accent.r, style.accent.g, style.accent.b,
-          static_cast<Uint8>(alpha * 0.85f)});
-  const auto &platform = game::platformDescriptor(entry->platform);
+          height * 0.30f - margin, 12.0f * unit, {6, 9, 26, panelAlpha});
   const int scale = selected && width >= 240.0f ? 3 : 2;
-  centeredText(renderer, static_cast<int>(x + width * 0.5f),
-               static_cast<int>(y + height * 0.29f),
-               std::string(platform.displayName), scale, {8, 14, 30, alpha});
+  centeredGlyph(renderer, static_cast<int>(x + width * 0.5f),
+                static_cast<int>(panelY + (height * 0.30f - margin) * 0.5f),
+                fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
+                         scale),
+                scale, {255, 255, 255, alpha});
 
-  centeredText(renderer, static_cast<int>(x + width * 0.5f),
-               static_cast<int>(y + height * 0.70f),
-               fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
-                        scale),
-               scale, {255, 255, 255, alpha});
-  centeredText(renderer, static_cast<int>(x + width * 0.5f),
-               static_cast<int>(y + height * 0.84f),
-               std::string(platform.fileTypeLabel), scale,
-               {style.accent.r, style.accent.g, style.accent.b, alpha});
+  // The console badge: a small mark in the corner instead of a second line of
+  // text, so the card says what it is without shouting it.
+  const char *badgeLabel = platformBadge(entry->platform);
+  const float badgeHeight = 20.0f * unit;
+  const float badgeWidth =
+      std::max(badgeHeight,
+               static_cast<float>(textWidth(badgeLabel, 1)) + 10.0f * unit);
+  const float badgeX = x + width - margin - badgeWidth;
+  const float badgeY = y + margin;
+  rounded(renderer, badgeX, badgeY, badgeWidth, badgeHeight,
+          badgeHeight * 0.5f,
+          {palette.accent.r, palette.accent.g, palette.accent.b,
+           static_cast<Uint8>(alpha * 0.85f)});
+  centeredGlyph(renderer, static_cast<int>(badgeX + badgeWidth * 0.5f),
+                static_cast<int>(badgeY + badgeHeight * 0.5f), badgeLabel, 1,
+                {10, 15, 28, alpha});
   // Selection fills the card and scales it up; the ring says the direction keys
   // are on it, so it fades away when they move to a pill or a footer action.
   if (focused)
@@ -204,19 +279,27 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity) {
+              float focusOpacity, CoverSource *covers) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
   selectedGame = std::clamp(selectedGame, 0, slotCount - 1);
-  const Game &style = styleFor(selectedGame);
   const bool libraryEmpty = gameLibrary.entries().empty();
   const library::GameEntry *selectedEntry =
       selectedGame < static_cast<int>(gameLibrary.entries().size())
           ? &gameLibrary.entries()[static_cast<std::size_t>(selectedGame)]
           : nullptr;
+  // The launcher background belongs to the console of the selected game, so it
+  // is stable instead of rotating with the shelf position.
+  const Game style = paletteStyle(selectedEntry != nullptr
+                                      ? selectedEntry->platform
+                                      : game::GamePlatform::Unknown);
 
-  drawBackground(renderer, style, time);
+  SDL_Texture *wallpaper =
+      covers != nullptr && selectedEntry != nullptr
+          ? covers->wallpaper(renderer, *selectedEntry)
+          : nullptr;
+  drawBackground(renderer, style, time, wallpaper);
   rounded(renderer, 72, 57, 4, 32, 2, style.accent);
   text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
   text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
@@ -286,12 +369,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
         i < static_cast<int>(gameLibrary.entries().size())
             ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
             : nullptr;
-    drawCard(renderer, i, static_cast<float>(i) - rowOffset, false, false,
-             focusOpacity, entry);
+    drawCard(renderer, static_cast<float>(i) - rowOffset, false, false,
+             focusOpacity, entry, covers);
   }
-  drawCard(renderer, selectedGame,
-           static_cast<float>(selectedGame) - rowOffset, true, cardsFocused,
-           focusOpacity, selectedEntry);
+  drawCard(renderer, static_cast<float>(selectedGame) - rowOffset, true,
+           cardsFocused, focusOpacity, selectedEntry, covers);
   SDL_RenderSetClipRect(renderer, nullptr);
 
   if (selectedEntry != nullptr) {

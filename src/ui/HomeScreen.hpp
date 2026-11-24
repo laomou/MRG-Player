@@ -5,6 +5,7 @@
 #include <string_view>
 
 #include "config/InputBindings.hpp"
+#include "ui/CoverSource.hpp"
 #include "i18n/Localization.hpp"
 #include "library/GameLibrary.hpp"
 
@@ -20,7 +21,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity);
+              float focusOpacity, CoverSource *covers = nullptr);
 void moveSelection(int &selectedGame, int direction, int count);
 
 // Two actions when a game is selected, none when the library is empty.
