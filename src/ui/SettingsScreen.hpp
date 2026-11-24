@@ -31,6 +31,10 @@ int controllerPageRowAt(int x, int y);
 // Same idea for the general page, whose rows are shorter than the others so
 // the rewind and runahead options fit above the footer.
 int generalPageRowAt(int x, int y);
+// The category rail and the settings rows are the clickable controls on this
+// screen, so both answer a pointer with the index it lands on, or -1.
+int settingsCategoryAt(float x, float y);
+int settingsRowAt(int category, float x, float y);
 void changeSetting(AppSettings &settings, int category, int row, int direction);
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   int category, int row, int selectedGame, float time,

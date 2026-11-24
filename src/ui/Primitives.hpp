@@ -56,5 +56,12 @@ void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
 // goes down first and the hint paints over it, so the row keeps its spacing.
 void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
                    SDL_Color accent);
+// The same ring for any other control: the accent edge and a soft halo, drawn
+// before the control fills its rectangle so only the border stays visible.
+// The interior is painted back in with plateColor, so a control keeps the
+// background it had before it was focused and only gains the border.
+void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color accent,
+                   SDL_Color plateColor);
 
 } // namespace launcher::ui

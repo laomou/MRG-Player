@@ -671,6 +671,12 @@ int Application::run(int argc, char **argv) {
     if (settingCategory == 5)
       refreshCoreRows();
   };
+  // Opening the settings screen always re-reads the installed cores, so the
+  // page is populated whether it was reached by key, pad, or mouse.
+  auto openSettings = [&] {
+    refreshCoreRows();
+    screen = Screen::Settings;
+  };
   auto pauseSessionClock = [&] {
     if (sessionActiveSince != 0) {
       sessionAccumulatedMs += SDL_GetTicks64() - sessionActiveSince;
@@ -1305,6 +1311,10 @@ int Application::run(int argc, char **argv) {
   }
 #endif
 
+  // The launcher can start on either screen, so the installer page is filled
+  // once here as well.
+  refreshCoreRows();
+
   while (running) {
     if (coreInstallDone.exchange(false)) {
       if (coreInstallThread != nullptr) {
@@ -1750,7 +1760,7 @@ int Application::run(int argc, char **argv) {
             if (homePill == 0)
               chooseAndImportGame();
             else
-              screen = Screen::Settings;
+              openSettings();
           } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Pills) {
             homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
@@ -1767,7 +1777,7 @@ int Application::run(int argc, char **argv) {
             ui::moveSelection(selectedGame, 1,
                               static_cast<int>(gameLibrary.slotCount()));
           else if (key == SDLK_s || key == SDLK_TAB)
-            screen = Screen::Settings;
+            openSettings();
           else if (key == SDLK_m || key == SDLK_x)
             (void)openManagement(ui::ManagementDialog::Menu);
           else if (key == SDLK_DELETE)
@@ -1864,7 +1874,7 @@ int Application::run(int argc, char **argv) {
             if (clickedPill == 0) {
               chooseAndImportGame();
             } else if (clickedPill == 1) {
-              screen = Screen::Settings;
+              openSettings();
             } else if (clickedAction >= 0) {
               homeFocus = ui::HomeFocus::Actions;
               homeAction = clickedAction;
@@ -1900,45 +1910,26 @@ int Application::run(int argc, char **argv) {
               confirmManagementAction();
             }
           }
-        } else if (x >= 72 && x <= 402 && y >= 389 && y < 753) {
-          const int clickedCategory = static_cast<int>((y - 389) / 52);
-          if (clickedCategory >= 0 &&
-              clickedCategory < ui::settingCategoryCount()) {
-            settingCategory = clickedCategory;
-            settingRow = 0;
-          }
-        } else if (x >= 466 && x <= 1476) {
-          bool clickedOption = false;
-          if (settingCategory == 0) {
-            const int clickedRow = ui::generalPageRowAt(static_cast<int>(x),
-                                                        static_cast<int>(y));
-            if (clickedRow >= 0) {
-              settingRow = clickedRow;
-              clickedOption = true;
-            }
-          } else if (settingCategory == 3) {
-            const int clickedRow = ui::controllerPageRowAt(x, y);
-            if (clickedRow >= 0) {
-              settingRow = clickedRow;
-              if (settingRow >= 4 &&
-                  settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
-                bindingCapture = true;
-              } else {
-                clickedOption = true;
-              }
-            }
-          } else if (settingCategory == 5) {
-            const int clickedRow = (y - 408) / 56;
-            if (clickedRow >= 0 &&
-                clickedRow < static_cast<int>(std::size(kInstallerPlatforms))) {
-              settingRow = clickedRow;
+        } else if (ui::settingsCategoryAt(x, y) >= 0) {
+          const int clickedCategory = ui::settingsCategoryAt(x, y);
+          settingCategory = clickedCategory;
+          settingRow = 0;
+          if (clickedCategory == 5)
+            refreshCoreRows();
+        } else {
+          const int clickedRow =
+              ui::settingsRowAt(settingCategory, x, y);
+          if (clickedRow >= 0) {
+            settingRow = clickedRow;
+            if (settingCategory == 3 && settingRow >= 4 &&
+                settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
+              bindingCapture = true;
+            } else if (settingCategory == 5) {
               startCoreInstall(clickedRow);
+            } else {
+              applySetting(1);
             }
-          } else {
-            clickedOption = y >= 410 && y <= 502;
           }
-          if (clickedOption)
-            applySetting(1);
         }
         break;
       }
@@ -1976,7 +1967,7 @@ int Application::run(int argc, char **argv) {
             (void)openManagement(ui::ManagementDialog::Menu);
           else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y ||
                    event.cbutton.button == SDL_CONTROLLER_BUTTON_START)
-            screen = Screen::Settings;
+            openSettings();
           else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                    event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
             running = false;

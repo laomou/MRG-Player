@@ -62,6 +62,23 @@ int main(int argc, char **argv) {
         "General hit testing must stop after the last row");
   check(generalPageRowAt(300, 420) == -1,
         "The settings sidebar must not activate general rows");
+  // Every clickable control on the settings screen answers a click: the
+  // category rail and the rows of each page.
+  check(settingsCategoryAt(200, 389 + 2 * 52 + 10) == 2,
+        "The category rail maps a click to its entry");
+  check(settingsCategoryAt(200, 770) == -1,
+        "Below the rail activates nothing");
+  check(settingsCategoryAt(500, 420) == -1,
+        "The settings body must not activate categories");
+  check(settingsRowAt(1, 1200, 728 + 10) == 3,
+        "Every display row is clickable, not just the first");
+  check(settingsRowAt(1, 1200, 728 + 100) == -1,
+        "The gap under the last display row activates nothing");
+  check(settingsRowAt(2, 1200, 516 + 10) == 1,
+        "Audio rows map to their own index");
+  check(settingsRowAt(4, 300, 420) == -1,
+        "Outside the row track activates nothing");
+  check(settingsRowAt(6, 1200, 420) == 0, "The about row is clickable");
   check(powerCycleChoiceAt(600, 530) == 0,
         "Power-cycle dialog defaults to cancel");
   check(powerCycleChoiceAt(900, 530) == 1, "Power-cycle confirmation target");

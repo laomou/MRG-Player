@@ -44,6 +44,13 @@ constexpr int kGeneralRowY = 404;
 constexpr int kGeneralRowStep = 84;
 constexpr int kGeneralRowHeight = 76;
 
+// The single-column pages use 92 pixel rows on a 106 pixel pitch, and the
+// installer page lists one platform per 56 pixel line.
+constexpr int kSettingRowY = 410;
+constexpr int kSettingRowStep = 106;
+constexpr int kSettingRowHeight = 92;
+constexpr int kInstallerRowCount = 5;
+
 TextId categoryText(int category) {
   constexpr std::array<TextId, kCategoryCount> ids{
       TextId::General,    TextId::Display,     TextId::Audio,
@@ -67,15 +74,14 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
                     const std::string &title, const std::string &description,
                     const std::string &value, SDL_Color accent,
                     int height = 92) {
+  // Focus only draws a border: the plate stays the same colour so the row
+  // behind the ring never changes when the selection moves.
+  const SDL_Color plate{7, 17, 34, 188};
+  if (selected)
+    drawFocusRing(renderer, 466, static_cast<float>(y), 1010,
+                  static_cast<float>(height), 17, accent, plate);
   rounded(renderer, 466, static_cast<float>(y), 1010,
-          static_cast<float>(height), 17,
-          selected ? SDL_Color{22, 35, 57, 246} : SDL_Color{7, 17, 34, 188});
-  if (selected) {
-    rounded(renderer, 466, static_cast<float>(y), 6,
-            static_cast<float>(height), 3, accent);
-    rounded(renderer, 1228, static_cast<float>(y + (height - 50) / 2), 216, 50,
-            25, {accent.r, accent.g, accent.b, 54});
-  }
+          static_cast<float>(height), 17, plate);
   const int titleY = y + (height - 58) / 2;
   text(renderer, 498, titleY, title, 2, {247, 248, 252, 255});
   text(renderer, 498, titleY + 34, description, 1, {148, 169, 187, 255});
@@ -89,12 +95,12 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
 void drawCompactRow(SDL_Renderer *renderer, int x, int y, int width,
                     bool selected, const std::string &title,
                     const std::string &value, SDL_Color accent) {
-  rounded(renderer, static_cast<float>(x), static_cast<float>(y),
-          static_cast<float>(width), 29, 9,
-          selected ? SDL_Color{22, 35, 57, 246} : SDL_Color{7, 17, 34, 170});
+  const SDL_Color plate{7, 17, 34, 170};
   if (selected)
-    rounded(renderer, static_cast<float>(x), static_cast<float>(y), 5, 29, 2,
-            accent);
+    drawFocusRing(renderer, static_cast<float>(x), static_cast<float>(y),
+                  static_cast<float>(width), 29, 9, accent, plate);
+  rounded(renderer, static_cast<float>(x), static_cast<float>(y),
+          static_cast<float>(width), 29, 9, plate);
   text(renderer, x + 26, y + 7, title, 1,
        selected ? SDL_Color{255, 255, 255, 255}
                 : SDL_Color{184, 198, 216, 255});
@@ -190,6 +196,41 @@ int generalPageRowAt(int x, int y) {
   return row;
 }
 
+int settingsCategoryAt(float x, float y) {
+  if (x < 72 || x > 402 || y < 389 || y >= 753)
+    return -1;
+  const int category = static_cast<int>((y - 389) / 52);
+  return category < kCategoryCount ? category : -1;
+}
+
+int settingsRowAt(int category, float x, float y) {
+  if (x < kTrackX || x > kTrackX + kTrackWidth)
+    return -1;
+  if (category == 0)
+    return generalPageRowAt(static_cast<int>(x), static_cast<int>(y));
+  if (category == 3)
+    return controllerPageRowAt(static_cast<int>(x), static_cast<int>(y));
+  if (category == 5) {
+    if (y < 408)
+      return -1;
+    const int row = (static_cast<int>(y) - 408) / 56;
+    if (row < 0 || row >= kInstallerRowCount)
+      return -1;
+    if ((static_cast<int>(y) - 408) % 56 >= kRowHeight)
+      return -1;
+    return row;
+  }
+  // The remaining pages share one column of 92 pixel rows spaced 106 apart.
+  const int row = (static_cast<int>(y) - kSettingRowY) / kSettingRowStep;
+  const int count = category == 1 ? 4 : (category == 2 ? 3 : 1);
+  if (row < 0 || row >= count)
+    return -1;
+  if ((static_cast<int>(y) - kSettingRowY) % kSettingRowStep >=
+      kSettingRowHeight)
+    return -1;
+  return row;
+}
+
 void changeSetting(AppSettings &settings, int category, int row,
                    int direction) {
   if (category == 0) {
@@ -265,6 +306,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   for (int i = 0; i < kCategoryCount; ++i) {
     const int y = 389 + i * 52;
     if (i == category) {
+      drawFocusRing(renderer, 91, static_cast<float>(y), 292, 48, 14,
+                    game.accent, {5, 14, 31, 255});
       rounded(renderer, 91, static_cast<float>(y), 292, 48, 14,
               {game.accent.r, game.accent.g, game.accent.b, 54});
       rounded(renderer, 91, static_cast<float>(y), 5, 48, 2, game.accent);

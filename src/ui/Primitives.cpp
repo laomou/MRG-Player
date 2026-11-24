@@ -409,6 +409,19 @@ void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
   }
 }
 
+void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color accent,
+                   SDL_Color plateColor) {
+  rounded(renderer, x - 8.0f, y - 8.0f, width + 16.0f, height + 16.0f,
+          radius + 8.0f,
+          {accent.r, accent.g, accent.b, 60});
+  rounded(renderer, x - 3.0f, y - 3.0f, width + 6.0f, height + 6.0f,
+          radius + 3.0f, accent);
+  // The interior is filled back in so the accent reads as a border rather than
+  // a block, and so focusing a control never changes its background.
+  rounded(renderer, x, y, width, height, radius, plateColor);
+}
+
 void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
                    SDL_Color accent) {
   // Two nested boxes keep the ring out of the row's own metrics: the outer one
