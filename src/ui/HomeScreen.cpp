@@ -141,6 +141,26 @@ std::string fitTitle(std::string title, int maxWidth, int scale) {
   return title + suffix;
 }
 
+// A title over box art needs contrast, but a solid plate reads as a black bar.
+// Fading the card's bottom instead keeps the art readable and the corners stay
+// round, because every row is inset by the radius the card already uses.
+void drawTitleScrim(SDL_Renderer *renderer, float x, float y, float width,
+                    float height, float radius, Uint8 strength) {
+  const float top = y + height * 0.50f;
+  const float span = y + height - top;
+  for (int row = 0; row < static_cast<int>(span); ++row) {
+    const float t = static_cast<float>(row) / std::max(1.0f, span);
+    const float distance = span - row - 0.5f;
+    const float yy = std::max(0.0f, radius - distance);
+    const float inset =
+        radius - std::sqrt(std::max(0.0f, radius * radius - yy * yy));
+    const auto shade =
+        static_cast<Uint8>(strength * std::pow(t, 1.6f));
+    fill(renderer, x + inset, top + row, width - 2 * inset, 1,
+         {4, 6, 16, shade});
+  }
+}
+
 void drawCard(SDL_Renderer *renderer, float column, bool selected,
               bool focused, float focusOpacity,
               const library::GameEntry *entry, CoverSource *covers) {
@@ -203,22 +223,20 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
                  {18, 18, 33, alpha});
   }
 
-  // One line of title on a plate that hugs it; a share of the card height made
-  // the band look like a footer rather than a label.
-  const float plateHeight = 58.0f * unit;
-  const float panelY = y + height - margin - plateHeight;
-  // Art is busy, so the title plate over it has to be nearly solid; the drawn
-  // gradient cards keep their translucent plate.
-  const Uint8 panelAlpha =
-      art != nullptr ? 244 : static_cast<Uint8>(alpha * 0.78f);
-  rounded(renderer, x + margin, panelY, width - margin * 2.0f, plateHeight,
-          12.0f * unit, {6, 9, 26, panelAlpha});
+  // Box art is busy and a solid plate reads as a black bar across the bottom of
+  // the card, so the title sits on a fade that follows the rounded corners and
+  // keeps the art visible underneath.
+  drawTitleScrim(renderer, x, y, width, height, radius,
+                 art != nullptr ? 246 : static_cast<Uint8>(alpha * 0.85f));
   const int scale = selected && width >= 240.0f ? 3 : 2;
+  // The dimmed cards keep a brighter title than the rest of the card so the
+  // name stays readable over the art.
+  const Uint8 titleAlpha = selected ? 255 : 220;
   centeredGlyph(renderer, static_cast<int>(x + width * 0.5f),
-                static_cast<int>(panelY + plateHeight * 0.5f),
+                static_cast<int>(y + height - margin - 14.0f),
                 fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
                          scale),
-                scale, {255, 255, 255, alpha});
+                scale, {255, 255, 255, titleAlpha});
 
   // The console badge: a small mark in the corner instead of a second line of
   // text, so the card says what it is without shouting it.
