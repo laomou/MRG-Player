@@ -33,6 +33,27 @@ struct CardBox {
   float height = 0.0f;
 };
 
+// The two header pills are sized from their labels and anchored against the
+// right margin, so a longer translation never runs past the edge of the
+// canvas; with the current Chinese labels the pair keeps its old geometry.
+SDL_FRect pillRect(bool settings, i18n::Language language, std::size_t count) {
+  using i18n::TextId;
+  using i18n::tr;
+  const int libraryLabel = textWidth(tr(TextId::Library, language), 2);
+  const int settingsLabel = textWidth(tr(TextId::Settings, language), 2);
+  const int countLabel = textWidth(std::to_string(count), 1);
+  const float settingsWidth =
+      std::max(156.0f, 44.0f + static_cast<float>(settingsLabel) + 20.0f);
+  const float libraryWidth =
+      std::max(246.0f, 44.0f + static_cast<float>(libraryLabel) + 16.0f +
+                           static_cast<float>(countLabel) + 20.0f);
+  const float settingsX = kRowRight - settingsWidth;
+  if (settings)
+    return SDL_FRect{settingsX, 52.0f, settingsWidth, 58.0f};
+  return SDL_FRect{settingsX - 16.0f - libraryWidth, 52.0f, libraryWidth,
+                   58.0f};
+}
+
 // The shelf shows seven whole cards plus half of the next one, so the cut-off
 // card at the right edge is always the cue that the row can travel. A library
 // that fits leaves an empty slot there instead of pretending there is more.
@@ -200,24 +221,33 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
   text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
-  rounded(renderer, 1110, 52, 246, 58, 29, {4, 10, 26, 145});
-  circle(renderer, 1143, 81, 15, style.accent);
-  text(renderer, 1136, 66, "+", 2, {18, 18, 33, 255});
-  text(renderer, 1170, 66, tr(TextId::Library, language), 2,
-       {255, 255, 255, 255});
-  text(renderer, 1320, 71, std::to_string(gameLibrary.entries().size()), 1,
-       {191, 201, 220, 255});
-  rounded(renderer, 1372, 52, 156, 58, 29, {4, 10, 26, 175});
-  circle(renderer, 1405, 81, 15, {255, 255, 255, 45});
-  text(renderer, 1399, 66, "?", 2, style.accent);
-  text(renderer, 1431, 66, tr(TextId::Settings, language), 2,
-       {255, 255, 255, 255});
+  const std::size_t libraryCount = gameLibrary.entries().size();
+  const SDL_FRect libraryPill = pillRect(false, language, libraryCount);
+  const SDL_FRect settingsPill = pillRect(true, language, libraryCount);
+  rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
+          libraryPill.h, 29, {4, 10, 26, 145});
+  circle(renderer, libraryPill.x + 33, 81, 15, style.accent);
+  text(renderer, static_cast<int>(libraryPill.x) + 26, 66, "+", 2,
+       {18, 18, 33, 255});
+  text(renderer, static_cast<int>(libraryPill.x) + 60, 66,
+       tr(TextId::Library, language), 2, {255, 255, 255, 255});
+  const std::string countLabel = std::to_string(libraryCount);
+  text(renderer,
+       static_cast<int>(libraryPill.x + libraryPill.w - 36.0f -
+                        static_cast<float>(textWidth(countLabel, 1))),
+       71, countLabel, 1, {191, 201, 220, 255});
+  rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
+          settingsPill.h, 29, {4, 10, 26, 175});
+  circle(renderer, settingsPill.x + 33, 81, 15, {255, 255, 255, 45});
+  text(renderer, static_cast<int>(settingsPill.x) + 27, 66, "?", 2,
+       style.accent);
+  text(renderer, static_cast<int>(settingsPill.x) + 59, 66,
+       tr(TextId::Settings, language), 2, {255, 255, 255, 255});
   // The pills are buttons too, so they take the same ring when the direction
   // keys are on them. The ring is drawn over the pills rather than under them,
   // because they are translucent and would tint it.
   if (focus == HomeFocus::Pills) {
-    const SDL_FRect pill = focusedPill == 0 ? SDL_FRect{1110, 52, 246, 58}
-                                            : SDL_FRect{1372, 52, 156, 58};
+    const SDL_FRect pill = focusedPill == 0 ? libraryPill : settingsPill;
     drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 29.0f,
                   focusOpacity);
   }
@@ -319,12 +349,14 @@ int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
   return -1;
 }
 
-int homePillAt(float x, float y) {
+int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
   if (y < 49.0f || y > 113.0f)
     return -1;
-  if (x >= 1107.0f && x <= 1359.0f)
+  const SDL_FRect libraryPill = pillRect(false, language, count);
+  if (x >= libraryPill.x && x <= libraryPill.x + libraryPill.w)
     return 0;
-  if (x >= 1369.0f && x <= 1531.0f)
+  const SDL_FRect settingsPill = pillRect(true, language, count);
+  if (x >= settingsPill.x && x <= settingsPill.x + settingsPill.w)
     return 1;
   return -1;
 }

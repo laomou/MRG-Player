@@ -94,9 +94,19 @@ int main(int argc, char **argv) {
 
   // The home screen lets the direction keys walk the pills, the shelf, and the
   // footer, so every on-screen button has a hit target of its own.
-  check(homePillAt(1200, 80) == 0, "Library pill target preserved");
-  check(homePillAt(1450, 80) == 1, "Settings pill target preserved");
-  check(homePillAt(700, 80) == -1, "Empty header space activates nothing");
+  check(homePillAt(1200, 80, launcher::i18n::Language::English, 4) == 0,
+        "Library pill target preserved");
+  check(homePillAt(1450, 80, launcher::i18n::Language::English, 4) == 1,
+        "Settings pill target preserved");
+  check(homePillAt(700, 80, launcher::i18n::Language::English, 4) == -1,
+        "Empty header space activates nothing");
+  // The pills are sized from their labels, so the longest translation still
+  // ends inside the right margin instead of running off the canvas.
+  check(homePillAt(1500, 80, launcher::i18n::Language::English, 4) == 1,
+        "The settings pill reaches the right margin");
+  check(homePillAt(1120, 80, launcher::i18n::Language::SimplifiedChinese,
+                   4) == 0,
+        "The Chinese pills keep their old geometry");
   check(homeCardAt(500, 500, 7, 0.0f) >= 0,
         "A card in the row is clickable");
   check(homeCardAt(500, 200, 7, 0.0f) == -1,

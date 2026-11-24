@@ -1954,7 +1954,9 @@ int Application::run(int argc, char **argv) {
             selectedGame = clickedCard;
             (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.button.button == SDL_BUTTON_LEFT) {
-            const int clickedPill = ui::homePillAt(x, y);
+            const int clickedPill =
+                ui::homePillAt(x, y, currentLanguage(),
+                               gameLibrary.entries().size());
             if (clickedPill == 0) {
               chooseAndImportGame();
             } else if (clickedPill == 1) {
