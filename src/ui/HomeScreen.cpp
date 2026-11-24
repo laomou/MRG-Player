@@ -143,12 +143,32 @@ void drawCard(SDL_Renderer *renderer, int index, int slot, int count,
                {style.accent.r, style.accent.g, style.accent.b, alpha});
 }
 
+// Footer geometry lives here because the drawing and the hit test have to agree
+// on it; the metrics themselves come from the hint helpers.
+constexpr float kFooterRight = 1528.0f;
+constexpr float kFooterY = 822.0f;
+
+std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
+                              const config::InputPrompts &prompts) {
+  std::vector<Hint> hints;
+  if (hasGame) {
+    hints.push_back(
+        {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
+    hints.push_back({i18n::tr(i18n::TextId::ManageGame, language),
+                     prompts.manage, false});
+  }
+  hints.push_back(
+      {i18n::tr(i18n::TextId::Quit, language), prompts.back, false});
+  return hints;
+}
+
 } // namespace
 
 void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
-              const config::InputPrompts &prompts) {
+              const config::InputPrompts &prompts, HomeFocus focus,
+              int focusedPill, int focusedAction) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -165,6 +185,14 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
   text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
+  // The pills are buttons too, so they take the same ring when the direction
+  // keys are on them.
+  if (focus == HomeFocus::Pills) {
+    const SDL_FRect pill = focusedPill == 0 ? SDL_FRect{1110, 52, 246, 58}
+                                            : SDL_FRect{1372, 52, 156, 58};
+    rounded(renderer, pill.x - 3.0f, pill.y - 3.0f, pill.w + 6.0f,
+            pill.h + 6.0f, 32.0f, style.accent);
+  }
   rounded(renderer, 1110, 52, 246, 58, 29, {4, 10, 26, 145});
   circle(renderer, 1143, 81, 15, style.accent);
   text(renderer, 1136, 66, "+", 2, {18, 18, 33, 255});
@@ -220,19 +248,67 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
 
   fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
   text(renderer, 72, 828, prompts.horizontal, 1, {168, 184, 207, 255});
-  std::vector<Hint> footer;
-  if (selectedEntry != nullptr) {
-    footer.push_back({tr(TextId::Start, language), prompts.confirm, true});
-    footer.push_back({tr(TextId::ManageGame, language), prompts.manage, false});
+  const std::vector<Hint> footer =
+      footerHints(selectedEntry != nullptr, language, prompts);
+  const int focused =
+      focus == HomeFocus::Actions
+          ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
+          : -1;
+  float cursor =
+      kFooterRight - static_cast<float>(hintRowWidth(footer));
+  for (int index = 0; index < static_cast<int>(footer.size()); ++index) {
+    if (index == focused)
+      drawHintFocus(renderer, cursor, kFooterY, footer[index], style.accent);
+    drawHint(renderer, cursor, kFooterY, footer[index], style.accent);
+    cursor += static_cast<float>(hintWidth(footer[index])) + kHintGap;
   }
-  footer.push_back({tr(TextId::Quit, language), prompts.back, false});
-  drawHintRow(renderer, 1528.0f, 822.0f, footer, style.accent);
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
     rounded(renderer, 484, 760, 632, 66, 18, {4, 8, 22, 235});
     centeredText(renderer, 800, 779, std::string(toastMessage), 2,
                  style.accent);
   }
+}
+
+int homeActionCount(bool hasGame) { return hasGame ? 3 : 1; }
+
+int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
+                 const config::InputPrompts &prompts) {
+  if (y < kFooterY - 12.0f || y > kFooterY + kHintChipHeight + 14.0f)
+    return -1;
+  const std::vector<Hint> hints = footerHints(hasGame, language, prompts);
+  float cursor = kFooterRight - static_cast<float>(hintRowWidth(hints));
+  for (int index = 0; index < static_cast<int>(hints.size()); ++index) {
+    const float width = static_cast<float>(hintWidth(hints[index]));
+    if (x >= cursor - 10.0f && x <= cursor + width + 10.0f)
+      return index;
+    cursor += width + kHintGap;
+  }
+  return -1;
+}
+
+int homePillAt(float x, float y) {
+  if (y < 49.0f || y > 113.0f)
+    return -1;
+  if (x >= 1107.0f && x <= 1359.0f)
+    return 0;
+  if (x >= 1369.0f && x <= 1531.0f)
+    return 1;
+  return -1;
+}
+
+int homeCardAt(float x, float y, int count) {
+  // The selected card is drawn a little larger, so accept either size and a
+  // click on its rim still counts.
+  for (int slot = 0; slot < std::max(1, count); ++slot) {
+    for (const bool selected : {false, true}) {
+      const CardBox box = cardBox(slot, count, selected);
+      if (x >= box.x && x <= box.x + box.width && y >= box.y &&
+          y <= box.y + box.height)
+        return slot;
+    }
+  }
+  return -1;
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

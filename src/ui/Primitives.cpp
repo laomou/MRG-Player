@@ -358,11 +358,9 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time) {
 namespace {
 // Footer legend metrics. The chip is deliberately the same height as a scale 1
 // line of text plus padding so a labelled hint sits on the footer baseline.
-constexpr float kHintChipHeight = 26.0f;
 constexpr float kHintChipPadding = 9.0f;
 constexpr float kHintMinChipWidth = 26.0f;
 constexpr float kHintLabelGap = 10.0f;
-constexpr float kHintGap = 34.0f;
 
 [[nodiscard]] float chipWidth(const Hint &hint) {
   return std::max(kHintMinChipWidth,
@@ -372,8 +370,8 @@ constexpr float kHintGap = 34.0f;
 } // namespace
 
 int hintWidth(const Hint &hint) {
-  return textWidth(hint.label, 1) + static_cast<int>(kHintLabelGap) +
-         static_cast<int>(chipWidth(hint));
+  return static_cast<int>(chipWidth(hint)) + static_cast<int>(kHintLabelGap) +
+         textWidth(hint.label, 1);
 }
 
 int hintRowWidth(const std::vector<Hint> &hints) {
@@ -388,11 +386,12 @@ int hintRowWidth(const std::vector<Hint> &hints) {
 
 void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
               SDL_Color accent) {
-  text(renderer, static_cast<int>(x), static_cast<int>(y) + 6, hint.label, 1,
-       {143, 163, 181, 255});
-  const float chipX =
-      x + static_cast<float>(textWidth(hint.label, 1)) + kHintLabelGap;
+  // Button first, then what it does: the eye lands on the control and reads the
+  // action to its right, the way a console legend is written.
+  const float chipX = x;
   const float width = chipWidth(hint);
+  text(renderer, static_cast<int>(chipX + width + kHintLabelGap),
+       static_cast<int>(y) + 6, hint.label, 1, {143, 163, 181, 255});
   rounded(renderer, chipX, y, width, kHintChipHeight, 8,
           hint.accent ? accent : SDL_Color{255, 255, 255, 26});
   centeredText(renderer, static_cast<int>(chipX + width * 0.5f),
@@ -408,6 +407,18 @@ void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
     drawHint(renderer, x, y, hint, accent);
     x += static_cast<float>(hintWidth(hint)) + kHintGap;
   }
+}
+
+void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
+                   SDL_Color accent) {
+  // Two nested boxes keep the ring out of the row's own metrics: the outer one
+  // is the accent edge, the inner one restores the dark plate behind the hint.
+  rounded(renderer, x - 12.0f, y - 7.0f,
+          static_cast<float>(hintWidth(hint)) + 24.0f,
+          kHintChipHeight + 14.0f, 11.0f, accent);
+  rounded(renderer, x - 10.0f, y - 5.0f,
+          static_cast<float>(hintWidth(hint)) + 20.0f,
+          kHintChipHeight + 10.0f, 9.0f, {13, 21, 37, 245});
 }
 
 } // namespace launcher::ui

@@ -277,10 +277,12 @@ if(BUILD_TESTING)
   add_executable(ui-rendering-test
     tests/UiRenderingTest.cpp
     src/ui/Primitives.cpp
+    src/ui/HomeScreen.cpp
     src/ui/PauseMenuScreen.cpp
     src/ui/GameManagementScreen.cpp
     src/ui/SettingsScreen.cpp
     src/model/Game.cpp
+    src/library/GameLibrary.cpp
     src/i18n/Localization.cpp
   )
   target_include_directories(ui-rendering-test PRIVATE src)

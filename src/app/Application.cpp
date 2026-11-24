@@ -382,6 +382,9 @@ int Application::run(int argc, char **argv) {
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;
   int selectedGame = settings.rememberSelection ? settings.selectedGame : 0;
+  ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
+  int homePill = 0;
+  int homeAction = 0;
   selectedGame = std::clamp(selectedGame, 0,
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
@@ -393,6 +396,9 @@ int Application::run(int argc, char **argv) {
   bool smokeSettingsDisplay = false;
   bool smokeSettingsAudio = false;
   bool smokeSettingsController = false;
+  bool smokeHomePills = false;
+  bool smokeHomeActions = false;
+  bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
   bool smokeSettingsAbout = false;
 #endif
@@ -1103,6 +1109,20 @@ int Application::run(int argc, char **argv) {
     screen = Screen::Management;
     return true;
   };
+  // Runs the footer entry the direction keys are pointing at, so the same
+  // action is reachable from the row and from its button.
+  auto activateHomeAction = [&] {
+    if (!selectedEntryAvailable()) {
+      running = false;
+      return;
+    }
+    if (homeAction == 0)
+      (void)startSelected();
+    else if (homeAction == 1)
+      (void)openManagement(ui::ManagementDialog::Menu);
+    else
+      running = false;
+  };
   auto executeManagementAction = [&] {
     switch (managementAction) {
     case 0:
@@ -1711,7 +1731,33 @@ int Application::run(int argc, char **argv) {
           break;
         const SDL_Keycode key = event.key.keysym.sym;
         if (screen == Screen::Home) {
-          if (key == SDLK_LEFT)
+          if (homeFocus == ui::HomeFocus::Actions &&
+              (key == SDLK_LEFT || key == SDLK_RIGHT)) {
+            const int count = ui::homeActionCount(selectedEntryAvailable());
+            const int step = key == SDLK_LEFT ? count - 1 : 1;
+            homeAction = (homeAction + step) % count;
+          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
+                     homeFocus == ui::HomeFocus::Actions) {
+            activateHomeAction();
+          } else if (homeFocus == ui::HomeFocus::Pills &&
+                     (key == SDLK_LEFT || key == SDLK_RIGHT)) {
+            homePill = 1 - homePill;
+          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
+                     homeFocus == ui::HomeFocus::Pills) {
+            if (homePill == 0)
+              chooseAndImportGame();
+            else
+              screen = Screen::Settings;
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Pills) {
+            homeFocus = ui::HomeFocus::Cards;
+          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
+            homeFocus = ui::HomeFocus::Pills;
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards) {
+            homeFocus = ui::HomeFocus::Actions;
+            homeAction = 0;
+          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Actions) {
+            homeFocus = ui::HomeFocus::Cards;
+          } else if (key == SDLK_LEFT)
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
           else if (key == SDLK_RIGHT)
@@ -1802,17 +1848,31 @@ int Application::run(int argc, char **argv) {
         SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &x,
                                   &y);
         if (screen == Screen::Home) {
-          const bool selectedCard =
-              x >= 640 && x <= 960 && y >= 285 && y <= 695;
-          if (event.button.button == SDL_BUTTON_RIGHT && selectedCard) {
+          const int clickedCard =
+              ui::homeCardAt(x, y, static_cast<int>(gameLibrary.slotCount()));
+          const int clickedAction =
+              ui::homeActionAt(x, y, selectedEntryAvailable(),
+                               currentLanguage(), currentPrompts());
+          if (event.button.button == SDL_BUTTON_RIGHT && clickedCard >= 0) {
+            selectedGame = clickedCard;
             (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.button.button == SDL_BUTTON_LEFT) {
-            if (x >= 1110 && x <= 1356 && y >= 52 && y <= 110)
+            const int clickedPill = ui::homePillAt(x, y);
+            if (clickedPill == 0) {
               chooseAndImportGame();
-            else if (x >= 1372 && x <= 1528 && y >= 52 && y <= 110)
+            } else if (clickedPill == 1) {
               screen = Screen::Settings;
-            else if (selectedCard)
-              (void)startSelected();
+            } else if (clickedAction >= 0) {
+              homeFocus = ui::HomeFocus::Actions;
+              homeAction = clickedAction;
+              activateHomeAction();
+            } else if (clickedCard >= 0) {
+              homeFocus = ui::HomeFocus::Cards;
+              const bool alreadySelected = clickedCard == selectedGame;
+              selectedGame = clickedCard;
+              if (alreadySelected)
+                (void)startSelected();
+            }
           }
         } else if (screen == Screen::Management) {
           if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -2054,7 +2114,7 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts);
+                   prompts, homeFocus, homePill, homeAction);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        selectedGame % static_cast<int>(kGameCount), time,
@@ -2063,7 +2123,7 @@ int Application::run(int argc, char **argv) {
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts);
+                   prompts, homeFocus, homePill, homeAction);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],
@@ -2088,8 +2148,24 @@ int Application::run(int argc, char **argv) {
       captureFrame(renderer, "emulator-screenshot.bmp");
       smokeRomCaptured = true;
     }
-    else if (options.smokeHome && screen == Screen::Home)
-      captureFrame(renderer, "launcher-screenshot.bmp");
+    else if (options.smokeHome && screen == Screen::Home) {
+      // Two shots: the row on its own, then the footer with a focused button,
+      // so the smoke test covers the focus ring as well as the layout.
+      if (!smokeHomePills) {
+        captureFrame(renderer, "launcher-screenshot.bmp");
+        smokeHomePills = true;
+        homeFocus = ui::HomeFocus::Pills;
+        homePill = 1;
+      } else if (!smokeHomeActions) {
+        captureFrame(renderer, "home-pills-screenshot.bmp");
+        smokeHomeActions = true;
+        homeFocus = ui::HomeFocus::Actions;
+        homeAction = 1;
+      } else {
+        captureFrame(renderer, "home-actions-screenshot.bmp");
+        smokeHomeDone = true;
+      }
+    }
     else if (options.smokeSettings && screen == Screen::Settings) {
       // Wait for the entry animation to settle before capturing, then switch
       // to the display page so the video options are covered too.
@@ -2165,6 +2241,7 @@ int Application::run(int argc, char **argv) {
 #if defined(MRG_ENABLE_SMOKE_TESTS)
     if (options.smokeTest() &&
         (!options.smokeSettings || smokeSettingsAbout) &&
+        (!options.smokeHome || smokeHomeDone) &&
         (!options.smokePause ||
          smokePauseCoreOptions || screen != Screen::Pause) &&
         (!options.smokeRom || smokeRomCaptured))

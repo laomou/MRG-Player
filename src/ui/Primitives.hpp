@@ -39,6 +39,11 @@ struct Hint {
   bool accent = false;
 };
 
+// Shared with callers that hit-test a legend row, so a click lands on the same
+// box the renderer drew.
+inline constexpr float kHintChipHeight = 26.0f;
+inline constexpr float kHintGap = 34.0f;
+
 [[nodiscard]] int hintWidth(const Hint &hint);
 [[nodiscard]] int hintRowWidth(const std::vector<Hint> &hints);
 void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
@@ -47,5 +52,9 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
 // the top edge where they would compete with the screen title.
 void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
                  const std::vector<Hint> &hints, SDL_Color accent);
+// Draws the ring that shows which legend entry the direction keys are on. It
+// goes down first and the hint paints over it, so the row keeps its spacing.
+void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
+                   SDL_Color accent);
 
 } // namespace launcher::ui

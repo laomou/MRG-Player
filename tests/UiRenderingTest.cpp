@@ -1,4 +1,5 @@
 #include "ui/GameManagementScreen.hpp"
+#include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
@@ -73,6 +74,23 @@ int main(int argc, char **argv) {
         "Danger section separator must not activate");
   check(confirmationChoiceAt(500, 620) == 0, "Cancel target preserved");
   check(confirmationChoiceAt(950, 620) == 1, "Confirmation target preserved");
+
+  // The home screen lets the direction keys walk the pills, the shelf, and the
+  // footer, so every on-screen button has a hit target of its own.
+  check(homePillAt(1200, 80) == 0, "Library pill target preserved");
+  check(homePillAt(1450, 80) == 1, "Settings pill target preserved");
+  check(homePillAt(700, 80) == -1, "Empty header space activates nothing");
+  check(homeCardAt(500, 500, 7) >= 0, "A card in the row is clickable");
+  check(homeCardAt(500, 200, 7) == -1, "Above the row activates nothing");
+  launcher::config::InputPrompts prompts;
+  check(homeActionAt(1500, 828, true, launcher::i18n::Language::English,
+                     prompts) == 2,
+        "The last footer entry is the rightmost button");
+  check(homeActionAt(700, 828, true, launcher::i18n::Language::English,
+                     prompts) == -1,
+        "Empty footer space activates nothing");
+  check(homeActionCount(true) == 3 && homeActionCount(false) == 1,
+        "An empty slot only offers to quit");
 
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);

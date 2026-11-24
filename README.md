@@ -121,8 +121,9 @@ Select a populated card and press **M** or keyboard **X**, controller **X**, or 
 
 | Action | Keyboard | Controller |
 |---|---|---|
+| Move between the pills, the shelf, and the footer | Up / Down | D-pad up / down |
 | Browse carousel | Left / Right | D-pad / left stick |
-| Import game | Click **+ Game Library** or drag a file | — |
+| Import game | Click **+ Game Library** or drag a file | Y / Start on the library pill |
 | Start selected game | Enter / Space or click | A |
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |
@@ -203,7 +204,7 @@ The same three options can be overridden for a single game from **Display** in t
 
 Open **Settings → Controller** to choose the UI prompt mode (**Auto**, **Keyboard & Mouse**, or **Controller**), controller label style (**Auto**, Xbox, Nintendo Switch, PlayStation, or Generic), and the active controller when multiple devices are connected. These choices change presentation only: keyboard, mouse, and controllers remain usable together. Auto mode follows the most recent meaningful input and ignores analog movement inside the configured dead zone; it falls back to keyboard prompts when no controller is available. The preferred controller is restored by SDL controller GUID after hotplug or restart.
 
-The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation.
+The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused.
 
 ## libretro cores
 
