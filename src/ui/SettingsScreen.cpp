@@ -504,9 +504,11 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
 
   // One legend, anchored bottom right: only the two keys that act here. The
   // direction keys are never written down, the way a console never labels them.
+  // Back sits on the left like the cancel button of every dialog, so the
+  // action that acts stays on the right.
   const std::vector<Hint> footer{
-      {tr(TextId::ChangeControl, language), prompts.change, true},
-      {tr(TextId::Back, language), prompts.back, false}};
+      {tr(TextId::Back, language), prompts.back, false},
+      {tr(TextId::ChangeControl, language), prompts.change, true}};
   drawHintRow(renderer, 1528.0f, 836.0f, footer, game.accent);
 }
 

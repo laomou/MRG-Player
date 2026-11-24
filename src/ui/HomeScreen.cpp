@@ -426,8 +426,8 @@ void drawQuitConfirm(SDL_Renderer *renderer, int choice,
     }
   }
   const std::vector<Hint> footer{
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Cancel, language), prompts.back, false}};
+      {tr(TextId::Cancel, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, kQuitDialogX + kQuitDialogWidth - 36.0f,
               kQuitDialogY + kQuitDialogHeight - 46.0f, footer, accent);
 }

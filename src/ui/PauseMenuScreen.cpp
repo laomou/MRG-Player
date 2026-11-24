@@ -209,9 +209,10 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
                     18.0f, 1.0f);
     }
   }
+  // Cancel sits on the left button, so its key is written first.
   const std::vector<Hint> footer{
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Cancel, language), prompts.back, false}};
+      {tr(TextId::Cancel, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, kConfirmX + kConfirmWidth - 36.0f,
               kConfirmY + kConfirmHeight - 52.0f, footer,
               {255, 211, 101, 255});
@@ -292,8 +293,8 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
        {165, 181, 204, 255});
 
   const std::vector<Hint> footer{
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Back, language), prompts.back, false}};
+      {tr(TextId::Back, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
 }
 
@@ -378,8 +379,8 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
               {{tr(TextId::ResetCoreOptions, language), "R", false}},
               {255, 211, 101, 255});
   const std::vector<Hint> footer{
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true},
-      {tr(TextId::Back, language), prompts.back, false}};
+      {tr(TextId::Back, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
 }
 
