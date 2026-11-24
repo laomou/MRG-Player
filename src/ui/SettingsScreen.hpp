@@ -16,6 +16,9 @@ struct CoreRow {
   std::string platform;
   std::string core;
   std::string status;
+  // Human-readable size of the installed library; empty when nothing is
+  // installed.
+  std::string size;
   bool installed = false;
 };
 

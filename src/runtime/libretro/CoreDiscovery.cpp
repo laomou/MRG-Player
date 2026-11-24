@@ -132,4 +132,32 @@ bool servedByCore(game::GamePlatform platform) noexcept {
   return platform != game::GamePlatform::Unknown && familyFor(platform) != nullptr;
 }
 
+bool removeInstalledCore(game::GamePlatform platform, std::string &error) {
+  const std::string installed = findCore(platform);
+  if (installed.empty()) {
+    error = "no core is installed for this platform";
+    return false;
+  }
+  const fs::path library(installed);
+  std::error_code failure;
+  if (!fs::remove(library, failure) || failure) {
+    error = "cannot remove " + installed + ": " +
+            (failure ? failure.message()
+                     : std::string("the file is unchanged"));
+    return false;
+  }
+  // The download archive and the copy unpacked from one belong to the same
+  // installation, so they go too. Both are best effort: a leftover archive
+  // never resurrects a core that is already gone.
+  std::error_code ignored;
+  const fs::path unpackRoot = unpackedCoreDirectory();
+  if (!unpackRoot.empty())
+    fs::remove(unpackRoot / library.filename(), ignored);
+  const std::string archiveName = library.filename().string() + ".zip";
+  fs::remove(library.parent_path() / archiveName, ignored);
+  for (const std::string &directory : coreSearchPaths())
+    fs::remove(fs::path(directory) / archiveName, ignored);
+  return true;
+}
+
 } // namespace launcher::runtime::libretro
