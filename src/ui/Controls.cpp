@@ -115,9 +115,29 @@ bool FocusGrid::focusList(int index) {
 }
 
 bool FocusGrid::moveVertical(int direction) {
-  if (lists_.empty())
+  if (direction == 0 || lists_.empty())
     return false;
-  return lists_[static_cast<std::size_t>(active_)].move(direction);
+  if (lists_[static_cast<std::size_t>(active_)].move(direction))
+    return true;
+  // A lane that ends still has the lines that span both lanes beyond it: the
+  // settings rows above the bindings and the dead zone below them. The keys
+  // step into the neighbouring column for those instead of stopping dead at
+  // the last binding.
+  if (active_ == 0)
+    return false;
+  const int row = lists_[static_cast<std::size_t>(active_)].focusedRow();
+  if (row < 0)
+    return false;
+  const int targetRow = row + direction;
+  for (int column = 1; column < listCount(); ++column) {
+    if (column == active_)
+      continue;
+    if (lists_[static_cast<std::size_t>(column)].focusRow(targetRow)) {
+      active_ = column;
+      return true;
+    }
+  }
+  return false;
 }
 
 bool FocusGrid::moveHorizontal(int direction) {
