@@ -587,6 +587,26 @@ int main(int, char **) {
       expect(unicodeRuntime->load(unicodeGame, renderer, 80),
              "loading a non-ASCII path failed: " +
                  std::string(unicodeRuntime->error()));
+      // Cores open the ROM through narrow file APIs, so a non-ASCII name has
+      // to reach them as an ASCII copy under rom-cache.
+      const fs::path romCache = launcher::paths::fromUtf8(
+          launcher::config::dataSubdirectory("rom-cache", ""));
+      std::size_t stagedCount = 0;
+      bool stagedNameIsAscii = true;
+      if (fs::is_directory(romCache)) {
+        for (const auto &entry : fs::directory_iterator(romCache)) {
+          ++stagedCount;
+          const std::string name =
+              launcher::paths::toUtf8(entry.path().filename());
+          for (const char ch : name) {
+            if (static_cast<unsigned char>(ch) >= 0x80)
+              stagedNameIsAscii = false;
+          }
+        }
+      }
+      expect(stagedCount == 1,
+             "the non-ASCII game was not staged for the core");
+      expect(stagedNameIsAscii, "the staged game file name is not ASCII");
       unicodeRuntime->stepFrame();
       unicodeRuntime->render(renderer);
       expect(unicodeRuntime->saveState(0, unicodeError) ==
@@ -609,6 +629,15 @@ int main(int, char **) {
                  launcher::runtime::StateStatus::Loaded,
              "loading a non-ASCII state failed: " + unicodeError);
       unicodeRuntime->stop();
+      std::size_t leftoverStages = 0;
+      if (fs::is_directory(romCache)) {
+        for (const auto &entry : fs::directory_iterator(romCache)) {
+          (void)entry;
+          ++leftoverStages;
+        }
+      }
+      expect(leftoverStages == 0,
+             "the staged game file was left behind after stop");
       const fs::path unicodeBattery =
           fs::path(launcher::config::dataSubdirectory("saves", "gba")) /
           launcher::paths::fromUtf8("超级马里奥.srm");

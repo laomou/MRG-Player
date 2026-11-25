@@ -15,6 +15,31 @@ inline constexpr int kLogicalHeight = 900;
 bool initializeTextRenderer(const std::string &fontPath);
 void shutdownTextRenderer();
 
+// The interface is laid out on the fixed 1600x900 canvas above but drawn
+// straight into the window at the size the window really has: text is
+// rasterised at device pixels instead of being upscaled from the canvas, which
+// is where the jagged widget text came from. A window that is not 16:9 gets the
+// canvas letterboxed, and every draw call still speaks canvas units.
+void setOutputSize(int outputWidth, int outputHeight);
+// The window size in the units SDL reports mouse positions in. A HiDPI display
+// hands out points that are smaller than the framebuffer it renders into, so the
+// pointer has to be scaled up by that ratio before it meets the canvas.
+void setWindowSize(int windowWidth, int windowHeight);
+// Maps a window coordinate, such as a mouse event, onto the canvas. Window
+// points are converted to output pixels first, so a click lands on the widget
+// it was aimed at whatever the display scaling is.
+void windowToCanvas(float windowX, float windowY, float &canvasX,
+                    float &canvasY);
+// Where the canvas landed in output pixels, so the console picture can be
+// placed inside the same letterbox as the widgets.
+void canvasRect(float &x, float &y, float &width, float &height);
+
+// Clip rectangles are given in canvas units and converted to output pixels, so
+// a scrolled row clips at the same place whatever the window size is.
+void setClipRect(SDL_Renderer *renderer, float x, float y, float width,
+                 float height);
+void clearClipRect(SDL_Renderer *renderer);
+
 SDL_Color mix(SDL_Color a, SDL_Color b, float t);
 void fill(SDL_Renderer *renderer, float x, float y, float width, float height,
           SDL_Color color);
@@ -22,12 +47,36 @@ void circle(SDL_Renderer *renderer, int centerX, int centerY, int radius,
             SDL_Color color);
 void rounded(SDL_Renderer *renderer, float x, float y, float width,
              float height, float radius, SDL_Color color);
+// Vertical gradient clipped to a rounded rectangle. The rows are walked in
+// output pixels, so a card body fades evenly instead of banding when the canvas
+// is scaled up.
+void gradientRounded(SDL_Renderer *renderer, float x, float y, float width,
+                     float height, float radius, SDL_Color top,
+                     SDL_Color bottom);
+// The same fade, but only the bottom corners are rounded: used for the shade
+// the card titles sit on.
+void fadeBottomRounded(SDL_Renderer *renderer, float x, float y, float width,
+                       float height, float radius, SDL_Color color,
+                       Uint8 strength, float exponent);
+
+// Draws a texture into a canvas-space rectangle; the game picture, box art and
+// save thumbnails all go through here so they follow the same transform.
+void drawTexture(SDL_Renderer *renderer, SDL_Texture *texture, float x, float y,
+                 float width, float height);
 int textWidth(const std::string &value, int scale);
 void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
           int scale, SDL_Color color);
 void centeredText(SDL_Renderer *renderer, int centerX, int y,
                   const std::string &value, int scale, SDL_Color color);
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time);
+// Centres a short label - a button glyph, a platform badge - inside a circle or
+// a pill. text() sits runs on the CJK baseline, so this uses the rendered box
+// instead of a hand-tuned offset.
+void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
+                   const std::string &value, int scale, SDL_Color color);
+// wallpaper, when present, replaces the drawn skyline with a soft version of
+// the selected game's cover, dimmed so the shelf stays readable.
+void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+                    SDL_Texture *wallpaper = nullptr);
 
 // One footer legend entry: what the control does, then the control itself, the
 // way a console writes "Back  B". Reading left to right gives the action first
@@ -39,6 +88,11 @@ struct Hint {
   bool accent = false;
 };
 
+// Shared with callers that hit-test a legend row, so a click lands on the same
+// box the renderer drew.
+inline constexpr float kHintChipHeight = 26.0f;
+inline constexpr float kHintGap = 34.0f;
+
 [[nodiscard]] int hintWidth(const Hint &hint);
 [[nodiscard]] int hintRowWidth(const std::vector<Hint> &hints);
 void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
@@ -47,5 +101,26 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
 // the top edge where they would compete with the screen title.
 void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
                  const std::vector<Hint> &hints, SDL_Color accent);
+// The focus ring never takes the accent of the game or the section on
+// screen: it answers "where do the keys go", which is a property of the
+// system, so it stays one colour everywhere.
+inline constexpr SDL_Color kFocusColor{215, 226, 242, 255};
+
+// Draws the ring that shows which legend entry the direction keys are on.
+// opacity fades the ring in when the focus lands on a new control, and 0
+// skips it entirely.
+void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
+                   float opacity);
+// The same ring for any other control: two pixels, three pixels outside the
+// rectangle, no halo. It is drawn last so it never disturbs the control or
+// the background underneath it.
+void drawFocusRing(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, float opacity);
+
+// A gear, drawn from geometry rather than a glyph: neither bundled font ships
+// a symbol for "settings", and the question mark it replaces read as help.
+// The silhouette is rasterised once and tinted per call.
+void gearIcon(SDL_Renderer *renderer, float centerX, float centerY,
+              float radius, SDL_Color color);
 
 } // namespace launcher::ui

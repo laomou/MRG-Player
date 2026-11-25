@@ -7,6 +7,33 @@
 
 namespace launcher::runtime {
 
+// The launcher draws its own interface on a fixed canvas and letterboxes it
+// into the window, so widgets and the console picture share one transform.
+inline constexpr int kCanvasWidth = 1600;
+inline constexpr int kCanvasHeight = 900;
+
+// Scale and offset that fit the canvas into a window, letterboxing the leftover
+// edges. Free of SDL types, like the viewport maths below.
+struct CanvasTransform {
+  float scale = 1.0f;
+  float offsetX = 0.0f;
+  float offsetY = 0.0f;
+};
+
+[[nodiscard]] inline CanvasTransform fitCanvas(int windowWidth,
+                                               int windowHeight) noexcept {
+  CanvasTransform canvas;
+  if (windowWidth <= 0 || windowHeight <= 0)
+    return canvas;
+  canvas.scale = std::min(static_cast<float>(windowWidth) / kCanvasWidth,
+                          static_cast<float>(windowHeight) / kCanvasHeight);
+  canvas.offsetX =
+      (static_cast<float>(windowWidth) - kCanvasWidth * canvas.scale) * 0.5f;
+  canvas.offsetY =
+      (static_cast<float>(windowHeight) - kCanvasHeight * canvas.scale) * 0.5f;
+  return canvas;
+}
+
 // Destination rectangle and source crop that place a console picture inside a
 // window. Deliberately free of SDL types so the geometry can be checked
 // without a video device.

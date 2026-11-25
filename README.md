@@ -11,6 +11,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Platform-neutral game model, managed library, runtime interface, and runtime registry
 - Dynamic platform and file-type labels in the library and management UI
 - Persistent managed library with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
+- Box art per game: drop a PNG into `covers/`, or map a local title to a libretro-thumbnails name in `covers/names.json` and let the launcher fetch it; cards without art keep the plain navy card with a console badge, and the selected game's art becomes the blurred background
 - Non-destructive migration from the legacy NES Player data directory
 - Console-agnostic runtime: video, audio, input, pacing, battery saves, and controller hot plugging are handled once for every core
 - In-game pause menu with three persistent instant-state slots, console reset, and a confirmed power cycle (cold boot that keeps battery saves)
@@ -20,6 +21,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Rewind: holding Backspace or pushing in the left stick steps the machine back through a rolling window of the core's own snapshots
 - Optional runahead (0-3 frames) that runs the core past the picture on screen to hide the core's own input lag
 - Display options: square, 4:3, or 8:7 aspect ratio, integer scaling, and 0-16 px overscan crop, globally or per game
+- One accent colour for the whole launcher — teal by default, five more in **Settings → Theme** — so the interface never borrows a game's palette
 - Core options: every option a libretro core declares is collected and editable from the pause menu, saved per core
 - In-game screenshots: **F12** writes a PNG of the current picture to the data root's `screenshots/` directory
 - Audio options: master volume, a mute toggle with a keyboard hotkey, and the fast-forward audio policy
@@ -70,6 +72,7 @@ MRGPlayer/
 │   ├── nes/
 │   └── gba/
 ├── core-options/             # one `<core>.tsv` of chosen values per core
+├── covers/                   # box art, plus names.json for automatic lookups
 └── screenshots/              # F12 captures
 ```
 
@@ -115,19 +118,50 @@ The legacy files are retained. Existing MRG Player destinations are never overwr
 
 Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
+### Box art
+
+A card shows art when the data root has a PNG for the game: `covers/<game id>.png`, where the id
+is the 16-hex suffix of the managed file (`library/nes/超级马里奥__0f3a...c1.nes` →
+`covers/0f3a...c1.png`). Dropping a file there works offline and always wins over a download.
+
+Most people have no art on disk, so the launcher can fetch it. It reads `covers/names.json`, which
+is created with three examples and never overwritten:
+
+```json
+{
+  "F1赛车": "F-1 Race (Japan)",
+  "超级马里奥": "Super Mario Bros. (World)",
+  "俄罗斯方块": "Tetris (USA)"
+}
+```
+
+The value is the No-Intro name used by [libretro-thumbnails](https://github.com/libretro-thumbnails),
+without `.png`. Matching ignores case and surrounding spaces. When a title is not in the file the
+launcher tries the title itself and then the title with `(World)`, `(USA)`, `(Europe)`, and `(Japan)`
+appended, so an English-named ROM often works with no mapping at all. A mapping value may also be a
+full `https://` URL, which is fetched as-is.
+
+Downloads run one at a time in the background, only from the platform's thumbnail repository, and
+stop at 8 MiB. A failure is silent: the card keeps its gradient and the next launch tries again. A
+success is cached as `covers/<game id>.png`, so later launches never touch the network. The selected
+game's art is also blurred into the launcher background; without it the background uses the selected
+console's palette.
+
 ## Controls
 
 ### Launcher
 
 | Action | Keyboard | Controller |
 |---|---|---|
+| Move between the pills, the shelf, and the footer | Up / Down | D-pad up / down |
 | Browse carousel | Left / Right | D-pad / left stick |
-| Import game | Click **+ Game Library** or drag a file | — |
+| Page the shelf by a screenful | Page Up / Page Down | L / R |
+| Import game | Click **+ Game Library** or drag a file | Focus the library pill, A |
 | Start selected game | Enter / Space or click | A |
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |
-| Open settings | S / Tab | Y / Start |
-| Back / exit | Escape | B / Back |
+| Open settings | Click **? Settings** | Focus the settings pill, A |
+| Quit the launcher | Esc, then confirm | B, then confirm |
 | Fullscreen | F11 | — |
 
 ### Controls
@@ -179,6 +213,19 @@ If a snapshot cannot be restored, the runtime reloads the core and reports that 
 
 Open **Settings → Display** to control how the picture fills the window. **Aspect ratio** cycles through square pixels, the 4:3 screen shape of a CRT, and the 8:7 pixel grid of the NES and Game Boy; **Integer scaling** snaps the picture to whole multiples of the cropped source and falls back to fractional scaling when the window is smaller than one source pixel; **Overscan crop** removes 0-16 source pixels from every edge to imitate the hidden border of a television. Rendering stays nearest-neighbour and centred, with black letterboxing, and every change applies immediately and is written to `settings.ini`.
 
+### Theme
+
+**Settings → Theme** holds the single accent colour the whole interface shares: the header mark, the pills, the footer
+key chips, the selected card's badge, the wash and bar that mark the current row, the pause menu, and the confirmation
+dialogs. Six hues are offered — teal (the default, and the colour of the wordmark), blue, purple, lime, orange, and
+yellow — and Left/Right or Enter cycles through them. The change applies to the screen that is open and is written to
+`accent=` in `settings.ini`, so it survives a restart.
+
+Only the accent moves. The background gradient, the card plates, the focus ring (a near-white line, because focus is a
+system state rather than a brand colour), and the destructive red of the delete confirmation stay fixed. Cards are no
+longer tinted per console: identity belongs to the box art and the small platform badge, which is why a library with
+five consoles in it still reads as one launcher.
+
 ### Core options
 
 Cores describe their own settings through the libretro environment callbacks, and MRG Player exposes them rather than hiding
@@ -186,6 +233,11 @@ them behind compiled-in defaults. **Core Options** in the pause menu lists every
 both the original `SET_VARIABLES` form and the categorised `SET_CORE_OPTIONS_V2` form — with the core's own labels and
 values. Move with Up/Down, change the focused value with Left/Right or Enter, and press **R** (or the left shoulder button)
 to restore the declared defaults.
+
+The panel is translated: the option names and the common value words of the cores the installer offers — Mesen, mGBA,
+Snes9x, Gambatte, and Genesis Plus GX — are shown in Chinese when the launcher is in Chinese, while numbers, palette
+names, and hardware jargon stay as the core wrote them. Anything a core adds later that the translation table has not
+seen yet falls back to the core's own English label, so a core update never leaves a blank row.
 
 Changes reach the core immediately through `GET_VARIABLE` and `GET_VARIABLE_UPDATE`, so an option such as a video filter
 or an overclock can be judged on the running picture while the panel is open. Selections are written to
@@ -203,7 +255,9 @@ The same three options can be overridden for a single game from **Display** in t
 
 Open **Settings → Controller** to choose the UI prompt mode (**Auto**, **Keyboard & Mouse**, or **Controller**), controller label style (**Auto**, Xbox, Nintendo Switch, PlayStation, or Generic), and the active controller when multiple devices are connected. These choices change presentation only: keyboard, mouse, and controllers remain usable together. Auto mode follows the most recent meaningful input and ignores analog movement inside the configured dead zone; it falls back to keyboard prompts when no controller is available. The preferred controller is restored by SDL controller GUID after hotplug or restart.
 
-The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation.
+The knobs on this screen follow the console convention: the category rail and the page next to it are two halves of one screen, so enter the screen on the rail, move the focus between the rail and the page with Left and Right, and press Enter on a category to step into its page. Back/Escape returns to the rail and, from there, to the home screen. The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused. Every clickable control on the settings screen draws the same focus ring, which only adds a border around the row: the plate underneath keeps its colour as the selection moves. The cores page re-reads the installed cores whenever the settings screen is opened, so it lists them without a click.
+
+The shelf always shows seven and a half cards: seven whole ones and a half card at the right edge, so a library that continues past the screen says so on its own. Once there are more than seven games, the row slides as the selection moves so the highlighted card stays in view and the half card is always the next one; the row stops at the last game instead of wrapping, and settles into place when the screen is opened rather than sliding in from the first game.
 
 ## libretro cores
 
@@ -221,6 +275,8 @@ Every platform runs through a libretro core that must already be on the machine;
 
 A downloaded archive needs no manual step: the libretro buildbot publishes every core as a one-file zip, and a <core>.so.zip (`.dll.zip` on Windows, `.dylib.zip` on macOS) sitting where the library itself would be is unpacked on first use. The extracted copy lands in `cores-unpacked/` under the data root, which keeps read-only system directories untouched, and it is reused on later launches while its bytes still match the archive. An archive that is not a zip, or that does not contain the expected library, is reported on stderr and skipped, so a stray file never hides a working core.
 
+Cores open the ROM through narrow file APIs, so a game whose file name is not plain ASCII (`F1赛车.nes`) is copied once into `rom-cache/` under the data root and the core is handed that ASCII path instead. The copy is removed when the game stops, and the error message a failed load reports still names the file the player picked.
+
 Core search order: `$MRG_CORES_DIR` when it is set (and then only that directory), then `<data root>/cores/`. On Windows the directory next to `mrg-player.exe` is searched as well, so a portable copy keeps its cores beside the binary. On Linux and macOS the search continues with `/usr/lib/libretro/`, `/usr/lib64/libretro/`, `/usr/lib/x86_64-linux-gnu/libretro/`, `/usr/local/lib/libretro/`, and `~/.local/lib/libretro/`. Setting `MRG_CORES_DIR` restricts the search to one directory, which is also how the test suite injects its stub core.
 
 Everything above the runtime interface treats every platform the same: one pause menu and three instant-state slots with thumbnails, fast-forward, slow motion, single-frame stepping, screenshots, turbo, per-game display overrides, and mute. A state file is the core's own serialization wrapped in a versioned header that records the core's name, so a state written by a different core is refused instead of being loaded into an incompatible machine. Battery saves live in `saves/<platform>/` as `.srm` files, are written when the game closes, and are what the management menu's delete action removes. Cores that need system or BIOS files look for them in `system/` under the data root.
@@ -232,6 +288,7 @@ Everything above the runtime interface treats every platform the same: one pause
 - Battery saves are `.srm` files written by the core. The legacy NES Player directory migration copies old `.sav` files into `saves/nes/`, but a libretro NES core looks for `.srm`, so those files are preserved rather than imported.
 - Only software-rendered cores are supported, and a core that insists on an OpenGL or Vulkan context is refused.
 - Instant states are the core's own blob, so their cross-build compatibility is the core's, not ours; the launcher still rejects a state written by a different core.
+- Box art is looked up by exact No-Intro name. A title the thumbnails project does not ship needs a `covers/names.json` entry or a file dropped into `covers/` by hand.
 
 ## Tests
 
@@ -261,4 +318,4 @@ Every platform needs a core, including the NES, so the game-path smoke tests are
 
 The `--smoke-test-*` flags are a developer tool and are compiled out by default: a build without `-DMRG_ENABLE_SMOKE_TESTS=ON` reports them as unknown options, so a released binary carries neither the flags nor the frame-capture code they drive. CI configures with the option on.
 
-Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, and cores pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, and the core options panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, rewinding through remembered snapshots, showing the frame runahead produces, unpacking the same core from stored and deflated zips, removing an installed core, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.
+Smoke tests render 1600×900 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, cores, theme, and about pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, and the core options panel, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `core-option-text-test` checks the Chinese core-option labels and the fallbacks; `cover-names-test` checks the box-art mapping parser, the console repositories, and the URL candidates; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, rewinding through remembered snapshots, showing the frame runahead produces, unpacking the same core from stored and deflated zips, removing an installed core, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.

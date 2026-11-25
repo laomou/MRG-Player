@@ -1,8 +1,11 @@
 #include "ui/GameManagementScreen.hpp"
+#include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
+#include "ui/Theme.hpp"
 #include <SDL.h>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -61,6 +64,33 @@ int main(int argc, char **argv) {
         "General hit testing must stop after the last row");
   check(generalPageRowAt(300, 420) == -1,
         "The settings sidebar must not activate general rows");
+  // Every clickable control on the settings screen answers a click: the
+  // category rail and the rows of each page.
+  check(settingsCategoryAt(200, 389 + 2 * 52 + 10) == 2,
+        "The category rail maps a click to its entry");
+  check(settingsCategoryAt(200, 810) == -1,
+        "Below the rail activates nothing");
+  check(settingsCategoryAt(200, 770) == 7,
+        "The last entry on the rail is about");
+  check(settingsCategoryAt(500, 420) == -1,
+        "The settings body must not activate categories");
+  check(settingsRowAt(1, 1200, 728 + 10) == 3,
+        "Every display row is clickable, not just the first");
+  check(settingsRowAt(1, 1200, 728 + 100) == -1,
+        "The gap under the last display row activates nothing");
+  check(settingsRowAt(2, 1200, 516 + 10) == 1,
+        "Audio rows map to their own index");
+  check(settingsRowAt(4, 300, 420) == -1,
+        "Outside the row track activates nothing");
+  check(settingsRowAt(6, 1200, 420) == 0, "The theme row is clickable");
+  check(settingsRowAt(7, 1200, 420) == 0, "The about row is clickable");
+  const SDL_Color teal = accentColor(0);
+  check(teal.r == 86 && teal.g == 223 && teal.b == 202,
+        "The default accent is the logo teal");
+  check(accentColor(kAccentCount).b == teal.b,
+        "The accent index wraps instead of falling off the table");
+  check(settingCategoryCount() == 8,
+        "Theme sits between the cores page and about");
   check(powerCycleChoiceAt(600, 530) == 0,
         "Power-cycle dialog defaults to cancel");
   check(powerCycleChoiceAt(900, 530) == 1, "Power-cycle confirmation target");
@@ -73,6 +103,80 @@ int main(int argc, char **argv) {
         "Danger section separator must not activate");
   check(confirmationChoiceAt(500, 620) == 0, "Cancel target preserved");
   check(confirmationChoiceAt(950, 620) == 1, "Confirmation target preserved");
+
+  // The home screen lets the direction keys walk the pills, the shelf, and the
+  // footer, so every on-screen button has a hit target of its own.
+  check(homePillAt(1200, 80, launcher::i18n::Language::English, 4) == 0,
+        "Library pill target preserved");
+  check(homePillAt(1450, 80, launcher::i18n::Language::English, 4) == 1,
+        "Settings pill target preserved");
+  check(homePillAt(700, 80, launcher::i18n::Language::English, 4) == -1,
+        "Empty header space activates nothing");
+  // The pills are sized from their labels, so the longest translation still
+  // ends inside the right margin instead of running off the canvas.
+  check(homePillAt(1500, 80, launcher::i18n::Language::English, 4) == 1,
+        "The settings pill reaches the right margin");
+  check(homePillAt(1120, 80, launcher::i18n::Language::SimplifiedChinese,
+                   4) == 0,
+        "The Chinese pills keep their old geometry");
+  check(homeCardAt(500, 500, 7, 0.0f) >= 0,
+        "A card in the row is clickable");
+  check(homeCardAt(500, 200, 7, 0.0f) == -1,
+        "Above the row activates nothing");
+  // Seven and a half cards fit: the last one is always half visible so the
+  // shelf shows there is more to the right, and the row never scrolls past its
+  // last card.
+  check(homeRowTarget(0, 5) == 0.0f && homeRowTarget(6, 7) == 0.0f,
+        "A short library never scrolls");
+  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 2.5f,
+        "A long library stops with the last card flush against the right edge");
+  check(homeCardAt(1500, 500, 10, 2.0f) >= 7,
+        "Scrolling the row moves the cards under the pointer");
+  launcher::config::InputPrompts prompts;
+  check(homeActionAt(1500, 828, true, launcher::i18n::Language::English,
+                     prompts) == 1,
+        "The last footer entry is the rightmost button");
+  check(homeActionAt(700, 828, true, launcher::i18n::Language::English,
+                     prompts) == -1,
+        "Empty footer space activates nothing");
+  check(homeActionCount(true) == 2 && homeActionCount(false) == 0,
+        "Only a real game offers start and manage");
+  // The settings screen keeps the categories and the page apart: the rail is
+  // where the focus starts, the page is reached with right.
+  check(settingsCategoryAt(200, 389 + 2 * 52 + 10) == 2,
+        "The category rail hit target follows the list");
+  check(settingsRowAt(1, 1200, 410 + 2 * 106 + 20) == 2,
+        "The display page rows are all clickable");
+
+  // The widgets speak canvas units, but they are drawn in output pixels, so a
+  // window that is wider than 16:9 letterboxes the canvas and the pointer maps
+  // back through the same transform.
+  setOutputSize(2000, 900);
+  float canvasX = 0.0f;
+  float canvasY = 0.0f;
+  windowToCanvas(1000.0f, 450.0f, canvasX, canvasY);
+  check(std::abs(canvasX - 800.0f) < 0.01f &&
+            std::abs(canvasY - 450.0f) < 0.01f,
+        "Window coordinates map back onto the canvas");
+  float canvasLeft = 0.0f;
+  float canvasTop = 0.0f;
+  float canvasWidth = 0.0f;
+  float canvasHeight = 0.0f;
+  canvasRect(canvasLeft, canvasTop, canvasWidth, canvasHeight);
+  check(std::abs(canvasLeft - 200.0f) < 0.5f &&
+            std::abs(canvasWidth - 1600.0f) < 0.5f &&
+            std::abs(canvasHeight - 900.0f) < 0.5f,
+        "A 2000x900 window letterboxes the canvas on both sides");
+  // A scaled display reports window points that are smaller than the pixels the
+  // canvas is drawn in, so the pointer is scaled up before the transform runs.
+  setOutputSize(3200, 1800);
+  setWindowSize(1600, 900);
+  windowToCanvas(800.0f, 450.0f, canvasX, canvasY);
+  check(std::abs(canvasX - 800.0f) < 0.01f &&
+            std::abs(canvasY - 450.0f) < 0.01f,
+        "A 2x display still maps the window centre onto the canvas centre");
+  setWindowSize(0, 0);
+  setOutputSize(1600, 900);
 
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);

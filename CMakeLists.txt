@@ -94,6 +94,7 @@ add_library(runtime-libretro STATIC
   src/runtime/libretro/CoreInstaller.cpp
   src/runtime/libretro/LibretroCore.cpp
   src/runtime/libretro/LibretroRuntime.cpp
+  src/util/Download.cpp
   src/util/Sha256.cpp
 )
 target_include_directories(runtime-libretro PUBLIC src third_party/libretro)
@@ -111,19 +112,23 @@ add_executable(mrg-player
   src/app/Application.cpp
   src/app/LaunchOptions.cpp
   src/config/Settings.cpp
+  src/i18n/CoreOptionText.cpp
   src/i18n/Localization.cpp
+  src/library/CoverNames.cpp
   src/library/GameLibrary.cpp
   src/runtime/RuntimeRegistry.cpp
   src/model/Game.cpp
+  src/ui/CoverCache.cpp
   src/ui/GameManagementScreen.cpp
   src/platform/RomFilePicker.cpp
   src/ui/HomeScreen.cpp
   src/ui/PauseMenuScreen.cpp
   src/ui/Primitives.cpp
   src/ui/SettingsScreen.cpp
+  src/util/Image.cpp
   src/util/PngWriter.cpp
 )
-target_include_directories(mrg-player PRIVATE src)
+target_include_directories(mrg-player PRIVATE src third_party/stb)
 target_compile_features(mrg-player PRIVATE cxx_std_17)
 target_compile_options(mrg-player PRIVATE ${MRG_WARNING_FLAGS})
 # The About page reports this string, so the release number lives in one place.
@@ -181,12 +186,31 @@ if(BUILD_TESTING)
   target_compile_options(sha256-test PRIVATE ${MRG_WARNING_FLAGS})
   add_test(NAME sha256 COMMAND sha256-test)
 
+  add_executable(core-option-text-test tests/CoreOptionTextTest.cpp
+    src/i18n/CoreOptionText.cpp)
+  target_include_directories(core-option-text-test PRIVATE src)
+  target_compile_features(core-option-text-test PRIVATE cxx_std_17)
+  target_compile_options(core-option-text-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME core-option-text COMMAND core-option-text-test)
+
   add_executable(input-bindings-test tests/InputBindingsTest.cpp)
   target_include_directories(input-bindings-test PRIVATE src)
   target_compile_features(input-bindings-test PRIVATE cxx_std_17)
   target_compile_options(input-bindings-test PRIVATE ${MRG_WARNING_FLAGS})
   target_link_libraries(input-bindings-test PRIVATE mrg-platform)
   add_test(NAME input-bindings COMMAND input-bindings-test)
+
+  # Cover names and box art URLs are pure string work, so they can be checked
+  # without the network or a renderer.
+  add_executable(cover-names-test
+    tests/CoverNamesTest.cpp
+    src/library/CoverNames.cpp
+  )
+  target_include_directories(cover-names-test PRIVATE src)
+  target_compile_features(cover-names-test PRIVATE cxx_std_17)
+  target_compile_options(cover-names-test PRIVATE ${MRG_WARNING_FLAGS})
+  target_link_libraries(cover-names-test PRIVATE mrg-platform)
+  add_test(NAME cover-names COMMAND cover-names-test)
 
   # A stub libretro core stands in for a real one so the runtime can be tested
   # without shipping or downloading an emulator library. Multi-config
@@ -277,10 +301,13 @@ if(BUILD_TESTING)
   add_executable(ui-rendering-test
     tests/UiRenderingTest.cpp
     src/ui/Primitives.cpp
+    src/ui/HomeScreen.cpp
     src/ui/PauseMenuScreen.cpp
     src/ui/GameManagementScreen.cpp
     src/ui/SettingsScreen.cpp
     src/model/Game.cpp
+    src/library/GameLibrary.cpp
+    src/i18n/CoreOptionText.cpp
     src/i18n/Localization.cpp
   )
   target_include_directories(ui-rendering-test PRIVATE src)

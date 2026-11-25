@@ -29,7 +29,7 @@ void drawPauseMenu(SDL_Renderer *renderer, std::string_view gameTitle,
                    const std::array<StateSlotView, kStateSlotCount> &slots,
                    std::string_view feedback, Uint64 feedbackUntil,
                    i18n::Language language,
-                   const config::InputPrompts &prompts);
+                   const config::InputPrompts &prompts, SDL_Color accent);
 int pauseActionAt(float x, float y);
 int pauseSlotAt(float x, float y);
 
@@ -46,7 +46,7 @@ struct PauseVideoState {
 
 void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                          const PauseVideoState &video, i18n::Language language,
-                         const config::InputPrompts &prompts);
+                         const config::InputPrompts &prompts, SDL_Color accent);
 int pauseVideoRowAt(float x, float y);
 
 // The option panel lists the settings the running core declares. Six fit on
@@ -57,14 +57,16 @@ inline constexpr int kPauseCoreOptionRows = 6;
 void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
                                const runtime::CoreOptionList &options,
                                i18n::Language language,
-                               const config::InputPrompts &prompts);
+                               const config::InputPrompts &prompts,
+                               SDL_Color accent);
 int pauseCoreOptionAt(float x, float y, int scroll);
 
 // Power cycling wipes unsaved progress, so it asks first. Choice 0 cancels
 // (the default) and choice 1 confirms.
 void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
                            i18n::Language language,
-                           const config::InputPrompts &prompts);
+                           const config::InputPrompts &prompts,
+                           SDL_Color accent);
 int powerCycleChoiceAt(float x, float y);
 
 } // namespace launcher::ui

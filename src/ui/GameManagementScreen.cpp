@@ -179,6 +179,8 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
                  tr(labels[choice], language), 2,
                  selected ? SDL_Color{23, 23, 38, 255}
                           : SDL_Color{255, 170, 166, 255});
+    if (selected)
+      drawFocusRing(renderer, x, 595.0f, 412.0f, 66.0f, 18.0f, 1.0f);
   }
   centeredText(renderer, 800, 696, tr(TextId::SafeDefaultHint, language), 1,
                {122, 135, 159, 255});

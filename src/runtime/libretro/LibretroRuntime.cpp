@@ -22,6 +22,7 @@
 #include "runtime/VideoViewport.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #include "util/ImageFile.hpp"
+#include "util/Sha256.hpp"
 #include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
@@ -58,6 +59,41 @@ bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::si
   bytes.resize(static_cast<std::size_t>(size));
   input.seekg(0);
   return static_cast<bool>(input.read(reinterpret_cast<char *>(bytes.data()), size));
+}
+
+// Cores open the ROM themselves through narrow file APIs, so a UTF-8 name such
+// as "F1赛车.nes" is read back in the ANSI code page on Windows and the open
+// fails. Hand every such game a copy with an ASCII name inside our own data
+// directory: it costs one file per launch and keeps the rule the same on every
+// platform.
+bool coreNeedsStagedRomPath(const std::string &path) {
+  return std::any_of(path.begin(), path.end(),
+                     [](unsigned char ch) { return ch >= 0x80; });
+}
+
+bool stageRomFile(const std::vector<std::uint8_t> &bytes,
+                  const std::string &sourcePath, std::string &stagedPath,
+                  std::string &error) {
+  const std::string hash = util::sha256Hex(bytes.data(), bytes.size());
+  const std::string extension =
+      paths::toUtf8(paths::fromUtf8(sourcePath).extension());
+  const fs::path cache = paths::fromUtf8(
+      config::dataSubdirectory("rom-cache", ""));
+  const fs::path target = cache / (hash.substr(0, 16) + extension);
+  std::ofstream output(target, std::ios::binary | std::ios::trunc);
+  if (!output) {
+    error = "Cannot stage the game file for the core: " + paths::toUtf8(target);
+    return false;
+  }
+  output.write(reinterpret_cast<const char *>(bytes.data()),
+               static_cast<std::streamsize>(bytes.size()));
+  output.close();
+  if (!output) {
+    error = "Cannot stage the game file for the core: " + paths::toUtf8(target);
+    return false;
+  }
+  stagedPath = paths::toUtf8(target);
+  return true;
 }
 
 std::string trim(const std::string &value) {
@@ -145,8 +181,18 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   core_.attachEnvironment(std::move(host));
   core_.init();
   core_.attachCallbacks();
+  romLoadPath_ = game.filePath;
+  if (coreNeedsStagedRomPath(romLoadPath_) &&
+      !stageRomFile(romBytes_, game.filePath, stagedRomPath_, error_)) {
+    stop();
+    return false;
+  }
+  if (!stagedRomPath_.empty())
+    romLoadPath_ = stagedRomPath_;
   const bool fullPath = core_.needsFullPath();
-  if (!core_.loadGame(game.filePath.c_str(), fullPath ? nullptr : romBytes_.data(), fullPath ? 0 : romBytes_.size())) {
+  const void *data = fullPath ? nullptr : romBytes_.data();
+  const std::size_t size = fullPath ? 0 : romBytes_.size();
+  if (!core_.loadGame(romLoadPath_.c_str(), data, size)) {
     error_ = "The core cannot load " + game.filePath;
     stop();
     return false;
@@ -192,6 +238,12 @@ void LibretroRuntime::stop() {
     SDL_DestroyTexture(texture_);
   texture_ = nullptr;
   renderer_ = nullptr;
+  if (!stagedRomPath_.empty()) {
+    std::error_code ignored;
+    fs::remove(paths::fromUtf8(stagedRomPath_), ignored);
+  }
+  stagedRomPath_.clear();
+  romLoadPath_.clear();
   gameId_.clear();
   gamePath_.clear();
   savePath_.clear();
@@ -222,7 +274,9 @@ bool LibretroRuntime::rebuildGame() {
   core_.unloadGame();
   gameLoaded_ = false;
   const bool fullPath = core_.needsFullPath();
-  if (!core_.loadGame(gamePath_.c_str(), fullPath ? nullptr : romBytes_.data(), fullPath ? 0 : romBytes_.size()))
+  const std::string &path = romLoadPath_.empty() ? gamePath_ : romLoadPath_;
+  if (!core_.loadGame(path.c_str(), fullPath ? nullptr : romBytes_.data(),
+                      fullPath ? 0 : romBytes_.size()))
     return false;
   gameLoaded_ = true;
   core_.setControllerPortDevice(0, RETRO_DEVICE_JOYPAD);
@@ -901,17 +955,24 @@ void LibretroRuntime::render(SDL_Renderer *renderer) const {
   SDL_RenderClear(renderer);
   if (!active_ || texture_ == nullptr || width_ == 0 || height_ == 0)
     return;
-  int windowWidth = 0;
-  int windowHeight = 0;
-  SDL_RenderGetLogicalSize(renderer, &windowWidth, &windowHeight);
-  if (windowWidth <= 0 || windowHeight <= 0)
-    SDL_GetRendererOutputSize(renderer, &windowWidth, &windowHeight);
-  const Viewport view = computeViewport(static_cast<int>(width_), static_cast<int>(height_), windowWidth, windowHeight,
-                                        video_);
+  // The game is fitted inside the 1600x900 canvas, and the canvas is then
+  // letterboxed into the real framebuffer; drawing straight to the window would
+  // leave the interface and the picture on two different scales.
+  int outputWidth = 0;
+  int outputHeight = 0;
+  SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight);
+  const CanvasTransform frame = fitCanvas(outputWidth, outputHeight);
+  const Viewport view =
+      computeViewport(static_cast<int>(width_), static_cast<int>(height_),
+                      kCanvasWidth, kCanvasHeight, video_);
   if (view.sourceWidth <= 0 || view.sourceHeight <= 0)
     return;
-  const SDL_Rect source{view.sourceX, view.sourceY, view.sourceWidth, view.sourceHeight};
-  const SDL_FRect destination{view.x, view.y, view.width, view.height};
+  const SDL_Rect source{view.sourceX, view.sourceY, view.sourceWidth,
+                        view.sourceHeight};
+  const SDL_FRect destination{frame.offsetX + view.x * frame.scale,
+                              frame.offsetY + view.y * frame.scale,
+                              view.width * frame.scale,
+                              view.height * frame.scale};
   SDL_RenderCopyF(renderer, texture_, &source, &destination);
 }
 

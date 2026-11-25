@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <cmath>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -30,11 +31,13 @@
 #include "runtime/libretro/CoreInstaller.hpp"
 #include "util/ImageFile.hpp"
 #include "util/Utf8Path.hpp"
+#include "ui/CoverCache.hpp"
 #include "ui/GameManagementScreen.hpp"
 #include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
+#include "ui/Theme.hpp"
 #include "util/PngWriter.hpp"
 
 namespace launcher {
@@ -307,8 +310,6 @@ int Application::run(int argc, char **argv) {
     return 1;
   }
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-  SDL_RenderSetLogicalSize(renderer, ui::kLogicalWidth, ui::kLogicalHeight);
-  SDL_RenderSetIntegerScale(renderer, SDL_FALSE);
 
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
@@ -378,10 +379,27 @@ int Application::run(int argc, char **argv) {
     std::fprintf(stderr, "Game library unavailable: %s\n",
                  std::string(gameLibrary.error()).c_str());
   }
+  // Box art lives next to the saves, beside a names.json the player can edit.
+  ui::CoverCache coverCache;
+  coverCache.initialize(config::dataSubdirectory("covers", ""));
   bool running = true;
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;
   int selectedGame = settings.rememberSelection ? settings.selectedGame : 0;
+  ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
+  int homePill = 0;
+  int homeAction = 0;
+  float homeRow = 0.0f;
+  bool homeRowSettled = false;
+  // Which half of the settings screen the direction keys drive: the category
+  // rail or the page next to it. Entering the screen always starts on the rail.
+  bool settingsRailFocus = true;
+  // The focus ring fades in when the keys land on a different control; the key
+  // below changes whenever that happens, so holding a direction does not
+  // restart the fade and changing a value never replays it.
+  std::string focusKey;
+  float focusOpacity = 1.0f;
+  Uint64 focusSince = 0;
   selectedGame = std::clamp(selectedGame, 0,
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
@@ -393,7 +411,12 @@ int Application::run(int argc, char **argv) {
   bool smokeSettingsDisplay = false;
   bool smokeSettingsAudio = false;
   bool smokeSettingsController = false;
+  bool smokeHomePills = false;
+  bool smokeHomeActions = false;
+  bool smokeHomeQuit = false;
+  bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
+  bool smokeSettingsTheme = false;
   bool smokeSettingsAbout = false;
 #endif
   std::vector<ui::CoreRow> coreRows;
@@ -406,6 +429,10 @@ int Application::run(int argc, char **argv) {
   int coreRemovePendingRow = -1;
   Uint64 coreRemovePendingUntil = 0;
   bool bindingCapture = false;
+  // Closing the launcher asks first, the way a console does; 0 keeps the
+  // cancel button focused so a stray key never ends the session.
+  bool quitConfirm = false;
+  int quitChoice = 0;
   int managementAction = 0;
   int confirmationChoice = 0;
   ui::ManagementDialog managementDialog = ui::ManagementDialog::Menu;
@@ -661,6 +688,13 @@ int Application::run(int argc, char **argv) {
     settingRow = 0;
     if (settingCategory == 5)
       refreshCoreRows();
+  };
+  // Opening the settings screen always re-reads the installed cores, so the
+  // page is populated whether it was reached by key, pad, or mouse.
+  auto openSettings = [&] {
+    refreshCoreRows();
+    settingsRailFocus = true;
+    screen = Screen::Settings;
   };
   auto pauseSessionClock = [&] {
     if (sessionActiveSince != 0) {
@@ -1103,6 +1137,20 @@ int Application::run(int argc, char **argv) {
     screen = Screen::Management;
     return true;
   };
+  // Runs the footer entry the direction keys are pointing at, so the same
+  // action is reachable from the row and from its button.
+  auto activateHomeAction = [&] {
+    // An empty library has no footer entry, so there is nothing to run; quitting
+    // stays on the Escape key and the top-right control.
+    if (!selectedEntryAvailable())
+      return;
+    if (homeAction == 0)
+      (void)startSelected();
+    else if (homeAction == 1)
+      (void)openManagement(ui::ManagementDialog::Menu);
+    else
+      running = false;
+  };
   auto executeManagementAction = [&] {
     switch (managementAction) {
     case 0:
@@ -1282,6 +1330,10 @@ int Application::run(int argc, char **argv) {
   }
 #endif
 
+  // The launcher can start on either screen, so the installer page is filled
+  // once here as well.
+  refreshCoreRows();
+
   while (running) {
     if (coreInstallDone.exchange(false)) {
       if (coreInstallThread != nullptr) {
@@ -1313,7 +1365,12 @@ int Application::run(int argc, char **argv) {
       }
 
       if (event.type == SDL_QUIT) {
-        running = false;
+        if (quitConfirm) {
+          running = false;
+        } else {
+          quitConfirm = true;
+          quitChoice = 0;
+        }
         continue;
       }
       if (event.type == SDL_DROPFILE) {
@@ -1369,6 +1426,67 @@ int Application::run(int argc, char **argv) {
           event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
         if (activeRuntime)
           activeRuntime->releaseInput();
+      }
+
+      // The quit dialog is modal: it takes every event from every device, and
+      // nothing below this point sees one. Keeping it here, ahead of the game
+      // and pause branches, is what stops a click from answering the dialog and
+      // then acting on the screen behind it.
+      if (quitConfirm) {
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+          const SDL_Keycode key = event.key.keysym.sym;
+          if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP ||
+              key == SDLK_DOWN) {
+            quitChoice = 1 - quitChoice;
+          } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (key == SDLK_ESCAPE || key == SDLK_b) {
+            quitConfirm = false;
+          }
+        } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+            quitChoice = 1 - quitChoice;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            quitConfirm = false;
+          }
+        } else if (event.type == SDL_MOUSEMOTION ||
+                   event.type == SDL_MOUSEBUTTONDOWN) {
+          const bool motion = event.type == SDL_MOUSEMOTION;
+          float x = 0.0f;
+          float y = 0.0f;
+          ui::windowToCanvas(
+              motion ? static_cast<float>(event.motion.x)
+                     : static_cast<float>(event.button.x),
+              motion ? static_cast<float>(event.motion.y)
+                     : static_cast<float>(event.button.y),
+              x, y);
+          const int choice = ui::quitConfirmChoiceAt(x, y);
+          if (motion) {
+            if (choice >= 0)
+              quitChoice = choice;
+          } else if (event.button.button == SDL_BUTTON_RIGHT) {
+            quitConfirm = false;
+          } else if (event.button.button == SDL_BUTTON_LEFT && choice >= 0) {
+            quitChoice = choice;
+            if (choice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          }
+        }
+        continue;
       }
 
       if (screen == Screen::Settings && bindingCapture) {
@@ -1488,7 +1606,8 @@ int Application::run(int argc, char **argv) {
           const SDL_Keycode key = event.key.keysym.sym;
           if (key == SDLK_ESCAPE || key == SDLK_b)
             pauseConfirmingPower = false;
-          else if (key == SDLK_LEFT || key == SDLK_RIGHT)
+          else if (key == SDLK_LEFT || key == SDLK_RIGHT ||
+                   key == SDLK_UP || key == SDLK_DOWN)
             pausePowerChoice = 1 - pausePowerChoice;
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
             confirmPausePower();
@@ -1498,7 +1617,9 @@ int Application::run(int argc, char **argv) {
               button == SDL_CONTROLLER_BUTTON_BACK)
             pauseConfirmingPower = false;
           else if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
-                   button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+                   button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
+                   button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
+                   button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
             pausePowerChoice = 1 - pausePowerChoice;
           else if (button == SDL_CONTROLLER_BUTTON_A)
             confirmPausePower();
@@ -1506,8 +1627,7 @@ int Application::run(int argc, char **argv) {
                    event.button.button == SDL_BUTTON_LEFT) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           const int choice = ui::powerCycleChoiceAt(x, y);
           if (choice >= 0) {
             pausePowerChoice = choice;
@@ -1554,8 +1674,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             closePauseCoreOptionsPanel();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1607,8 +1726,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             closePauseVideoPanel();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1682,8 +1800,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_MOUSEBUTTONDOWN) {
           float x = 0.0f;
           float y = 0.0f;
-          SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y,
-                                    &x, &y);
+          ui::windowToCanvas(event.button.x, event.button.y, x, y);
           if (event.button.button == SDL_BUTTON_RIGHT) {
             resumeGame();
           } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -1711,60 +1828,105 @@ int Application::run(int argc, char **argv) {
           break;
         const SDL_Keycode key = event.key.keysym.sym;
         if (screen == Screen::Home) {
-          if (key == SDLK_LEFT)
+          if (homeFocus == ui::HomeFocus::Actions &&
+              (key == SDLK_LEFT || key == SDLK_RIGHT)) {
+            const int count = ui::homeActionCount(selectedEntryAvailable());
+            if (count > 0) {
+              const int step = key == SDLK_LEFT ? count - 1 : 1;
+              homeAction = (homeAction + step) % count;
+            }
+          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
+                     homeFocus == ui::HomeFocus::Actions) {
+            activateHomeAction();
+          } else if (homeFocus == ui::HomeFocus::Pills &&
+                     (key == SDLK_LEFT || key == SDLK_RIGHT)) {
+            homePill = 1 - homePill;
+          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
+                     homeFocus == ui::HomeFocus::Pills) {
+            if (homePill == 0)
+              chooseAndImportGame();
+            else
+              openSettings();
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Pills) {
+            homeFocus = ui::HomeFocus::Cards;
+          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
+            homeFocus = ui::HomeFocus::Pills;
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards &&
+                     ui::homeActionCount(selectedEntryAvailable()) > 0) {
+            homeFocus = ui::HomeFocus::Actions;
+            homeAction = 0;
+          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Actions) {
+            homeFocus = ui::HomeFocus::Cards;
+          } else if (key == SDLK_LEFT)
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
           else if (key == SDLK_RIGHT)
             ui::moveSelection(selectedGame, 1,
                               static_cast<int>(gameLibrary.slotCount()));
-          else if (key == SDLK_s || key == SDLK_TAB)
-            screen = Screen::Settings;
-          else if (key == SDLK_m || key == SDLK_x)
+          else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+            // The shoulders move the shelf by a screenful; the selection stops
+            // at either end instead of wrapping around.
+            const int count = static_cast<int>(gameLibrary.slotCount());
+            const int direction = key == SDLK_PAGEDOWN ? 1 : -1;
+            selectedGame =
+                std::clamp(selectedGame + direction * 7, 0, count - 1);
+          } else if (key == SDLK_m || key == SDLK_x)
             (void)openManagement(ui::ManagementDialog::Menu);
           else if (key == SDLK_DELETE)
             (void)openManagement(ui::ManagementDialog::ConfirmRemoveRom);
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
             (void)startSelected();
-          else if (key == SDLK_ESCAPE)
-            running = false;
+          else if (key == SDLK_ESCAPE) {
+            quitConfirm = true;
+            quitChoice = 0;
+          }
         } else if (screen == Screen::Settings) {
+          const int rowCount = ui::settingRowCount(settingCategory);
           if (key == SDLK_ESCAPE || key == SDLK_b) {
             bindingCapture = false;
-            screen = Screen::Home;
-          } else if (key == SDLK_r && settingCategory == 3) {
+            if (settingsRailFocus)
+              screen = Screen::Home;
+            else
+              settingsRailFocus = true;
+          } else if (key == SDLK_r && settingCategory == 3 &&
+                     !settingsRailFocus) {
             settings.input = config::defaultInputBindings();
             if (activeRuntime)
               activeRuntime->setInputBindings(settings.input);
             saveSettings(settings);
-          } else if (key == SDLK_r && settingCategory == 5) {
+          } else if (key == SDLK_r && settingCategory == 5 &&
+                     !settingsRailFocus) {
             refreshCoreRows();
-          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
-                     settingCategory == 5) {
-            startCoreInstall(settingRow);
-          } else if (key == SDLK_DELETE && settingCategory == 5) {
+          } else if (key == SDLK_DELETE && settingCategory == 5 &&
+                     !settingsRailFocus) {
             removeCoreRow(settingRow);
-          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
-                     settingCategory == 3 && settingRow >= 4 &&
-                     settingRow < 4 + static_cast<int>(
-                                        config::kInputActionCount)) {
-            bindingCapture = true;
-          } else if (key == SDLK_TAB)
-            changeCategory((SDL_GetModState() & KMOD_SHIFT) != 0 ? -1 : 1);
-          else if (key == SDLK_PAGEUP || key == SDLK_q)
-            changeCategory(-1);
-          else if (key == SDLK_PAGEDOWN || key == SDLK_e)
-            changeCategory(1);
-          else if (key == SDLK_UP)
-            settingRow =
-                (settingRow - 1 + ui::settingRowCount(settingCategory)) %
-                ui::settingRowCount(settingCategory);
-          else if (key == SDLK_DOWN)
-            settingRow =
-                (settingRow + 1) % ui::settingRowCount(settingCategory);
-          else if (key == SDLK_LEFT)
-            applySetting(-1);
-          else if (key == SDLK_RIGHT || key == SDLK_RETURN || key == SDLK_SPACE)
-            applySetting(1);
+          } else if (key == SDLK_LEFT) {
+            settingsRailFocus = true;
+          } else if (key == SDLK_RIGHT) {
+            settingsRailFocus = false;
+          } else if (key == SDLK_UP) {
+            if (settingsRailFocus)
+              changeCategory(-1);
+            else
+              settingRow = (settingRow - 1 + rowCount) % rowCount;
+          } else if (key == SDLK_DOWN) {
+            if (settingsRailFocus)
+              changeCategory(1);
+            else
+              settingRow = (settingRow + 1) % rowCount;
+          } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
+            if (settingsRailFocus) {
+              settingsRailFocus = false;
+            } else if (settingCategory == 5) {
+              startCoreInstall(settingRow);
+            } else if (settingCategory == 3 && settingRow >= 4 &&
+                       settingRow <
+                           4 + static_cast<int>(config::kInputActionCount)) {
+              bindingCapture = true;
+            } else {
+              applySetting(1);
+            }
+          }
         } else if (managementDialog == ui::ManagementDialog::Menu) {
           if (key == SDLK_ESCAPE || key == SDLK_b)
             screen = Screen::Home;
@@ -1799,20 +1961,35 @@ int Application::run(int argc, char **argv) {
       case SDL_MOUSEBUTTONDOWN: {
         float x = 0.0f;
         float y = 0.0f;
-        SDL_RenderWindowToLogical(renderer, event.button.x, event.button.y, &x,
-                                  &y);
+        ui::windowToCanvas(event.button.x, event.button.y, x, y);
         if (screen == Screen::Home) {
-          const bool selectedCard =
-              x >= 640 && x <= 960 && y >= 285 && y <= 695;
-          if (event.button.button == SDL_BUTTON_RIGHT && selectedCard) {
+          const int clickedCard = ui::homeCardAt(
+              x, y, static_cast<int>(gameLibrary.slotCount()), homeRow);
+          const int clickedAction =
+              ui::homeActionAt(x, y, selectedEntryAvailable(),
+                               currentLanguage(), currentPrompts());
+          if (event.button.button == SDL_BUTTON_RIGHT && clickedCard >= 0) {
+            selectedGame = clickedCard;
             (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.button.button == SDL_BUTTON_LEFT) {
-            if (x >= 1110 && x <= 1356 && y >= 52 && y <= 110)
+            const int clickedPill =
+                ui::homePillAt(x, y, currentLanguage(),
+                               gameLibrary.entries().size());
+            if (clickedPill == 0) {
               chooseAndImportGame();
-            else if (x >= 1372 && x <= 1528 && y >= 52 && y <= 110)
-              screen = Screen::Settings;
-            else if (selectedCard)
-              (void)startSelected();
+            } else if (clickedPill == 1) {
+              openSettings();
+            } else if (clickedAction >= 0) {
+              homeFocus = ui::HomeFocus::Actions;
+              homeAction = clickedAction;
+              activateHomeAction();
+            } else if (clickedCard >= 0) {
+              homeFocus = ui::HomeFocus::Cards;
+              const bool alreadySelected = clickedCard == selectedGame;
+              selectedGame = clickedCard;
+              if (alreadySelected)
+                (void)startSelected();
+            }
           }
         } else if (screen == Screen::Management) {
           if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -1837,45 +2014,28 @@ int Application::run(int argc, char **argv) {
               confirmManagementAction();
             }
           }
-        } else if (x >= 72 && x <= 402 && y >= 389 && y < 753) {
-          const int clickedCategory = static_cast<int>((y - 389) / 52);
-          if (clickedCategory >= 0 &&
-              clickedCategory < ui::settingCategoryCount()) {
-            settingCategory = clickedCategory;
-            settingRow = 0;
-          }
-        } else if (x >= 466 && x <= 1476) {
-          bool clickedOption = false;
-          if (settingCategory == 0) {
-            const int clickedRow = ui::generalPageRowAt(static_cast<int>(x),
-                                                        static_cast<int>(y));
-            if (clickedRow >= 0) {
-              settingRow = clickedRow;
-              clickedOption = true;
-            }
-          } else if (settingCategory == 3) {
-            const int clickedRow = ui::controllerPageRowAt(x, y);
-            if (clickedRow >= 0) {
-              settingRow = clickedRow;
-              if (settingRow >= 4 &&
-                  settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
-                bindingCapture = true;
-              } else {
-                clickedOption = true;
-              }
-            }
-          } else if (settingCategory == 5) {
-            const int clickedRow = (y - 408) / 56;
-            if (clickedRow >= 0 &&
-                clickedRow < static_cast<int>(std::size(kInstallerPlatforms))) {
-              settingRow = clickedRow;
+        } else if (ui::settingsCategoryAt(x, y) >= 0) {
+          const int clickedCategory = ui::settingsCategoryAt(x, y);
+          settingCategory = clickedCategory;
+          settingRow = 0;
+          settingsRailFocus = false;
+          if (clickedCategory == 5)
+            refreshCoreRows();
+        } else {
+          const int clickedRow =
+              ui::settingsRowAt(settingCategory, x, y);
+          if (clickedRow >= 0) {
+            settingRow = clickedRow;
+            settingsRailFocus = false;
+            if (settingCategory == 3 && settingRow >= 4 &&
+                settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
+              bindingCapture = true;
+            } else if (settingCategory == 5) {
               startCoreInstall(clickedRow);
+            } else {
+              applySetting(1);
             }
-          } else {
-            clickedOption = y >= 410 && y <= 502;
           }
-          if (clickedOption)
-            applySetting(1);
         }
         break;
       }
@@ -1888,9 +2048,13 @@ int Application::run(int argc, char **argv) {
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
         } else if (screen == Screen::Settings && event.wheel.y != 0) {
-          settingRow = (settingRow + (event.wheel.y < 0 ? 1 : -1) +
-                        ui::settingRowCount(settingCategory)) %
-                       ui::settingRowCount(settingCategory);
+          const int direction = event.wheel.y < 0 ? 1 : -1;
+          if (settingsRailFocus) {
+            changeCategory(direction);
+          } else {
+            const int count = ui::settingRowCount(settingCategory);
+            settingRow = (settingRow + direction + count) % count;
+          }
         } else if (screen == Screen::Management && event.wheel.y != 0 &&
                    managementDialog == ui::ManagementDialog::Menu) {
           const int direction = event.wheel.y < 0 ? 1 : -1;
@@ -1901,54 +2065,111 @@ int Application::run(int argc, char **argv) {
         break;
       case SDL_CONTROLLERBUTTONDOWN:
         if (screen == Screen::Home) {
-          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+          const bool left =
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT;
+          const bool right =
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
+          if ((left || right) && homeFocus == ui::HomeFocus::Pills) {
+            homePill = 1 - homePill;
+          } else if ((left || right) && homeFocus == ui::HomeFocus::Actions) {
+            const int count = ui::homeActionCount(selectedEntryAvailable());
+            if (count > 0) {
+              const int step = left ? count - 1 : 1;
+              homeAction = (homeAction + step) % count;
+            }
+          } else if (left) {
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+          } else if (right) {
             ui::moveSelection(selectedGame, 1,
                               static_cast<int>(gameLibrary.slotCount()));
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A)
-            (void)startSelected();
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_X)
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+            if (homeFocus == ui::HomeFocus::Cards)
+              homeFocus = ui::HomeFocus::Pills;
+            else if (homeFocus == ui::HomeFocus::Actions)
+              homeFocus = ui::HomeFocus::Cards;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+            if (homeFocus == ui::HomeFocus::Pills) {
+              homeFocus = ui::HomeFocus::Cards;
+            } else if (homeFocus == ui::HomeFocus::Cards &&
+                       ui::homeActionCount(selectedEntryAvailable()) > 0) {
+              homeFocus = ui::HomeFocus::Actions;
+              homeAction = 0;
+            }
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (homeFocus == ui::HomeFocus::Pills) {
+              if (homePill == 0)
+                chooseAndImportGame();
+              else
+                openSettings();
+            } else if (homeFocus == ui::HomeFocus::Actions) {
+              activateHomeAction();
+            } else {
+              (void)startSelected();
+            }
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_X) {
             (void)openManagement(ui::ManagementDialog::Menu);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y ||
-                   event.cbutton.button == SDL_CONTROLLER_BUTTON_START)
-            screen = Screen::Settings;
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
-                   event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
-            running = false;
-        } else if (screen == Screen::Settings) {
-          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP)
-            settingRow =
-                (settingRow - 1 + ui::settingRowCount(settingCategory)) %
-                ui::settingRowCount(settingCategory);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
-            settingRow =
-                (settingRow + 1) % ui::settingRowCount(settingCategory);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT)
-            applySetting(-1);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
-            applySetting(1);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
-            if (settingCategory == 3 && settingRow >= 4 &&
-                settingRow <
-                    4 + static_cast<int>(config::kInputActionCount))
-              bindingCapture = true;
-            else if (settingCategory == 5)
-              startCoreInstall(settingRow);
-            else
-              applySetting(1);
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
-                     settingCategory == 5) {
-            removeCoreRow(settingRow);
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            quitConfirm = true;
+            quitChoice = 0;
           } else if (event.cbutton.button ==
-                     SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
-            changeCategory(-1);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)
-            changeCategory(1);
-          else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
-                   event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK)
-            screen = Screen::Home;
+                         SDL_CONTROLLER_BUTTON_LEFTSHOULDER ||
+                     event.cbutton.button ==
+                         SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
+            const int count = static_cast<int>(gameLibrary.slotCount());
+            const int direction =
+                event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER
+                    ? 1
+                    : -1;
+            selectedGame =
+                std::clamp(selectedGame + direction * 7, 0, count - 1);
+          }
+        } else if (screen == Screen::Settings) {
+          const int rowCount = ui::settingRowCount(settingCategory);
+          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            bindingCapture = false;
+            if (settingsRailFocus)
+              screen = Screen::Home;
+            else
+              settingsRailFocus = true;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
+            settingsRailFocus = true;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
+            settingsRailFocus = false;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
+            if (settingsRailFocus)
+              changeCategory(-1);
+            else
+              settingRow = (settingRow - 1 + rowCount) % rowCount;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+            if (settingsRailFocus)
+              changeCategory(1);
+            else
+              settingRow = (settingRow + 1) % rowCount;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (settingsRailFocus) {
+              settingsRailFocus = false;
+            } else if (settingCategory == 5) {
+              startCoreInstall(settingRow);
+            } else if (settingCategory == 3 && settingRow >= 4 &&
+                       settingRow <
+                           4 + static_cast<int>(config::kInputActionCount)) {
+              bindingCapture = true;
+            } else {
+              applySetting(1);
+            }
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
+                     settingCategory == 5 && !settingsRailFocus) {
+            removeCoreRow(settingRow);
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
+                     settingCategory == 3 && !settingsRailFocus) {
+            settings.input = config::defaultInputBindings();
+            if (activeRuntime)
+              activeRuntime->setInputBindings(settings.input);
+            saveSettings(settings);
+          }
         } else if (managementDialog == ui::ManagementDialog::Menu) {
           if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP)
             managementAction =
@@ -2000,9 +2221,12 @@ int Application::run(int argc, char **argv) {
           } else if (direction != 0 &&
                      event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
             if (screen == Screen::Settings) {
-              settingRow = (settingRow + direction +
-                            ui::settingRowCount(settingCategory)) %
-                           ui::settingRowCount(settingCategory);
+              if (settingsRailFocus) {
+                changeCategory(direction);
+              } else {
+                const int count = ui::settingRowCount(settingCategory);
+                settingRow = (settingRow + direction + count) % count;
+              }
             } else if (screen == Screen::Management &&
                        managementDialog == ui::ManagementDialog::Menu) {
               managementAction =
@@ -2021,6 +2245,75 @@ int Application::run(int argc, char **argv) {
     const float time =
         static_cast<float>((SDL_GetPerformanceCounter() - start) / frequency);
     const config::InputPrompts prompts = currentPrompts();
+    // One ring, one control: the key names whichever control currently owns
+    // the focus, and moving to a different one restarts the fade.
+    char focusBuffer[80];
+    std::snprintf(focusBuffer, sizeof(focusBuffer),
+                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+                  static_cast<int>(screen), static_cast<int>(homeFocus),
+                  homePill, homeAction, selectedGame, settingCategory,
+                  settingRow, settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
+                  pauseAction, pauseCoreOptionCursor);
+    if (focusKey != focusBuffer) {
+      if (focusKey.empty()) {
+        focusOpacity = 1.0f;
+      } else {
+        focusOpacity = 0.0f;
+        focusSince = SDL_GetTicks64();
+      }
+      focusKey = focusBuffer;
+    }
+    if (focusOpacity < 1.0f) {
+      const float elapsed =
+          static_cast<float>(SDL_GetTicks64() - focusSince) / 120.0f;
+      const float progress = std::min(1.0f, elapsed);
+      focusOpacity = 1.0f - (1.0f - progress) * (1.0f - progress);
+    }
+    if (screen == Screen::Home) {
+      // The shelf eases towards the column that keeps the selection on screen,
+      // so a card sliding past never jumps.
+      const float rowTarget = ui::homeRowTarget(
+          selectedGame, static_cast<int>(gameLibrary.slotCount()));
+      // Coming back from another screen should show the shelf where it belongs
+      // instead of sliding in from the start.
+      if (!homeRowSettled) {
+        homeRow = rowTarget;
+        homeRowSettled = true;
+      }
+      homeRow += (rowTarget - homeRow) * 0.35f;
+      if (std::abs(rowTarget - homeRow) < 0.002f)
+        homeRow = rowTarget;
+    } else {
+      homeRowSettled = false;
+    }
+    // The highlighted game is the one being looked at, so its art jumps the
+    // queue; the shelf's left-to-right order fills in after it.
+    if (screen == Screen::Home || selectedEntryAvailable()) {
+      const auto &shelf = gameLibrary.entries();
+      if (selectedGame < static_cast<int>(shelf.size())) {
+        const auto index = static_cast<std::size_t>(selectedGame);
+        (void)coverCache.cover(renderer, shelf[index]);
+      }
+    }
+    // Downloads and decodes finish here, never inside a draw call.
+    coverCache.poll(renderer);
+    // The interface draws itself in output pixels, so every frame starts by
+    // telling the UI how big the window's framebuffer is.
+    int outputWidth = 0;
+    int outputHeight = 0;
+    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0)
+      ui::setOutputSize(outputWidth, outputHeight);
+    // Mouse positions arrive in window points, which are not the pixels above
+    // when the display scales the window, so the pointer mapping gets both.
+    int windowWidth = 0;
+    int windowHeight = 0;
+    SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+    ui::setWindowSize(windowWidth, windowHeight);
+    // Nothing paints the bars around the canvas, so clear the whole
+    // framebuffer; otherwise a window that is not exactly 16:9 shows whatever
+    // the framebuffer held.
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
     if (screen == Screen::Game) {
       if (activeRuntime) {
         // Holding the rewind key stops the clock and walks the snapshots
@@ -2034,41 +2327,49 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Pause) {
       if (activeRuntime) {
         activeRuntime->render(renderer);
+        const SDL_Color accent = ui::accentColor(settings.accent);
         if (pauseCoreOptionsPanel) {
           ui::drawPauseCoreOptionsPanel(renderer, pauseCoreOptionCursor,
                                         pauseCoreOptionScroll,
                                         activeRuntime->coreOptions(),
-                                        currentLanguage(), prompts);
+                                        currentLanguage(), prompts, accent);
         } else if (pauseVideoPanel) {
           ui::drawPauseVideoPanel(renderer, pauseVideoRow, pauseVideo,
-                                  currentLanguage(), prompts);
+                                  currentLanguage(), prompts, accent);
         } else {
           ui::drawPauseMenu(renderer, activeGameTitle, pauseAction, stateSlot,
                             stateSlots, pauseFeedback, pauseFeedbackUntil,
-                            currentLanguage(), prompts);
+                            currentLanguage(), prompts, accent);
         }
         if (pauseConfirmingPower)
           ui::drawPowerCycleConfirm(renderer, pausePowerChoice,
-                                    currentLanguage(), prompts);
+                                    currentLanguage(), prompts, accent);
       }
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts);
+                   prompts, homeFocus, homePill, homeAction, homeRow,
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
-      ui::drawSettings(renderer, settings, settingCategory, settingRow,
-                       selectedGame % static_cast<int>(kGameCount), time,
+      ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
-                       resolvedControllerStyle(), coreRows, prompts);
+                       resolvedControllerStyle(), coreRows, prompts,
+                       settingsRailFocus, focusOpacity);
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts);
+                   prompts, homeFocus, homePill, homeAction, homeRow,
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],
           managementAction, managementDialog, confirmationChoice,
           saveDataPresent, currentLanguage(), prompts);
+    }
+
+    if (quitConfirm) {
+      ui::drawQuitConfirm(renderer, quitChoice, currentLanguage(), prompts,
+                          ui::accentColor(settings.accent));
     }
 
     if ((screen == Screen::Game || screen == Screen::Pause ||
@@ -2088,8 +2389,34 @@ int Application::run(int argc, char **argv) {
       captureFrame(renderer, "emulator-screenshot.bmp");
       smokeRomCaptured = true;
     }
-    else if (options.smokeHome && screen == Screen::Home)
-      captureFrame(renderer, "launcher-screenshot.bmp");
+    else if (options.smokeHome && screen == Screen::Home) {
+      // Two shots: the row on its own, then the footer with a focused button,
+      // so the smoke test covers the focus ring as well as the layout.
+      // Each shot waits for the focus fade to finish, otherwise the ring in the
+      // capture would be caught half transparent.
+      if (focusOpacity < 1.0f) {
+        // still fading
+      } else if (!smokeHomePills) {
+        captureFrame(renderer, "launcher-screenshot.bmp");
+        smokeHomePills = true;
+        homeFocus = ui::HomeFocus::Pills;
+        homePill = 1;
+      } else if (!smokeHomeActions) {
+        captureFrame(renderer, "home-pills-screenshot.bmp");
+        smokeHomeActions = true;
+        homeFocus = ui::HomeFocus::Actions;
+        homeAction = 1;
+      } else if (!smokeHomeQuit) {
+        captureFrame(renderer, "home-actions-screenshot.bmp");
+        smokeHomeQuit = true;
+        quitConfirm = true;
+        quitChoice = 0;
+      } else {
+        captureFrame(renderer, "home-quit-screenshot.bmp");
+        quitConfirm = false;
+        smokeHomeDone = true;
+      }
+    }
     else if (options.smokeSettings && screen == Screen::Settings) {
       // Wait for the entry animation to settle before capturing, then switch
       // to the display page so the video options are covered too.
@@ -2125,8 +2452,13 @@ int Application::run(int argc, char **argv) {
         smokeSettingsCores = true;
         settingCategory = 6;
         settingRow = 0;
-      } else if (smokeSettingsCores && !smokeSettingsAbout &&
-                 elapsed >= 3600) {
+      } else if (smokeSettingsCores && !smokeSettingsTheme && elapsed >= 3400) {
+        captureFrame(renderer, "settings-theme-screenshot.bmp");
+        smokeSettingsTheme = true;
+        settingCategory = 7;
+        settingRow = 0;
+      } else if (smokeSettingsTheme && !smokeSettingsAbout &&
+                 elapsed >= 3800) {
         captureFrame(renderer, "settings-about-screenshot.bmp");
         smokeSettingsAbout = true;
       }
@@ -2165,6 +2497,7 @@ int Application::run(int argc, char **argv) {
 #if defined(MRG_ENABLE_SMOKE_TESTS)
     if (options.smokeTest() &&
         (!options.smokeSettings || smokeSettingsAbout) &&
+        (!options.smokeHome || smokeHomeDone) &&
         (!options.smokePause ||
          smokePauseCoreOptions || screen != Screen::Pause) &&
         (!options.smokeRom || smokeRomCaptured))
@@ -2192,9 +2525,11 @@ int Application::run(int argc, char **argv) {
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
   clearStateSlots();
+  // Cached textures belong to this renderer, so drop them first.
+  coverCache.shutdown();
+  ui::shutdownTextRenderer();
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
-  ui::shutdownTextRenderer();
   SDL_Quit();
   return startupRomFailed ? 1 : 0;
 }

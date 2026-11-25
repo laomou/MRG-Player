@@ -105,6 +105,8 @@ constexpr Entry kText[]{
     {"CANCEL", "取消"},
     {"RETURN TO THE GAME LIBRARY", "返回游戏库"},
     {"CHOOSE AN ACTION FOR THIS GAME", "选择要对当前游戏执行的操作"},
+    {"QUIT MRG PLAYER?", "退出 MRG PLAYER？"},
+    {"THE GAME LIBRARY AND YOUR SAVES STAY AS THEY ARE", "游戏库和存档都会保留"},
     {"MANAGED ROM", "托管 ROM"},
     {"SAVE DATA", "保存数据"},
     {"AVAILABLE", "存在"},
@@ -200,7 +202,17 @@ constexpr Entry kText[]{
     {"DOWNLOADS COME FROM THE LIBRETRO NIGHTLY BUILDS", "下载来自 libretro 的每夜构建"},
     {"CORE OPTIONS", "核心选项"},
     {"THIS CORE DECLARES NO OPTIONS", "该核心没有提供选项"},
-    {"RESTORE DEFAULTS", "恢复默认"}};
+    {"RESTORE DEFAULTS", "恢复默认"},
+    {"THEME", "主题"},
+    {"APPEARANCE, NOT GAMEPLAY", "界面外观，不影响游戏"},
+    {"ACCENT COLOUR", "强调色"},
+    {"APPLIES TO THE WHOLE LAUNCHER", "应用到整个启动器"},
+    {"TEAL", "青绿"},
+    {"BLUE", "蓝"},
+    {"PURPLE", "紫"},
+    {"LIME", "柠檬绿"},
+    {"ORANGE", "橙"},
+    {"YELLOW", "黄"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 
