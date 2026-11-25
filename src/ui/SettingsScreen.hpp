@@ -35,6 +35,9 @@ int generalPageRowAt(int x, int y);
 // screen, so both answer a pointer with the index it lands on, or -1.
 int settingsCategoryAt(float x, float y);
 int settingsRowAt(int category, float x, float y);
+// The core page also carries a refresh button on its heading line, which is a
+// button rather than a row, so it answers a hit test of its own.
+bool coreRefreshAt(float x, float y);
 void changeSetting(AppSettings &settings, int category, int row, int direction);
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   int category, int row, float time,

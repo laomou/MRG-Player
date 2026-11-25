@@ -426,8 +426,6 @@ int Application::run(int argc, char **argv) {
   std::string coreInstallMessage;
   SDL_Thread *coreInstallThread = nullptr;
   int coreInstallRow = 0;
-  int coreRemovePendingRow = -1;
-  Uint64 coreRemovePendingUntil = 0;
   bool bindingCapture = false;
   // Closing the launcher asks first, the way a console does; 0 keeps the
   // cancel button focused so a stray key never ends the session.
@@ -858,37 +856,24 @@ int Application::run(int argc, char **argv) {
     bannerMessage = message;
     bannerUntil = SDL_GetTicks64() + duration;
   };
-  // Deleting a core asks for a confirmation press first, so a stray Delete
-  // on the page never costs a multi-megabyte download.
-  auto removeCoreRow = [&](int row) {
+  // Choosing a platform never downloads anything. The confirm key installs a
+  // missing core and shows the details of an installed one, so a stray press on
+  // the page cannot cost a multi-megabyte download it already has.
+  auto activateCoreRow = [&](int row) {
     if (coreInstallBusy || row < 0 ||
-        row >= static_cast<int>(std::size(kInstallerPlatforms))) {
+        row >= static_cast<int>(coreRows.size())) {
       return;
     }
-    const bool confirmed = coreRemovePendingRow == row &&
-                           SDL_GetTicks64() < coreRemovePendingUntil;
-    if (!confirmed) {
-      coreRemovePendingRow = row;
-      coreRemovePendingUntil = SDL_GetTicks64() + 2500;
-      showBanner(i18n::tr(i18n::TextId::CoreRemoveConfirm, currentLanguage()),
-                 2500);
+    const ui::CoreRow &entry = coreRows[static_cast<std::size_t>(row)];
+    if (!entry.installed) {
+      startCoreInstall(row);
       return;
     }
-    coreRemovePendingRow = -1;
-    std::string error;
-    if (!runtime::libretro::removeInstalledCore(kInstallerPlatforms[row],
-                                               error)) {
-      std::fprintf(stderr, "core removal: %s\n", error.c_str());
-      showBanner(
-          i18n::tr(i18n::TextId::CoreRemoveFailedBanner, currentLanguage()),
-          3000);
-      return;
-    }
-    showBanner(i18n::tr(i18n::TextId::CoreRemovedBanner, currentLanguage()),
-               3000);
-    refreshCoreRows();
+    std::string details = entry.platform + "  " + entry.core;
+    if (!entry.size.empty())
+      details += "  " + entry.size;
+    showBanner(details, 3200);
   };
-
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
   auto saveScreenshot = [&]() -> std::string {
@@ -1908,9 +1893,6 @@ int Application::run(int argc, char **argv) {
           } else if (key == SDLK_r && settingCategory == 5 &&
                      !settingsRailFocus) {
             refreshCoreRows();
-          } else if (key == SDLK_DELETE && settingCategory == 5 &&
-                     !settingsRailFocus) {
-            removeCoreRow(settingRow);
           } else if (key == SDLK_LEFT) {
             settingsRailFocus = true;
           } else if (key == SDLK_RIGHT) {
@@ -1929,7 +1911,7 @@ int Application::run(int argc, char **argv) {
             if (settingsRailFocus) {
               settingsRailFocus = false;
             } else if (settingCategory == 5) {
-              startCoreInstall(settingRow);
+              activateCoreRow(settingRow);
             } else if (settingCategory == 3 && settingRow >= 4 &&
                        settingRow <
                            4 + static_cast<int>(config::kInputActionCount)) {
@@ -2032,6 +2014,8 @@ int Application::run(int argc, char **argv) {
           settingsRailFocus = false;
           if (clickedCategory == 5)
             refreshCoreRows();
+        } else if (settingCategory == 5 && ui::coreRefreshAt(x, y)) {
+          refreshCoreRows();
         } else {
           const int clickedRow =
               ui::settingsRowAt(settingCategory, x, y);
@@ -2042,7 +2026,10 @@ int Application::run(int argc, char **argv) {
                 settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
               bindingCapture = true;
             } else if (settingCategory == 5) {
-              startCoreInstall(clickedRow);
+              // A single click only moves the cursor: the list never starts a
+              // download behind the player's back.
+              if (event.button.clicks >= 2)
+                activateCoreRow(clickedRow);
             } else {
               applySetting(1);
             }
@@ -2163,7 +2150,7 @@ int Application::run(int argc, char **argv) {
             if (settingsRailFocus) {
               settingsRailFocus = false;
             } else if (settingCategory == 5) {
-              startCoreInstall(settingRow);
+              activateCoreRow(settingRow);
             } else if (settingCategory == 3 && settingRow >= 4 &&
                        settingRow <
                            4 + static_cast<int>(config::kInputActionCount)) {
@@ -2171,9 +2158,6 @@ int Application::run(int argc, char **argv) {
             } else {
               applySetting(1);
             }
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
-                     settingCategory == 5 && !settingsRailFocus) {
-            removeCoreRow(settingRow);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
                      settingCategory == 3 && !settingsRailFocus) {
             settings.input = config::defaultInputBindings();
@@ -2370,7 +2354,8 @@ int Application::run(int argc, char **argv) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache,
+                   /*showFooter=*/false);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],

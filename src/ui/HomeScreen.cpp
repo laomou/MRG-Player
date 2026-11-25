@@ -243,7 +243,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity, SDL_Color accent, CoverSource *covers) {
+              float focusOpacity, SDL_Color accent, CoverSource *covers,
+              bool showFooter) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -352,20 +353,24 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
     centeredText(renderer, 800, 758, playTime, 1, {232, 236, 244, 255});
   }
 
-  fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
-  const std::vector<Hint> footer =
-      footerHints(selectedEntry != nullptr, language, prompts);
-  const int focused =
-      focus == HomeFocus::Actions && !footer.empty()
-          ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
-          : -1;
-  float cursor =
-      kFooterRight - static_cast<float>(hintRowWidth(footer));
-  for (int index = 0; index < static_cast<int>(footer.size()); ++index) {
-    if (index == focused)
-      drawHintFocus(renderer, cursor, kFooterY, footer[index], focusOpacity);
-    drawHint(renderer, cursor, kFooterY, footer[index], style.accent);
-    cursor += static_cast<float>(hintWidth(footer[index])) + kHintGap;
+  // The shelf is the only screen with a footer of its own; the management
+  // drawer covers it, so the caller can turn it off and let the drawer draw
+  // its own legend in the space it actually owns.
+  if (showFooter) {
+    fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
+    const std::vector<Hint> footer =
+        footerHints(selectedEntry != nullptr, language, prompts);
+    const int focused =
+        focus == HomeFocus::Actions && !footer.empty()
+            ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
+            : -1;
+    float cursor = kFooterRight - static_cast<float>(hintRowWidth(footer));
+    for (int index = 0; index < static_cast<int>(footer.size()); ++index) {
+      if (index == focused)
+        drawHintFocus(renderer, cursor, kFooterY, footer[index], focusOpacity);
+      drawHint(renderer, cursor, kFooterY, footer[index], style.accent);
+      cursor += static_cast<float>(hintWidth(footer[index])) + kHintGap;
+    }
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
