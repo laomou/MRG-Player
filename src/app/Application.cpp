@@ -880,12 +880,19 @@ int Application::run(int argc, char **argv) {
     ui::FocusGrid grid = ui::settingsControls(settingCategory);
     grid.list(0).focusIndex(settingCategory);
     // Ids, not indices: the core page's refresh button occupies the first slot,
-    // so the platform rows sit one place further down.
-    grid.list(1).focusIndex(coreRefreshFocused
-                                ? grid.list(1).indexOfId(
-                                      ui::kSettingsRefreshControlId)
-                                : grid.list(1).indexOfId(settingRow));
-    (void)grid.focusList(settingsRailFocus ? 0 : 1);
+    // so the platform rows sit one place further down, and the controller page
+    // keeps each binding in the lane it is drawn in.
+    const int wanted =
+        coreRefreshFocused ? ui::kSettingsRefreshControlId : settingRow;
+    int column = 1;
+    int slot = grid.list(column).indexOfId(wanted);
+    if (slot < 0 && grid.listCount() > 2) {
+      column = 2;
+      slot = grid.list(column).indexOfId(wanted);
+    }
+    if (slot >= 0)
+      grid.list(column).focusIndex(slot);
+    (void)grid.focusList(settingsRailFocus ? 0 : column);
     return grid;
   };
   auto adoptSettingsControls = [&](const ui::FocusGrid &grid) {
@@ -905,7 +912,7 @@ int Application::run(int argc, char **argv) {
       }
       return;
     }
-    const int id = grid.list(1).focusedId();
+    const int id = grid.list(grid.listIndex()).focusedId();
     if (id == ui::kSettingsRefreshControlId) {
       coreRefreshFocused = true;
     } else if (id >= 0) {
@@ -927,7 +934,7 @@ int Application::run(int argc, char **argv) {
       return;
     }
     if (nav == SettingsNav::Left || nav == SettingsNav::Right) {
-      (void)grid.focusList(nav == SettingsNav::Left ? 0 : 1);
+      (void)grid.moveHorizontal(nav == SettingsNav::Left ? -1 : 1);
       adoptSettingsControls(grid);
       return;
     }

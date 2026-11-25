@@ -10,6 +10,10 @@ namespace launcher::ui {
 struct Control {
   int id = -1;
   bool enabled = true;
+  // Position inside a column that is split into lanes, so that a horizontal
+  // move can look for the same line in the neighbouring lane. Columns that are
+  // not split never compare rows.
+  int row = 0;
 };
 
 // One column of controls. Focus skips disabled entries, so a row that is not
@@ -25,6 +29,10 @@ public:
   [[nodiscard]] int focusedIndex() const;
   // The id of the focused control, or -1 when the list is empty.
   [[nodiscard]] int focusedId() const;
+  // The row of the focused control, or -1 when nothing is focused.
+  [[nodiscard]] int focusedRow() const;
+  // Focuses the control on that line, reporting whether the line exists here.
+  [[nodiscard]] bool focusRow(int row);
 
   // Explicit focus, used by the pointer, which may land on any control.
   void focusIndex(int index);
@@ -43,7 +51,10 @@ private:
 // Columns laid out left to right. The direction keys move inside the active
 // column; left and right cross between columns. The settings page is a rail of
 // categories next to a column of rows, and its core page puts the refresh
-// button at the front of the row column.
+// button at the front of the row column. The controller page splits its rows
+// into two lanes, so the same line has to exist on the other side before the
+// focus crosses over; the rail is the one column that has no rows and simply
+// hands the keys to the page.
 class FocusGrid {
 public:
   void reset(std::vector<ControlList> lists);

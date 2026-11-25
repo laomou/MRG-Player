@@ -240,15 +240,45 @@ FocusGrid settingsControls(int category) {
     categories.push_back(Control{index, true});
   rail.reset(std::move(categories));
 
+  if (category == 3) {
+    // The controller page is the one page whose rows are cut into two lanes:
+    // four full width rows, then the bindings side by side, then the dead zone.
+    // Sharing a line number is what lets left and right cross between the two
+    // halves of a binding instead of handing the keys back to the rail.
+    const int actions = static_cast<int>(config::kInputActionCount);
+    const int lanes = static_cast<int>(kBindingsPerColumn);
+    std::vector<Control> left;
+    std::vector<Control> right;
+    left.reserve(static_cast<std::size_t>(kFixedRowCount + kBindingsPerColumn) + 1);
+    right.reserve(kBindingsPerColumn);
+    for (int index = 0; index < kFixedRowCount; ++index)
+      left.push_back(Control{index, true, index});
+    for (int index = 0; index < lanes; ++index) {
+      const int line = kFixedRowCount + index;
+      const int id = kFixedRowCount + index;
+      left.push_back(Control{id, true, line});
+      right.push_back(Control{id + lanes, true, line});
+    }
+    left.push_back(Control{kFixedRowCount + actions, true,
+                           kFixedRowCount + lanes});
+    ControlList leftLane;
+    leftLane.reset(std::move(left), false);
+    ControlList rightLane;
+    rightLane.reset(std::move(right), false);
+    FocusGrid grid;
+    grid.reset({std::move(rail), std::move(leftLane), std::move(rightLane)});
+    return grid;
+  }
+
   std::vector<Control> rows;
   const int rowCount = settingRowCount(category);
   rows.reserve(static_cast<std::size_t>(rowCount) + 1);
   // The refresh button sits above the first platform, so it is the first entry
   // of the column rather than a row index with a special meaning.
   if (category == 5)
-    rows.push_back(Control{kSettingsRefreshControlId, true});
+    rows.push_back(Control{kSettingsRefreshControlId, true, 0});
   for (int index = 0; index < rowCount; ++index)
-    rows.push_back(Control{index, true});
+    rows.push_back(Control{index, true, index});
   ControlList content;
   content.reset(std::move(rows), false);
 
