@@ -73,6 +73,20 @@ void centeredText(SDL_Renderer *renderer, int centerX, int y,
 // instead of a hand-tuned offset.
 void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
                    const std::string &value, int scale, SDL_Color color);
+// The y origin to hand to text() so the rendered box of value lands on
+// centerY. TTF ink starts a few pixels below the requested origin and mixed
+// runs share the CJK baseline, which is why labels used to carry hand-tuned
+// offsets (+10, +7, +4): this measures the box instead.
+[[nodiscard]] int textCenteredY(const std::string &value, int centerY,
+                                int scale);
+
+// A button: plate, optional hairline rim, a label centred with textCenteredY,
+// and the shared focus ring when focused. Buttons go through this so the label
+// is centred by construction and focus looks the same everywhere.
+void drawButton(SDL_Renderer *renderer, float x, float y, float width,
+                float height, float radius, const std::string &label, int scale,
+                SDL_Color plate, SDL_Color rim, SDL_Color labelColor,
+                bool focused, float focusOpacity = 1.0f);
 // wallpaper, when present, replaces the drawn skyline with a soft version of
 // the selected game's cover, dimmed so the shelf stays readable.
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time,

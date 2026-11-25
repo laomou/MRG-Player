@@ -404,6 +404,9 @@ int Application::run(int argc, char **argv) {
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
   int settingRow = 0;
+  // The core page's refresh button is reached by pressing up from the first
+  // row; while it holds the keys the rows draw no focus ring.
+  bool coreRefreshFocused = false;
   bool rewindHeld = false;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
   const Uint64 smokeSettingsStart = SDL_GetTicks64();
@@ -680,17 +683,11 @@ int Application::run(int argc, char **argv) {
     coreInstallThread = SDL_CreateThread(runCoreInstall, "core-install", job);
     refreshCoreRows();
   };
-  auto changeCategory = [&](int direction) {
-    const int count = ui::settingCategoryCount();
-    settingCategory = (settingCategory + direction + count) % count;
-    settingRow = 0;
-    if (settingCategory == 5)
-      refreshCoreRows();
-  };
   // Opening the settings screen always re-reads the installed cores, so the
   // page is populated whether it was reached by key, pad, or mouse.
   auto openSettings = [&] {
     refreshCoreRows();
+    coreRefreshFocused = false;
     settingsRailFocus = true;
     screen = Screen::Settings;
   };
@@ -873,6 +870,95 @@ int Application::run(int argc, char **argv) {
     if (!entry.size.empty())
       details += "  " + entry.size;
     showBanner(details, 3200);
+  };
+  // Focus order of the settings page comes from ui::settingsControls: the
+  // category rail is one column, the rows of the current page the other, and
+  // the core page's refresh button is the first entry of the row column. The
+  // keyboard and the pad both drive this one implementation, so the button
+  // needs no special case and the two devices cannot drift apart.
+  auto currentSettingsControls = [&] {
+    ui::FocusGrid grid = ui::settingsControls(settingCategory);
+    grid.list(0).focusIndex(settingCategory);
+    // Ids, not indices: the core page's refresh button occupies the first slot,
+    // so the platform rows sit one place further down.
+    grid.list(1).focusIndex(coreRefreshFocused
+                                ? grid.list(1).indexOfId(
+                                      ui::kSettingsRefreshControlId)
+                                : grid.list(1).indexOfId(settingRow));
+    (void)grid.focusList(settingsRailFocus ? 0 : 1);
+    return grid;
+  };
+  auto adoptSettingsControls = [&](const ui::FocusGrid &grid) {
+    settingsRailFocus = grid.listIndex() == 0;
+    if (settingsRailFocus) {
+      const int category = grid.list(0).focusedId();
+      if (category >= 0 && category != settingCategory) {
+        settingCategory = category;
+        settingRow = 0;
+        coreRefreshFocused = false;
+        if (settingCategory == 5)
+          refreshCoreRows();
+      } else {
+        // Crossing to the rail gives up the button but keeps the row, so
+        // coming back lands where the player left off.
+        coreRefreshFocused = false;
+      }
+      return;
+    }
+    const int id = grid.list(1).focusedId();
+    if (id == ui::kSettingsRefreshControlId) {
+      coreRefreshFocused = true;
+    } else if (id >= 0) {
+      coreRefreshFocused = false;
+      settingRow = id;
+    }
+  };
+  enum class SettingsNav { Up, Down, Left, Right, Confirm, Cancel };
+  auto settingsNavigate = [&](SettingsNav nav) {
+    ui::FocusGrid grid = currentSettingsControls();
+    if (nav == SettingsNav::Cancel) {
+      bindingCapture = false;
+      if (grid.listIndex() == 0) {
+        screen = Screen::Home;
+        return;
+      }
+      (void)grid.focusList(0);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (nav == SettingsNav::Left || nav == SettingsNav::Right) {
+      (void)grid.focusList(nav == SettingsNav::Left ? 0 : 1);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (nav == SettingsNav::Up || nav == SettingsNav::Down) {
+      const int direction = nav == SettingsNav::Up ? -1 : 1;
+      if (grid.listIndex() == 0)
+        (void)grid.list(0).move(direction);
+      else
+        (void)grid.moveVertical(direction);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (grid.listIndex() == 0) {
+      (void)grid.focusList(1);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (grid.list(1).focusedId() == ui::kSettingsRefreshControlId) {
+      refreshCoreRows();
+      return;
+    }
+    if (settingCategory == 5) {
+      activateCoreRow(settingRow);
+      return;
+    }
+    if (settingCategory == 3 && settingRow >= 4 &&
+        settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
+      bindingCapture = true;
+      return;
+    }
+    applySetting(1);
   };
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
@@ -1877,15 +1963,7 @@ int Application::run(int argc, char **argv) {
             quitChoice = 0;
           }
         } else if (screen == Screen::Settings) {
-          const int rowCount = ui::settingRowCount(settingCategory);
-          if (key == SDLK_ESCAPE || key == SDLK_b) {
-            bindingCapture = false;
-            if (settingsRailFocus)
-              screen = Screen::Home;
-            else
-              settingsRailFocus = true;
-          } else if (key == SDLK_r && settingCategory == 3 &&
-                     !settingsRailFocus) {
+          if (key == SDLK_r && settingCategory == 3 && !settingsRailFocus) {
             settings.input = config::defaultInputBindings();
             if (activeRuntime)
               activeRuntime->setInputBindings(settings.input);
@@ -1893,32 +1971,18 @@ int Application::run(int argc, char **argv) {
           } else if (key == SDLK_r && settingCategory == 5 &&
                      !settingsRailFocus) {
             refreshCoreRows();
+          } else if (key == SDLK_ESCAPE || key == SDLK_b) {
+            settingsNavigate(SettingsNav::Cancel);
           } else if (key == SDLK_LEFT) {
-            settingsRailFocus = true;
+            settingsNavigate(SettingsNav::Left);
           } else if (key == SDLK_RIGHT) {
-            settingsRailFocus = false;
+            settingsNavigate(SettingsNav::Right);
           } else if (key == SDLK_UP) {
-            if (settingsRailFocus)
-              changeCategory(-1);
-            else
-              settingRow = (settingRow - 1 + rowCount) % rowCount;
+            settingsNavigate(SettingsNav::Up);
           } else if (key == SDLK_DOWN) {
-            if (settingsRailFocus)
-              changeCategory(1);
-            else
-              settingRow = (settingRow + 1) % rowCount;
+            settingsNavigate(SettingsNav::Down);
           } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
-            if (settingsRailFocus) {
-              settingsRailFocus = false;
-            } else if (settingCategory == 5) {
-              activateCoreRow(settingRow);
-            } else if (settingCategory == 3 && settingRow >= 4 &&
-                       settingRow <
-                           4 + static_cast<int>(config::kInputActionCount)) {
-              bindingCapture = true;
-            } else {
-              applySetting(1);
-            }
+            settingsNavigate(SettingsNav::Confirm);
           }
         } else if (managementDialog == ui::ManagementDialog::Menu) {
           if (key == SDLK_ESCAPE || key == SDLK_b)
@@ -2011,16 +2075,22 @@ int Application::run(int argc, char **argv) {
           const int clickedCategory = ui::settingsCategoryAt(x, y);
           settingCategory = clickedCategory;
           settingRow = 0;
+          coreRefreshFocused = false;
           settingsRailFocus = false;
           if (clickedCategory == 5)
             refreshCoreRows();
         } else if (settingCategory == 5 && ui::coreRefreshAt(x, y)) {
+          // Clicking the button parks the cursor on it, so a following Enter
+          // repeats the refresh instead of opening the platform below.
+          coreRefreshFocused = true;
+          settingsRailFocus = false;
           refreshCoreRows();
         } else {
           const int clickedRow =
               ui::settingsRowAt(settingCategory, x, y);
           if (clickedRow >= 0) {
             settingRow = clickedRow;
+            coreRefreshFocused = false;
             settingsRailFocus = false;
             if (settingCategory == 3 && settingRow >= 4 &&
                 settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
@@ -2046,13 +2116,8 @@ int Application::run(int argc, char **argv) {
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
         } else if (screen == Screen::Settings && event.wheel.y != 0) {
-          const int direction = event.wheel.y < 0 ? 1 : -1;
-          if (settingsRailFocus) {
-            changeCategory(direction);
-          } else {
-            const int count = ui::settingRowCount(settingCategory);
-            settingRow = (settingRow + direction + count) % count;
-          }
+          settingsNavigate(event.wheel.y < 0 ? SettingsNav::Down
+                                             : SettingsNav::Up);
         } else if (screen == Screen::Management && event.wheel.y != 0 &&
                    managementDialog == ui::ManagementDialog::Menu) {
           const int direction = event.wheel.y < 0 ? 1 : -1;
@@ -2124,40 +2189,19 @@ int Application::run(int argc, char **argv) {
                 std::clamp(selectedGame + direction * 7, 0, count - 1);
           }
         } else if (screen == Screen::Settings) {
-          const int rowCount = ui::settingRowCount(settingCategory);
           if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
               event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
-            bindingCapture = false;
-            if (settingsRailFocus)
-              screen = Screen::Home;
-            else
-              settingsRailFocus = true;
+            settingsNavigate(SettingsNav::Cancel);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
-            settingsRailFocus = true;
+            settingsNavigate(SettingsNav::Left);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
-            settingsRailFocus = false;
+            settingsNavigate(SettingsNav::Right);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-            if (settingsRailFocus)
-              changeCategory(-1);
-            else
-              settingRow = (settingRow - 1 + rowCount) % rowCount;
+            settingsNavigate(SettingsNav::Up);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-            if (settingsRailFocus)
-              changeCategory(1);
-            else
-              settingRow = (settingRow + 1) % rowCount;
+            settingsNavigate(SettingsNav::Down);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
-            if (settingsRailFocus) {
-              settingsRailFocus = false;
-            } else if (settingCategory == 5) {
-              activateCoreRow(settingRow);
-            } else if (settingCategory == 3 && settingRow >= 4 &&
-                       settingRow <
-                           4 + static_cast<int>(config::kInputActionCount)) {
-              bindingCapture = true;
-            } else {
-              applySetting(1);
-            }
+            settingsNavigate(SettingsNav::Confirm);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_Y &&
                      settingCategory == 3 && !settingsRailFocus) {
             settings.input = config::defaultInputBindings();
@@ -2216,12 +2260,8 @@ int Application::run(int argc, char **argv) {
           } else if (direction != 0 &&
                      event.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
             if (screen == Screen::Settings) {
-              if (settingsRailFocus) {
-                changeCategory(direction);
-              } else {
-                const int count = ui::settingRowCount(settingCategory);
-                settingRow = (settingRow + direction + count) % count;
-              }
+              settingsNavigate(direction < 0 ? SettingsNav::Up
+                                             : SettingsNav::Down);
             } else if (screen == Screen::Management &&
                        managementDialog == ui::ManagementDialog::Menu) {
               managementAction =
@@ -2244,11 +2284,12 @@ int Application::run(int argc, char **argv) {
     // the focus, and moving to a different one restarts the fade.
     char focusBuffer[80];
     std::snprintf(focusBuffer, sizeof(focusBuffer),
-                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
                   static_cast<int>(screen), static_cast<int>(homeFocus),
                   homePill, homeAction, selectedGame, settingCategory,
                   settingRow, settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
-                  pauseAction, pauseCoreOptionCursor);
+                  pauseAction, pauseCoreOptionCursor,
+                  coreRefreshFocused ? 1 : 0);
     if (focusKey != focusBuffer) {
       if (focusKey.empty()) {
         focusOpacity = 1.0f;
@@ -2349,7 +2390,7 @@ int Application::run(int argc, char **argv) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
-                       settingsRailFocus, focusOpacity);
+                       settingsRailFocus, focusOpacity, coreRefreshFocused);
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,

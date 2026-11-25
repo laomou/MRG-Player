@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config/Settings.hpp"
+#include "ui/Controls.hpp"
 
 #include <SDL.h>
 
@@ -24,6 +25,14 @@ struct CoreRow {
 
 int settingCategoryCount();
 int settingRowCount(int category);
+// The refresh button is a control rather than a list row, so focus order needs
+// an id that cannot collide with a row index.
+inline constexpr int kSettingsRefreshControlId = 1000;
+// Focus order of the page: column 0 is the category rail, column 1 is the rows
+// of the current page. The core page puts its refresh button at the front of
+// that column, so pressing up from the first platform reaches the button
+// without a special case in the input code.
+[[nodiscard]] FocusGrid settingsControls(int category);
 // Maps a point in logical coordinates to the controller page row under it, or
 // -1 when the point misses every row. The binding list is two columns wide, so
 // hit testing has to know the exact geometry the page draws with.
@@ -45,6 +54,6 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity);
+                  float focusOpacity, bool refreshFocused = false);
 
 } // namespace launcher::ui

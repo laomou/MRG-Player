@@ -308,10 +308,10 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       libraryEmpty ? TextId::ChooseRom
                    : (startupPage == 0 ? TextId::ContinueSubtitle
                                        : TextId::LibrarySubtitle);
-  text(renderer, 72, 174, tr(sectionTitle, language), 1, style.accent);
-  text(renderer, 72, 207, tr(TextId::ChooseYourGame, language), 3,
+  text(renderer, 72, 160, tr(sectionTitle, language), 1, style.accent);
+  text(renderer, 72, 193, tr(TextId::ChooseYourGame, language), 3,
        {255, 255, 255, 255});
-  text(renderer, 72, 251, tr(sectionSubtitle, language), 1,
+  text(renderer, 72, 237, tr(sectionSubtitle, language), 1,
        {191, 201, 220, 255});
 
   const bool cardsFocused = focus == HomeFocus::Cards;

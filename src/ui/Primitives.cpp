@@ -685,6 +685,47 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
   textDevice(renderer, cx - width / 2, top, value, scale, color);
 }
 
+int textCenteredY(const std::string &value, int centerY, int scale) {
+  if (value.empty())
+    return centerY;
+  TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
+  int width = 0;
+  int height = 0;
+  if (font == nullptr ||
+      TTF_SizeUTF8(font, value.c_str(), &width, &height) != 0) {
+    // The bitmap fallback draws ink straight down from y, seven pixels tall per
+    // scale step.
+    return centerY - 3 * scale;
+  }
+  TTF_Font *cjk = fontForScale(scale);
+  const int baseline = cjk ? TTF_FontAscent(cjk) : TTF_FontAscent(font);
+  if (gScale <= 0.0f)
+    return centerY - (baseline - TTF_FontAscent(font)) - height / 2;
+  // textDevice puts the rendered box at y + (baseline - ascent). Remove that
+  // offset and half the box so the box centre lands on centerY.
+  const float top = deviceY(static_cast<float>(centerY)) -
+                    static_cast<float>(baseline - TTF_FontAscent(font)) -
+                    static_cast<float>(height) / 2.0f;
+  return static_cast<int>(std::lround((top - gOffsetY) / gScale));
+}
+
+void drawButton(SDL_Renderer *renderer, float x, float y, float width,
+                float height, float radius, const std::string &label, int scale,
+                SDL_Color plate, SDL_Color rim, SDL_Color labelColor,
+                bool focused, float focusOpacity) {
+  if (rim.a > 0) {
+    rounded(renderer, x - 1.0f, y - 1.0f, width + 2.0f, height + 2.0f,
+            radius + 1.0f, rim);
+  }
+  rounded(renderer, x, y, width, height, radius, plate);
+  const int centerX = static_cast<int>(std::lround(x + width / 2.0f));
+  const int centerY = static_cast<int>(std::lround(y + height / 2.0f));
+  centeredText(renderer, centerX, textCenteredY(label, centerY, scale), label,
+               scale, labelColor);
+  if (focused)
+    drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
+}
+
 void setOutputSize(int outputWidth, int outputHeight) {
   gOutputWidth = outputWidth;
   gOutputHeight = outputHeight;

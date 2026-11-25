@@ -8,7 +8,10 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
+#include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 // CMake passes the project version in; a build that bypasses it still reports
@@ -25,9 +28,32 @@ using i18n::tr;
 
 constexpr int kCategoryCount = 8;
 
+// The focus ring fades in over about 120 ms, so the wash under the control has
+// to travel the same curve; without that the plate lights up in one frame and
+// the ring looks like it lands late.
+Uint8 focusWashAlpha(SDL_Color accent, bool focused, float focusOpacity) {
+  const Uint8 alpha = accentWashAlpha(accent);
+  if (!focused)
+    return alpha;
+  return static_cast<Uint8>(
+      std::lround(static_cast<float>(alpha) *
+                  std::clamp(focusOpacity, 0.0f, 1.0f)));
+}
+
+// The content column starts on the same line as the home shelf: stepping into
+// the settings screen then keeps the page rhythm instead of dropping the list
+// lower and leaving the last row sitting on top of the footer.
+constexpr int kContentTop = 296;
+constexpr int kRailTop = kContentTop;
+constexpr int kRailHeight = 470;
+constexpr int kRailLabelY = kContentTop + 23;
+constexpr int kRailItemY = kContentTop + 55;
+constexpr int kContentTitleY = kContentTop + 3;
+constexpr int kContentDescriptionY = kContentTop + 42;
+
 // Geometry of the dense controller page, shared by drawing and hit testing.
-constexpr int kCompactStartY = 400;
-constexpr int kCompactStep = 30;
+constexpr int kCompactStartY = kContentTop + 76;
+constexpr int kCompactStep = 34;
 constexpr int kRowHeight = 29;
 constexpr int kTrackX = 466;
 constexpr int kTrackWidth = 1010;
@@ -43,13 +69,13 @@ static_assert(config::kInputActionCount == 2 * kBindingsPerColumn);
 // The general page carries five rows now, so its rows are slightly shorter
 // than the ones on the other pages.
 constexpr int kGeneralRowCount = 5;
-constexpr int kGeneralRowY = 404;
+constexpr int kGeneralRowY = kContentTop + 80;
 constexpr int kGeneralRowStep = 84;
 constexpr int kGeneralRowHeight = 76;
 
 // The single-column pages use 92 pixel rows on a 106 pixel pitch, and the
 // installer page lists one platform per 56 pixel line.
-constexpr int kSettingRowY = 410;
+constexpr int kSettingRowY = kContentTop + 86;
 constexpr int kSettingRowStep = 106;
 constexpr int kSettingRowHeight = 92;
 constexpr int kInstallerRowCount = 5;
@@ -58,11 +84,11 @@ constexpr int kInstallerRowCount = 5;
 // with the installed counter and the refresh button on the heading line. The
 // columns are fixed so the platform name, the core file, and the status never
 // wander between rows.
-constexpr int kCoreRowY = 418;
+constexpr int kCoreRowY = kContentTop + 100;
 constexpr int kCoreRowStep = 56;
 constexpr int kCoreRowHeight = 48;
 constexpr int kCoreRefreshX = 1330;
-constexpr int kCoreRefreshY = 331;
+constexpr int kCoreRefreshY = kContentTop - 3;
 constexpr int kCoreRefreshWidth = 146;
 constexpr int kCoreRefreshHeight = 34;
 constexpr int kCoreColumnCoreX = 900;
@@ -102,7 +128,8 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
   if (selected) {
     rounded(renderer, 466, static_cast<float>(y), 1010,
             static_cast<float>(height), 17,
-            {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
+            {accent.r, accent.g, accent.b,
+             focusWashAlpha(accent, focused, focusOpacity)});
   }
   // A row without a description puts the label itself on the centre line, so the
   // page keeps one rhythm instead of a ragged column of top-aligned labels.
@@ -114,7 +141,7 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
   if (hasDescription)
     text(renderer, 498, titleY + 34, description, 1, {148, 169, 187, 255});
   const int valueX = 1420 - textWidth(value, 2);
-  text(renderer, valueX, y + (height - 24) / 2, value, 2,
+  text(renderer, valueX, textCenteredY(value, y + height / 2, 2), value, 2,
        selected || focused ? accent : SDL_Color{205, 215, 226, 255});
   if (focused)
     drawFocusRing(renderer, 466, static_cast<float>(y), 1010,
@@ -133,13 +160,15 @@ void drawCompactRow(SDL_Renderer *renderer, int x, int y, int width,
   if (selected) {
     rounded(renderer, static_cast<float>(x), static_cast<float>(y),
             static_cast<float>(width), 29, 9,
-            {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
+            {accent.r, accent.g, accent.b,
+             focusWashAlpha(accent, focused, focusOpacity)});
   }
-  text(renderer, x + 26, y + 4, title, 1,
+  const int centerY = y + 14;
+  text(renderer, x + 26, textCenteredY(title, centerY, 1), title, 1,
        selected || focused ? SDL_Color{255, 255, 255, 255}
                            : SDL_Color{184, 198, 216, 255});
   const int valueX = x + width - 20 - textWidth(value, 1);
-  text(renderer, valueX, y + 4, value, 1,
+  text(renderer, valueX, textCenteredY(value, centerY, 1), value, 1,
        selected || focused ? accent : SDL_Color{205, 215, 226, 255});
   if (focused)
     drawFocusRing(renderer, static_cast<float>(x), static_cast<float>(y),
@@ -203,6 +232,31 @@ int settingRowCount(int category) {
   return 1;
 }
 
+FocusGrid settingsControls(int category) {
+  ControlList rail;
+  std::vector<Control> categories;
+  categories.reserve(static_cast<std::size_t>(kCategoryCount));
+  for (int index = 0; index < kCategoryCount; ++index)
+    categories.push_back(Control{index, true});
+  rail.reset(std::move(categories));
+
+  std::vector<Control> rows;
+  const int rowCount = settingRowCount(category);
+  rows.reserve(static_cast<std::size_t>(rowCount) + 1);
+  // The refresh button sits above the first platform, so it is the first entry
+  // of the column rather than a row index with a special meaning.
+  if (category == 5)
+    rows.push_back(Control{kSettingsRefreshControlId, true});
+  for (int index = 0; index < rowCount; ++index)
+    rows.push_back(Control{index, true});
+  ControlList content;
+  content.reset(std::move(rows), false);
+
+  FocusGrid grid;
+  grid.reset({std::move(rail), std::move(content)});
+  return grid;
+}
+
 int controllerPageRowAt(int x, int y) {
   if (x < kTrackX || x > kTrackX + kTrackWidth)
     return -1;
@@ -242,9 +296,10 @@ int generalPageRowAt(int x, int y) {
 }
 
 int settingsCategoryAt(float x, float y) {
-  if (x < 72 || x > 402 || y < 389 || y >= 389 + kCategoryCount * 52)
+  if (x < 72 || x > 402 || y < kRailItemY ||
+      y >= kRailItemY + kCategoryCount * 52)
     return -1;
-  const int category = static_cast<int>((y - 389) / 52);
+  const int category = static_cast<int>((y - kRailItemY) / 52);
   return category < kCategoryCount ? category : -1;
 }
 
@@ -345,7 +400,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity) {
+                  float focusOpacity, bool refreshFocused) {
   // The background no longer borrows a game's palette: one accent for every
   // screen, so the picture never changes colour when the library does.
   Game game{};
@@ -353,8 +408,11 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   game.bottom = {9, 17, 36, 255};
   game.accent = accentColor(settings.accent);
   // Only one control carries the ring: the rail while the page is being
-  // chosen, a setting row once the keys have moved into the page.
-  const bool contentFocused = !railFocused;
+  // chosen, a row once the keys have moved into the page. The core page's
+  // refresh button is a control of its own, so while it owns the keys no row
+  // draws a ring.
+  const bool contentFocused = !railFocused && !refreshFocused;
+  const bool refreshRing = !railFocused && refreshFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game, time);
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 8, 20, 128});
@@ -363,36 +421,42 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
   text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
-  text(renderer, 72, 174, tr(TextId::System, language), 2, game.accent);
-  text(renderer, 72, 211, tr(TextId::SettingsTitle, language), 3,
+  // Same header rhythm as the library: the section label, the page title and
+  // the subtitle sit on the lines the home screen uses, so the content below
+  // starts on the same shelf line on both pages. The block is pulled up so the
+  // air above it (under the wordmark) matches the air below it.
+  text(renderer, 72, 160, tr(TextId::System, language), 2, game.accent);
+  text(renderer, 72, 193, tr(TextId::SettingsTitle, language), 3,
        {255, 255, 255, 255});
-  text(renderer, 72, 260, tr(TextId::SettingsSubtitle, language), 1,
+  text(renderer, 72, 237, tr(TextId::SettingsSubtitle, language), 1,
        {173, 190, 207, 255});
 
-  rounded(renderer, 72, 334, 330, 470, 22, {5, 14, 31, 218});
-  text(renderer, 103, 357, tr(TextId::Preferences, language), 1,
+  rounded(renderer, 72, static_cast<float>(kRailTop), 330,
+          static_cast<float>(kRailHeight), 22, {5, 14, 31, 218});
+  text(renderer, 103, kRailLabelY, tr(TextId::Preferences, language), 1,
        {139, 160, 178, 255});
   for (int i = 0; i < kCategoryCount; ++i) {
-    const int y = 389 + i * 52;
+    const int y = kRailItemY + i * 52;
     if (i == category) {
       // The tint always marks the page on screen; the ring only appears when
       // the keys are actually on the rail.
       rounded(renderer, 91, static_cast<float>(y), 292, 48, 14,
               {game.accent.r, game.accent.g, game.accent.b,
-               accentWashAlpha(game.accent)});
+               focusWashAlpha(game.accent, railFocused, focusOpacity)});
       if (railFocused)
         drawFocusRing(renderer, 91, static_cast<float>(y), 292, 48, 14,
                       focusOpacity);
     }
-    text(renderer, 116, y + 10, tr(categoryText(i), language), 2,
+    const std::string label = tr(categoryText(i), language);
+    text(renderer, 116, textCenteredY(label, y + 24, 2), label, 2,
          i == category ? SDL_Color{255, 255, 255, 255}
                        : SDL_Color{165, 183, 199, 255});
   }
 
-  text(renderer, 466, 337, tr(categoryText(category), language), 3,
-       {255, 255, 255, 255});
-  text(renderer, 466, 376, tr(categoryDescription(category), language), 1,
-       {144, 165, 184, 255});
+  text(renderer, 466, kContentTitleY, tr(categoryText(category), language),
+       3, {255, 255, 255, 255});
+  text(renderer, 466, kContentDescriptionY,
+       tr(categoryDescription(category), language), 1, {144, 165, 184, 255});
 
   if (category == 0) {
     const std::string runahead =
@@ -527,27 +591,23 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         tr(TextId::AnalogDeadZone, language),
         std::to_string(settings.input.analogDeadZone), game.accent,
         focusOpacity);
-    drawHintRow(renderer, 1528.0f, 784.0f,
+    // The reset hint sits on the heading line: with fourteen bindings on the
+    // page the list needs the room under it.
+    drawHintRow(renderer, static_cast<float>(kTrackX + kTrackWidth),
+                static_cast<float>(kContentDescriptionY),
                 {{tr(TextId::ResetBindingsHint, language), "R", false}},
                 game.accent);
   } else if (category == 5) {
     // The refresh button shares the heading line with the page title, so the
     // table below starts on a clean row. A hairline rim keeps it readable as a
     // button on the dark page.
-    rounded(renderer, static_cast<float>(kCoreRefreshX - 1),
-            static_cast<float>(kCoreRefreshY - 1),
-            static_cast<float>(kCoreRefreshWidth + 2),
-            static_cast<float>(kCoreRefreshHeight + 2), 12.0f,
-            SDL_Color{58, 84, 112, 90});
-    rounded(renderer, static_cast<float>(kCoreRefreshX),
-            static_cast<float>(kCoreRefreshY),
-            static_cast<float>(kCoreRefreshWidth),
-            static_cast<float>(kCoreRefreshHeight), 11.0f,
-            SDL_Color{26, 42, 64, 235});
-    const std::string refresh = tr(TextId::RefreshCores, language);
-    text(renderer,
-         kCoreRefreshX + (kCoreRefreshWidth - textWidth(refresh, 1)) / 2,
-         kCoreRefreshY + 12, refresh, 1, {232, 238, 246, 255});
+    drawButton(renderer, static_cast<float>(kCoreRefreshX),
+               static_cast<float>(kCoreRefreshY),
+               static_cast<float>(kCoreRefreshWidth),
+               static_cast<float>(kCoreRefreshHeight), 11.0f,
+               tr(TextId::RefreshCores, language), 1,
+               SDL_Color{26, 42, 64, 235}, SDL_Color{58, 84, 112, 90},
+               SDL_Color{232, 238, 246, 255}, refreshRing, focusOpacity);
 
     // Column captions: the status column is right aligned to the same edge the
     // pills below it use.
@@ -567,11 +627,18 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
               static_cast<float>(kTrackWidth),
               static_cast<float>(kCoreRowHeight), 12.0f,
               SDL_Color{10, 20, 38, 210});
-      if (selected)
+      if (selected) {
+        // The core rows carry their own wash strength, so it fades with the
+        // ring the same way the setting rows do.
+        const float wash = std::clamp(focusOpacity, 0.0f, 1.0f);
+        const Uint8 washAlpha = static_cast<Uint8>(
+            std::lround(90.0f * (contentFocused ? wash : 1.0f)));
         rounded(renderer, static_cast<float>(kTrackX), static_cast<float>(y),
                 static_cast<float>(kTrackWidth),
                 static_cast<float>(kCoreRowHeight), 12.0f,
-                SDL_Color{game.accent.r, game.accent.g, game.accent.b, 90});
+                SDL_Color{game.accent.r, game.accent.g, game.accent.b,
+                          washAlpha});
+      }
       if (selected && contentFocused)
         drawFocusRing(renderer, static_cast<float>(kTrackX),
                       static_cast<float>(y), static_cast<float>(kTrackWidth),
@@ -580,11 +647,13 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
       if (!hasRow)
         continue;
       const CoreRow &entry = cores[static_cast<std::size_t>(index)];
-      text(renderer, kTrackX + 28, y + 15, entry.platform, 2,
+      const int centerY = y + kCoreRowHeight / 2;
+      text(renderer, kTrackX + 28, textCenteredY(entry.platform, centerY, 2),
+           entry.platform, 2,
            selected ? SDL_Color{255, 255, 255, 255}
                     : SDL_Color{232, 238, 246, 255});
-      text(renderer, kCoreColumnCoreX, y + 19, entry.core, 1,
-           {176, 193, 211, 255});
+      text(renderer, kCoreColumnCoreX, textCenteredY(entry.core, centerY, 1),
+           entry.core, 1, {176, 193, 211, 255});
       const int pillWidth = textWidth(entry.status, 1) + 26;
       rounded(renderer, static_cast<float>(kCorePillRight - pillWidth),
               static_cast<float>(y + 9), static_cast<float>(pillWidth), 30.0f,
@@ -592,7 +661,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
               entry.installed
                   ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
                   : SDL_Color{26, 40, 60, 180});
-      text(renderer, kCorePillRight - pillWidth + 13, y + 17, entry.status, 1,
+      text(renderer, kCorePillRight - pillWidth + 13,
+           textCenteredY(entry.status, y + 24, 1), entry.status, 1,
            entry.installed ? game.accent
                            : SDL_Color{150, 168, 188, 255});
     }
@@ -628,9 +698,11 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     const bool installedRow =
         row >= 0 && row < static_cast<int>(cores.size()) &&
         cores[static_cast<std::size_t>(row)].installed;
-    footer.push_back({tr(installedRow ? TextId::CoreDetails : TextId::InstallCore,
-                         language),
-                      prompts.confirm, true});
+    const TextId action =
+        refreshFocused
+            ? TextId::RefreshCores
+            : (installedRow ? TextId::CoreDetails : TextId::InstallCore);
+    footer.push_back({tr(action, language), prompts.confirm, true});
   } else {
     footer.push_back(
         {tr(TextId::ChangeControl, language), prompts.change, true});
