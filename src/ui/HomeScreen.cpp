@@ -91,25 +91,6 @@ CardBox cardBox(float column, bool selected) {
   return {centre - width * 0.5f, kRowBottom - height, width, height};
 }
 
-std::string fitTitle(std::string title, int maxWidth, int scale) {
-  if (textWidth(title, scale) <= maxWidth)
-    return title;
-  const std::string suffix = "...";
-  while (!title.empty() && textWidth(title + suffix, scale) > maxWidth) {
-    const unsigned char last = static_cast<unsigned char>(title.back());
-    title.pop_back();
-    while (!title.empty() && (last & 0xc0) == 0x80 &&
-           (static_cast<unsigned char>(title.back()) & 0xc0) == 0x80) {
-      title.pop_back();
-    }
-    if (!title.empty() &&
-        (static_cast<unsigned char>(title.back()) & 0xc0) == 0xc0) {
-      title.pop_back();
-    }
-  }
-  return title + suffix;
-}
-
 // A title over box art needs contrast, but a solid plate reads as a black bar.
 // Fading the card's bottom instead keeps the art readable and the corners stay
 // round, because every row is inset by the radius the card already uses.
@@ -180,7 +161,7 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
   const Uint8 titleAlpha = selected ? 255 : 220;
   centeredGlyph(renderer, static_cast<int>(x + width * 0.5f),
                 static_cast<int>(y + height - margin - 14.0f),
-                fitTitle(entry->title, static_cast<int>(width - margin * 2.0f),
+                fitText(entry->title, static_cast<int>(width - margin * 2.0f),
                          scale),
                 scale, {255, 255, 255, titleAlpha});
 
@@ -212,15 +193,8 @@ constexpr float kFooterY = 822.0f;
 
 // The quit confirmation is centred on the logical canvas so it covers the
 // shelf no matter which part of it has focus.
-constexpr float kQuitDialogWidth = 760.0f;
-constexpr float kQuitDialogHeight = 290.0f;
-constexpr float kQuitDialogX = (1600.0f - kQuitDialogWidth) * 0.5f;
-constexpr float kQuitDialogY = 300.0f;
-constexpr float kQuitButtonWidth = 220.0f;
-constexpr float kQuitButtonHeight = 64.0f;
-constexpr float kQuitButtonY = 452.0f;
-constexpr float kQuitCancelX = 520.0f;
-constexpr float kQuitConfirmX = 860.0f;
+const ConfirmLayout kQuitLayout =
+    confirmLayout({420, 300, 760, 290}, 152, 100, 120, 20);
 
 // Only the two actions live in the footer; leaving the launcher is done by
 // closing the window, the way a console has no "quit" entry on its home row.
@@ -341,7 +315,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   clearClipRect(renderer);
 
   if (selectedEntry != nullptr) {
-    centeredText(renderer, 800, 711, fitTitle(selectedEntry->title, 760, 3), 3,
+    centeredText(renderer, 800, 711, fitText(selectedEntry->title, 760, 3), 3,
                  style.accent);
     const std::uint64_t hours = selectedEntry->playSeconds / 3600;
     const std::uint64_t minutes = (selectedEntry->playSeconds % 3600) / 60;
@@ -364,13 +338,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
         focus == HomeFocus::Actions && !footer.empty()
             ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
             : -1;
-    float cursor = kFooterRight - static_cast<float>(hintRowWidth(footer));
-    for (int index = 0; index < static_cast<int>(footer.size()); ++index) {
-      if (index == focused)
-        drawHintFocus(renderer, cursor, kFooterY, footer[index], focusOpacity);
-      drawHint(renderer, cursor, kFooterY, footer[index], style.accent);
-      cursor += static_cast<float>(hintWidth(footer[index])) + kHintGap;
-    }
+    drawHintRow(renderer, kFooterRight, kFooterY, footer, style.accent,
+                focused, focusOpacity);
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
@@ -385,15 +354,12 @@ int homeActionCount(bool hasGame) { return hasGame ? 2 : 0; }
 
 int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                  const config::InputPrompts &prompts) {
-  if (y < kFooterY - 12.0f || y > kFooterY + kHintChipHeight + 14.0f)
-    return -1;
-  const std::vector<Hint> hints = footerHints(hasGame, language, prompts);
-  float cursor = kFooterRight - static_cast<float>(hintRowWidth(hints));
-  for (int index = 0; index < static_cast<int>(hints.size()); ++index) {
-    const float width = static_cast<float>(hintWidth(hints[index]));
-    if (x >= cursor - 10.0f && x <= cursor + width + 10.0f)
-      return index;
-    cursor += width + kHintGap;
+  const auto layout = hintLayout(kFooterRight, kFooterY,
+                                 footerHints(hasGame, language, prompts));
+  for (std::size_t index = 0; index < layout.size(); ++index) {
+    // Retain generous pointer padding around the small footer legend.
+    if (layout[index].expanded(10, 13).translated(0, 1).contains(x, y))
+      return static_cast<int>(index);
   }
   return -1;
 }
@@ -443,52 +409,20 @@ void drawQuitConfirm(SDL_Renderer *renderer, int choice,
                      i18n::Language language,
                      const config::InputPrompts &prompts, SDL_Color accent) {
   using i18n::TextId;
-  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 160});
-  rounded(renderer, kQuitDialogX + 8, kQuitDialogY + 10, kQuitDialogWidth,
-          kQuitDialogHeight, 28, {0, 0, 0, 70});
-  rounded(renderer, kQuitDialogX, kQuitDialogY, kQuitDialogWidth,
-          kQuitDialogHeight, 28, {12, 21, 37, 245});
-  rounded(renderer, kQuitDialogX + 36, kQuitDialogY + 40, 4, 32, 2, accent);
-  text(renderer, kQuitDialogX + 56, kQuitDialogY + 42,
-       tr(TextId::QuitConfirmTitle, language), 2, accent);
-  text(renderer, kQuitDialogX + 36, kQuitDialogY + 106,
-       tr(TextId::QuitConfirmBody, language), 2, {206, 216, 232, 255});
-
-  const std::array<TextId, 2> labels{TextId::Cancel, TextId::Quit};
-  const std::array<float, 2> xs{kQuitCancelX, kQuitConfirmX};
-  for (int option = 0; option < 2; ++option) {
-    const bool selected = option == choice;
-    rounded(renderer, xs[static_cast<std::size_t>(option)], kQuitButtonY,
-            kQuitButtonWidth, kQuitButtonHeight, 18,
-            selected ? accent : SDL_Color{255, 255, 255, 18});
-    centeredText(renderer,
-                 static_cast<int>(xs[static_cast<std::size_t>(option)] +
-                                  kQuitButtonWidth / 2.0f),
-                 static_cast<int>(kQuitButtonY + 22),
-                 tr(labels[static_cast<std::size_t>(option)], language), 2,
-                 selected ? SDL_Color{24, 24, 39, 255}
-                          : SDL_Color{230, 235, 245, 255});
-    if (selected) {
-      drawFocusRing(renderer, xs[static_cast<std::size_t>(option)],
-                    kQuitButtonY, kQuitButtonWidth, kQuitButtonHeight, 18.0f,
-                    1.0f);
-    }
-  }
+  drawConfirmFrame(renderer, kQuitLayout, tr(TextId::QuitConfirmTitle, language),
+                   tr(TextId::QuitConfirmBody, language), accent, 160);
+  drawChoiceButtons(renderer, kQuitLayout.buttons,
+                    {tr(TextId::Cancel, language), tr(TextId::Quit, language)},
+                    choice, accent);
   const std::vector<Hint> footer{
       {tr(TextId::Cancel, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, kQuitDialogX + kQuitDialogWidth - 36.0f,
-              kQuitDialogY + kQuitDialogHeight - 46.0f, footer, accent);
+  drawHintRow(renderer, kQuitLayout.footer.right(), kQuitLayout.footer.y,
+              footer, accent);
 }
 
 int quitConfirmChoiceAt(float x, float y) {
-  if (y < kQuitButtonY || y > kQuitButtonY + kQuitButtonHeight)
-    return -1;
-  if (x >= kQuitCancelX && x <= kQuitCancelX + kQuitButtonWidth)
-    return 0;
-  if (x >= kQuitConfirmX && x <= kQuitConfirmX + kQuitButtonWidth)
-    return 1;
-  return -1;
+  return kQuitLayout.buttons.hit(x, y);
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

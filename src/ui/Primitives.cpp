@@ -709,6 +709,80 @@ int textCenteredY(const std::string &value, int centerY, int scale) {
   return static_cast<int>(std::lround((top - gOffsetY) / gScale));
 }
 
+std::string fitText(std::string value, int width, int scale) {
+  if (width <= 0)
+    return {};
+  if (textWidth(value, scale) <= width)
+    return value;
+  const std::string suffix = "...";
+  if (textWidth(suffix, scale) > width)
+    return {};
+  while (!value.empty() && textWidth(value + suffix, scale) > width) {
+    std::size_t start = value.size() - 1;
+    while (start > 0 &&
+           (static_cast<unsigned char>(value[start]) & 0xc0) == 0x80)
+      --start;
+    value.resize(start);
+  }
+  return value + suffix;
+}
+
+void drawButton(SDL_Renderer *renderer, Rect bounds, float radius,
+                const std::string &label, int scale, SDL_Color plate,
+                SDL_Color labelColor, bool focused, float focusOpacity) {
+  drawButton(renderer, bounds.x, bounds.y, bounds.w, bounds.h, radius,
+             fitText(label, static_cast<int>(bounds.w - 24), scale), scale,
+             plate, {0, 0, 0, 0}, labelColor, focused, focusOpacity);
+}
+
+void drawSelectionPlate(SDL_Renderer *renderer, Rect bounds, float radius,
+                        SDL_Color base, SDL_Color wash, bool selected,
+                        bool focused, float focusOpacity) {
+  rounded(renderer, bounds.x, bounds.y, bounds.w, bounds.h, radius, base);
+  if (selected) {
+    if (focused)
+      wash.a = static_cast<Uint8>(std::lround(wash.a *
+                    std::clamp(focusOpacity, 0.0f, 1.0f)));
+    rounded(renderer, bounds.x, bounds.y, bounds.w, bounds.h, radius, wash);
+  }
+  if (focused)
+    drawFocusRing(renderer, bounds.x, bounds.y, bounds.w, bounds.h, radius,
+                  focusOpacity);
+}
+
+void drawPanel(SDL_Renderer *renderer, Rect bounds, float radius,
+               SDL_Color plate, Rect shadow, SDL_Color shadowColor) {
+  rounded(renderer, shadow.x, shadow.y, shadow.w, shadow.h, radius, shadowColor);
+  rounded(renderer, bounds.x, bounds.y, bounds.w, bounds.h, radius, plate);
+}
+
+void drawConfirmFrame(SDL_Renderer *renderer, const ConfirmLayout &layout,
+                      const std::string &title, const std::string &body,
+                      SDL_Color accent, Uint8 scrimAlpha) {
+  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, scrimAlpha});
+  drawPanel(renderer, layout.bounds, 28, {12, 21, 37, 245},
+            layout.bounds.translated(8, 10), {0, 0, 0, 70});
+  const Rect heading = layout.heading;
+  rounded(renderer, heading.x, heading.y, 4, heading.h, 2, accent);
+  text(renderer, heading.x + 20, heading.y + 2,
+       fitText(title, static_cast<int>(heading.w - 20), 2), 2, accent);
+  text(renderer, layout.body.x, layout.body.y,
+       fitText(body, static_cast<int>(layout.body.w), 2), 2,
+       {206, 216, 232, 255});
+}
+
+void drawChoiceButtons(SDL_Renderer *renderer, const LinearLayout &layout,
+                       const std::array<std::string, 2> &labels, int choice,
+                       SDL_Color accent, SDL_Color idlePlate,
+                       SDL_Color idleText) {
+  for (int index = 0; index < 2; ++index) {
+    const bool selected = choice == index;
+    drawButton(renderer, layout.item(index), 18, labels[index], 2,
+               selected ? accent : idlePlate,
+               selected ? SDL_Color{24, 24, 39, 255} : idleText, selected);
+  }
+}
+
 void drawFocusablePlate(SDL_Renderer *renderer, float x, float y, float width,
                         float height, float radius, SDL_Color plate,
                         bool focused, float focusOpacity) {
@@ -924,12 +998,27 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
                            : SDL_Color{232, 238, 247, 255});
 }
 
-void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
-                 const std::vector<Hint> &hints, SDL_Color accent) {
+std::vector<Rect> hintLayout(float rightX, float y, const std::vector<Hint> &hints) {
+  std::vector<Rect> result;
+  result.reserve(hints.size());
   float x = rightX - static_cast<float>(hintRowWidth(hints));
   for (const Hint &hint : hints) {
-    drawHint(renderer, x, y, hint, accent);
-    x += static_cast<float>(hintWidth(hint)) + kHintGap;
+    const float width = static_cast<float>(hintWidth(hint));
+    result.push_back({x, y, width, kHintChipHeight});
+    x += width + kHintGap;
+  }
+  return result;
+}
+
+void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
+                 const std::vector<Hint> &hints, SDL_Color accent,
+                 int focused, float focusOpacity) {
+  const auto layout = hintLayout(rightX, y, hints);
+  for (std::size_t index = 0; index < hints.size(); ++index) {
+    const Rect bounds = layout[index];
+    if (static_cast<int>(index) == focused)
+      drawHintFocus(renderer, bounds.x, bounds.y, hints[index], focusOpacity);
+    drawHint(renderer, bounds.x, bounds.y, hints[index], accent);
   }
 }
 

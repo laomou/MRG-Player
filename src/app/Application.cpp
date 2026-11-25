@@ -2072,7 +2072,8 @@ int Application::run(int argc, char **argv) {
             }
           } else if (event.button.button == SDL_BUTTON_LEFT &&
                      managementDialog == ui::ManagementDialog::Info) {
-            managementDialog = ui::ManagementDialog::Menu;
+            if (ui::managementInfoBackAt(x, y))
+              managementDialog = ui::ManagementDialog::Menu;
           } else if (event.button.button == SDL_BUTTON_LEFT) {
             const int choice = ui::confirmationChoiceAt(x, y);
             if (choice >= 0) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/Game.hpp"
+#include "ui/Layout.hpp"
 
 #include <SDL.h>
 
@@ -64,6 +65,8 @@ void fadeBottomRounded(SDL_Renderer *renderer, float x, float y, float width,
 void drawTexture(SDL_Renderer *renderer, SDL_Texture *texture, float x, float y,
                  float width, float height);
 int textWidth(const std::string &value, int scale);
+// Truncates at UTF-8 codepoint boundaries; even the ellipsis must fit.
+std::string fitText(std::string value, int width, int scale);
 void text(SDL_Renderer *renderer, int x, int y, const std::string &value,
           int scale, SDL_Color color);
 void centeredText(SDL_Renderer *renderer, int centerX, int y,
@@ -95,6 +98,24 @@ void drawButton(SDL_Renderer *renderer, float x, float y, float width,
                 float height, float radius, const std::string &label, int scale,
                 SDL_Color plate, SDL_Color rim, SDL_Color labelColor,
                 bool focused, float focusOpacity = 1.0f);
+// Rect-based controls use the exact geometry handed to hit testing.
+void drawButton(SDL_Renderer *renderer, Rect bounds, float radius,
+                const std::string &label, int scale, SDL_Color plate,
+                SDL_Color labelColor, bool focused, float focusOpacity = 1.0f);
+void drawSelectionPlate(SDL_Renderer *renderer, Rect bounds, float radius,
+                        SDL_Color base, SDL_Color wash, bool selected,
+                        bool focused, float focusOpacity = 1.0f);
+void drawPanel(SDL_Renderer *renderer, Rect bounds, float radius,
+               SDL_Color plate, Rect shadow, SDL_Color shadowColor);
+// Simple confirmations share a frame and two buttons, not their business action.
+void drawConfirmFrame(SDL_Renderer *renderer, const ConfirmLayout &layout,
+                      const std::string &title, const std::string &body,
+                      SDL_Color accent, Uint8 scrimAlpha);
+void drawChoiceButtons(SDL_Renderer *renderer, const LinearLayout &layout,
+                       const std::array<std::string, 2> &labels, int choice,
+                       SDL_Color accent,
+                       SDL_Color idlePlate = {255, 255, 255, 18},
+                       SDL_Color idleText = {230, 235, 245, 255});
 // wallpaper, when present, replaces the drawn skyline with a soft version of
 // the selected game's cover, dimmed so the shelf stays readable.
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
@@ -121,8 +142,10 @@ void drawHint(SDL_Renderer *renderer, float x, float y, const Hint &hint,
               SDL_Color accent);
 // Lays a legend row out so its last chip ends at rightX, keeping footers off
 // the top edge where they would compete with the screen title.
+std::vector<Rect> hintLayout(float rightX, float y, const std::vector<Hint> &hints);
 void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
-                 const std::vector<Hint> &hints, SDL_Color accent);
+                 const std::vector<Hint> &hints, SDL_Color accent,
+                 int focused = -1, float focusOpacity = 1.0f);
 // The focus ring never takes the accent of the game or the section on
 // screen: it answers "where do the keys go", which is a property of the
 // system, so it stays one colour everywhere.
