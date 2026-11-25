@@ -345,7 +345,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity) {
+                  float focusOpacity, bool refreshFocused) {
   // The background no longer borrows a game's palette: one accent for every
   // screen, so the picture never changes colour when the library does.
   Game game{};
@@ -353,8 +353,11 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   game.bottom = {9, 17, 36, 255};
   game.accent = accentColor(settings.accent);
   // Only one control carries the ring: the rail while the page is being
-  // chosen, a setting row once the keys have moved into the page.
-  const bool contentFocused = !railFocused;
+  // chosen, a row once the keys have moved into the page. The core page's
+  // refresh button is a control of its own, so while it owns the keys no row
+  // draws a ring.
+  const bool contentFocused = !railFocused && !refreshFocused;
+  const bool refreshRing = !railFocused && refreshFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game, time);
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 8, 20, 128});
@@ -545,9 +548,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
             static_cast<float>(kCoreRefreshHeight), 11.0f,
             SDL_Color{26, 42, 64, 235});
     const std::string refresh = tr(TextId::RefreshCores, language);
+    // The TTF ink starts a few pixels below the requested origin, so the label
+    // sits at +7 rather than half the button height to read as centred.
     text(renderer,
          kCoreRefreshX + (kCoreRefreshWidth - textWidth(refresh, 1)) / 2,
-         kCoreRefreshY + 12, refresh, 1, {232, 238, 246, 255});
+         kCoreRefreshY + 7, refresh, 1, {232, 238, 246, 255});
+    if (refreshRing)
+      drawFocusRing(renderer, static_cast<float>(kCoreRefreshX),
+                    static_cast<float>(kCoreRefreshY),
+                    static_cast<float>(kCoreRefreshWidth),
+                    static_cast<float>(kCoreRefreshHeight), 11.0f, focusOpacity);
 
     // Column captions: the status column is right aligned to the same edge the
     // pills below it use.
@@ -628,9 +638,11 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     const bool installedRow =
         row >= 0 && row < static_cast<int>(cores.size()) &&
         cores[static_cast<std::size_t>(row)].installed;
-    footer.push_back({tr(installedRow ? TextId::CoreDetails : TextId::InstallCore,
-                         language),
-                      prompts.confirm, true});
+    const TextId action =
+        refreshFocused
+            ? TextId::RefreshCores
+            : (installedRow ? TextId::CoreDetails : TextId::InstallCore);
+    footer.push_back({tr(action, language), prompts.confirm, true});
   } else {
     footer.push_back(
         {tr(TextId::ChangeControl, language), prompts.change, true});

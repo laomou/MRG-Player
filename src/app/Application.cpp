@@ -404,6 +404,9 @@ int Application::run(int argc, char **argv) {
                             static_cast<int>(gameLibrary.slotCount()) - 1);
   int settingCategory = 0;
   int settingRow = 0;
+  // The core page's refresh button is reached by pressing up from the first
+  // row; while it holds the keys the rows draw no focus ring.
+  bool coreRefreshFocused = false;
   bool rewindHeld = false;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
   const Uint64 smokeSettingsStart = SDL_GetTicks64();
@@ -684,6 +687,7 @@ int Application::run(int argc, char **argv) {
     const int count = ui::settingCategoryCount();
     settingCategory = (settingCategory + direction + count) % count;
     settingRow = 0;
+    coreRefreshFocused = false;
     if (settingCategory == 5)
       refreshCoreRows();
   };
@@ -691,6 +695,7 @@ int Application::run(int argc, char **argv) {
   // page is populated whether it was reached by key, pad, or mouse.
   auto openSettings = [&] {
     refreshCoreRows();
+    coreRefreshFocused = false;
     settingsRailFocus = true;
     screen = Screen::Settings;
   };
@@ -1895,21 +1900,34 @@ int Application::run(int argc, char **argv) {
             refreshCoreRows();
           } else if (key == SDLK_LEFT) {
             settingsRailFocus = true;
+            coreRefreshFocused = false;
           } else if (key == SDLK_RIGHT) {
             settingsRailFocus = false;
           } else if (key == SDLK_UP) {
-            if (settingsRailFocus)
+            if (settingsRailFocus) {
               changeCategory(-1);
-            else
+            } else if (settingCategory == 5 && settingRow == 0 &&
+                       !coreRefreshFocused) {
+              // Up from the first platform reaches the refresh button sitting
+              // on the heading line, so the button is a real keyboard target.
+              coreRefreshFocused = true;
+            } else {
+              coreRefreshFocused = false;
               settingRow = (settingRow - 1 + rowCount) % rowCount;
+            }
           } else if (key == SDLK_DOWN) {
-            if (settingsRailFocus)
+            if (settingsRailFocus) {
               changeCategory(1);
-            else
+            } else if (coreRefreshFocused) {
+              coreRefreshFocused = false;
+            } else {
               settingRow = (settingRow + 1) % rowCount;
+            }
           } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
             if (settingsRailFocus) {
               settingsRailFocus = false;
+            } else if (coreRefreshFocused) {
+              refreshCoreRows();
             } else if (settingCategory == 5) {
               activateCoreRow(settingRow);
             } else if (settingCategory == 3 && settingRow >= 4 &&
@@ -2011,16 +2029,22 @@ int Application::run(int argc, char **argv) {
           const int clickedCategory = ui::settingsCategoryAt(x, y);
           settingCategory = clickedCategory;
           settingRow = 0;
+          coreRefreshFocused = false;
           settingsRailFocus = false;
           if (clickedCategory == 5)
             refreshCoreRows();
         } else if (settingCategory == 5 && ui::coreRefreshAt(x, y)) {
+          // Clicking the button parks the cursor on it, so a following Enter
+          // repeats the refresh instead of opening the platform below.
+          coreRefreshFocused = true;
+          settingsRailFocus = false;
           refreshCoreRows();
         } else {
           const int clickedRow =
               ui::settingsRowAt(settingCategory, x, y);
           if (clickedRow >= 0) {
             settingRow = clickedRow;
+            coreRefreshFocused = false;
             settingsRailFocus = false;
             if (settingCategory == 3 && settingRow >= 4 &&
                 settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
@@ -2134,21 +2158,32 @@ int Application::run(int argc, char **argv) {
               settingsRailFocus = true;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT) {
             settingsRailFocus = true;
+            coreRefreshFocused = false;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT) {
             settingsRailFocus = false;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-            if (settingsRailFocus)
+            if (settingsRailFocus) {
               changeCategory(-1);
-            else
+            } else if (settingCategory == 5 && settingRow == 0 &&
+                       !coreRefreshFocused) {
+              coreRefreshFocused = true;
+            } else {
+              coreRefreshFocused = false;
               settingRow = (settingRow - 1 + rowCount) % rowCount;
+            }
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-            if (settingsRailFocus)
+            if (settingsRailFocus) {
               changeCategory(1);
-            else
+            } else if (coreRefreshFocused) {
+              coreRefreshFocused = false;
+            } else {
               settingRow = (settingRow + 1) % rowCount;
+            }
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             if (settingsRailFocus) {
               settingsRailFocus = false;
+            } else if (coreRefreshFocused) {
+              refreshCoreRows();
             } else if (settingCategory == 5) {
               activateCoreRow(settingRow);
             } else if (settingCategory == 3 && settingRow >= 4 &&
@@ -2349,7 +2384,7 @@ int Application::run(int argc, char **argv) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
-                       settingsRailFocus, focusOpacity);
+                       settingsRailFocus, focusOpacity, coreRefreshFocused);
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
