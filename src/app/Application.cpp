@@ -37,6 +37,7 @@
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
+#include "ui/Theme.hpp"
 #include "util/PngWriter.hpp"
 
 namespace launcher {
@@ -415,6 +416,7 @@ int Application::run(int argc, char **argv) {
   bool smokeHomeQuit = false;
   bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
+  bool smokeSettingsTheme = false;
   bool smokeSettingsAbout = false;
 #endif
   std::vector<ui::CoreRow> coreRows;
@@ -2305,31 +2307,31 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Pause) {
       if (activeRuntime) {
         activeRuntime->render(renderer);
+        const SDL_Color accent = ui::accentColor(settings.accent);
         if (pauseCoreOptionsPanel) {
           ui::drawPauseCoreOptionsPanel(renderer, pauseCoreOptionCursor,
                                         pauseCoreOptionScroll,
                                         activeRuntime->coreOptions(),
-                                        currentLanguage(), prompts);
+                                        currentLanguage(), prompts, accent);
         } else if (pauseVideoPanel) {
           ui::drawPauseVideoPanel(renderer, pauseVideoRow, pauseVideo,
-                                  currentLanguage(), prompts);
+                                  currentLanguage(), prompts, accent);
         } else {
           ui::drawPauseMenu(renderer, activeGameTitle, pauseAction, stateSlot,
                             stateSlots, pauseFeedback, pauseFeedbackUntil,
-                            currentLanguage(), prompts);
+                            currentLanguage(), prompts, accent);
         }
         if (pauseConfirmingPower)
           ui::drawPowerCycleConfirm(renderer, pausePowerChoice,
-                                    currentLanguage(), prompts);
+                                    currentLanguage(), prompts, accent);
       }
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity, &coverCache);
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
-      ui::drawSettings(renderer, settings, settingCategory, settingRow,
-                       selectedGame % static_cast<int>(kGameCount), time,
+      ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
                        settingsRailFocus, focusOpacity);
@@ -2337,7 +2339,7 @@ int Application::run(int argc, char **argv) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity, &coverCache);
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],
@@ -2346,10 +2348,8 @@ int Application::run(int argc, char **argv) {
     }
 
     if (quitConfirm) {
-      const Game &quitStyle = games()[static_cast<std::size_t>(
-          selectedGame % static_cast<int>(kGameCount))];
       ui::drawQuitConfirm(renderer, quitChoice, currentLanguage(), prompts,
-                          quitStyle.accent);
+                          ui::accentColor(settings.accent));
     }
 
     if ((screen == Screen::Game || screen == Screen::Pause ||
@@ -2432,8 +2432,13 @@ int Application::run(int argc, char **argv) {
         smokeSettingsCores = true;
         settingCategory = 6;
         settingRow = 0;
-      } else if (smokeSettingsCores && !smokeSettingsAbout &&
-                 elapsed >= 3600) {
+      } else if (smokeSettingsCores && !smokeSettingsTheme && elapsed >= 3400) {
+        captureFrame(renderer, "settings-theme-screenshot.bmp");
+        smokeSettingsTheme = true;
+        settingCategory = 7;
+        settingRow = 0;
+      } else if (smokeSettingsTheme && !smokeSettingsAbout &&
+                 elapsed >= 3800) {
         captureFrame(renderer, "settings-about-screenshot.bmp");
         smokeSettingsAbout = true;
       }

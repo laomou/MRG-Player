@@ -193,6 +193,16 @@ enum class TextId {
   CoreOptions,
   CoreOptionsEmpty,
   ResetCoreOptions,
+  Theme,
+  ThemeDescription,
+  AccentColour,
+  AccentDescription,
+  AccentTeal,
+  AccentBlue,
+  AccentPurple,
+  AccentLime,
+  AccentOrange,
+  AccentYellow,
   Count
 };
 

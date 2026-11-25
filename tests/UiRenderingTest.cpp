@@ -3,6 +3,7 @@
 #include "ui/PauseMenuScreen.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
+#include "ui/Theme.hpp"
 #include <SDL.h>
 #include <cmath>
 #include <cstdlib>
@@ -67,8 +68,10 @@ int main(int argc, char **argv) {
   // category rail and the rows of each page.
   check(settingsCategoryAt(200, 389 + 2 * 52 + 10) == 2,
         "The category rail maps a click to its entry");
-  check(settingsCategoryAt(200, 770) == -1,
+  check(settingsCategoryAt(200, 810) == -1,
         "Below the rail activates nothing");
+  check(settingsCategoryAt(200, 770) == 7,
+        "The last entry on the rail is about");
   check(settingsCategoryAt(500, 420) == -1,
         "The settings body must not activate categories");
   check(settingsRowAt(1, 1200, 728 + 10) == 3,
@@ -79,7 +82,15 @@ int main(int argc, char **argv) {
         "Audio rows map to their own index");
   check(settingsRowAt(4, 300, 420) == -1,
         "Outside the row track activates nothing");
-  check(settingsRowAt(6, 1200, 420) == 0, "The about row is clickable");
+  check(settingsRowAt(6, 1200, 420) == 0, "The theme row is clickable");
+  check(settingsRowAt(7, 1200, 420) == 0, "The about row is clickable");
+  const SDL_Color teal = accentColor(0);
+  check(teal.r == 86 && teal.g == 223 && teal.b == 202,
+        "The default accent is the logo teal");
+  check(accentColor(kAccentCount).b == teal.b,
+        "The accent index wraps instead of falling off the table");
+  check(settingCategoryCount() == 8,
+        "Theme sits between the cores page and about");
   check(powerCycleChoiceAt(600, 530) == 0,
         "Power-cycle dialog defaults to cancel");
   check(powerCycleChoiceAt(900, 530) == 1, "Power-cycle confirmation target");

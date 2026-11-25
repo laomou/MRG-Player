@@ -13,41 +13,10 @@
 namespace launcher::ui {
 namespace {
 
-// Card colours follow the console rather than the shelf position, so a game
-// keeps its card when the library order changes and a large library never
-// cycles back to a colour it has already used.
-struct CardPalette {
-  SDL_Color top;
-  SDL_Color bottom;
-  SDL_Color accent;
-};
-
-CardPalette paletteFor(game::GamePlatform platform) {
-  switch (platform) {
-  case game::GamePlatform::Nes:
-    return {{31, 42, 68, 255}, {9, 17, 36, 255}, {86, 223, 202, 255}};
-  case game::GamePlatform::Gba:
-    return {{35, 43, 70, 255}, {9, 17, 36, 255}, {95, 181, 255, 255}};
-  case game::GamePlatform::Snes:
-    return {{42, 39, 69, 255}, {10, 17, 37, 255}, {181, 135, 255, 255}};
-  case game::GamePlatform::GameBoy:
-    return {{36, 47, 66, 255}, {9, 18, 35, 255}, {153, 224, 92, 255}};
-  case game::GamePlatform::Genesis:
-    return {{45, 40, 65, 255}, {11, 17, 36, 255}, {255, 136, 92, 255}};
-  case game::GamePlatform::Unknown:
-    break;
-  }
-  return {{39, 42, 68, 255}, {9, 17, 38, 255}, {214, 224, 241, 255}};
-}
-
-Game paletteStyle(game::GamePlatform platform) {
-  const CardPalette palette = paletteFor(platform);
-  Game style{};
-  style.top = palette.top;
-  style.bottom = palette.bottom;
-  style.accent = palette.accent;
-  return style;
-}
+// One accent for every screen, so the cards step back and let the box art say
+// which console a game came from; only the corner badge wears the accent.
+constexpr SDL_Color kCardTop{31, 42, 68, 255};
+constexpr SDL_Color kCardBottom{9, 17, 36, 255};
 
 // Two or three letters, so the badge fits the narrowest card.
 const char *platformBadge(game::GamePlatform platform) {
@@ -151,11 +120,8 @@ void drawTitleScrim(SDL_Renderer *renderer, float x, float y, float width,
 }
 
 void drawCard(SDL_Renderer *renderer, float column, bool selected,
-              bool focused, float focusOpacity,
+              bool focused, float focusOpacity, SDL_Color accent,
               const library::GameEntry *entry, CoverSource *covers) {
-  const game::GamePlatform platform =
-      entry != nullptr ? entry->platform : game::GamePlatform::Unknown;
-  const CardPalette palette = paletteFor(platform);
   const CardBox box = cardBox(column, selected);
   const float x = box.x;
   // The selected card sits still: the highlight does the work. A vertical
@@ -187,9 +153,8 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
     SDL_SetTextureAlphaMod(art, 255);
   } else {
     gradientRounded(renderer, x, y, width, height, radius,
-                    {palette.top.r, palette.top.g, palette.top.b, alpha},
-                    {palette.bottom.r, palette.bottom.g, palette.bottom.b,
-                     alpha});
+                    {kCardTop.r, kCardTop.g, kCardTop.b, alpha},
+                    {kCardBottom.r, kCardBottom.g, kCardBottom.b, alpha});
   }
 
   const float margin = 12.0f * unit;
@@ -230,8 +195,7 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
   const float badgeY = y + margin;
   rounded(renderer, badgeX, badgeY, badgeWidth, badgeHeight,
           badgeHeight * 0.5f,
-          {palette.accent.r, palette.accent.g, palette.accent.b,
-           static_cast<Uint8>(alpha * 0.85f)});
+          {accent.r, accent.g, accent.b, static_cast<Uint8>(alpha * 0.85f)});
   centeredGlyph(renderer, static_cast<int>(badgeX + badgeWidth * 0.5f),
                 static_cast<int>(badgeY + badgeHeight * 0.5f), badgeLabel, 1,
                 {10, 15, 28, alpha});
@@ -279,7 +243,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity, CoverSource *covers) {
+              float focusOpacity, SDL_Color accent, CoverSource *covers) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -289,11 +253,12 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       selectedGame < static_cast<int>(gameLibrary.entries().size())
           ? &gameLibrary.entries()[static_cast<std::size_t>(selectedGame)]
           : nullptr;
-  // The launcher background belongs to the console of the selected game, so it
-  // is stable instead of rotating with the shelf position.
-  const Game style = paletteStyle(selectedEntry != nullptr
-                                      ? selectedEntry->platform
-                                      : game::GamePlatform::Unknown);
+  // The background is the launcher's own, not the selected game's: one accent
+  // paints every screen so the chrome never changes colour with the library.
+  Game style{};
+  style.top = kCardTop;
+  style.bottom = kCardBottom;
+  style.accent = accent;
 
   SDL_Texture *wallpaper =
       covers != nullptr && selectedEntry != nullptr
@@ -368,10 +333,10 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
             ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
             : nullptr;
     drawCard(renderer, static_cast<float>(i) - rowOffset, false, false,
-             focusOpacity, entry, covers);
+             focusOpacity, accent, entry, covers);
   }
   drawCard(renderer, static_cast<float>(selectedGame) - rowOffset, true,
-           cardsFocused, focusOpacity, selectedEntry, covers);
+           cardsFocused, focusOpacity, accent, selectedEntry, covers);
   clearClipRect(renderer);
 
   if (selectedEntry != nullptr) {

@@ -4,6 +4,7 @@
 #include "i18n/Localization.hpp"
 #include "model/Game.hpp"
 #include "ui/Primitives.hpp"
+#include "ui/Theme.hpp"
 
 #include <algorithm>
 #include <array>
@@ -22,7 +23,7 @@ using i18n::Language;
 using i18n::TextId;
 using i18n::tr;
 
-constexpr int kCategoryCount = 7;
+constexpr int kCategoryCount = 8;
 
 // Geometry of the dense controller page, shared by drawing and hit testing.
 constexpr int kCompactStartY = 400;
@@ -55,7 +56,7 @@ TextId categoryText(int category) {
   constexpr std::array<TextId, kCategoryCount> ids{
       TextId::General,    TextId::Display,     TextId::Audio,
       TextId::Controller, TextId::GameLibrary, TextId::Cores,
-      TextId::About};
+      TextId::Theme,      TextId::About};
   return ids[static_cast<std::size_t>(
       std::clamp(category, 0, kCategoryCount - 1))];
 }
@@ -65,7 +66,7 @@ TextId categoryDescription(int category) {
       TextId::GeneralDescription, TextId::DisplayDescription,
       TextId::AudioDescription,   TextId::ControllerDescription,
       TextId::LibraryDescription, TextId::CoresDescription,
-      TextId::AboutDescription};
+      TextId::ThemeDescription,   TextId::AboutDescription};
   return ids[static_cast<std::size_t>(
       std::clamp(category, 0, kCategoryCount - 1))];
 }
@@ -134,6 +135,14 @@ TextId aspectText(int aspect) {
   if (aspect == 2)
     return TextId::AspectPixels8x7;
   return TextId::AspectPixel;
+}
+
+TextId accentText(int accent) {
+  constexpr std::array<TextId, kAccentCount> ids{
+      TextId::AccentTeal, TextId::AccentBlue, TextId::AccentPurple,
+      TextId::AccentLime, TextId::AccentOrange, TextId::AccentYellow};
+  return ids[static_cast<std::size_t>(
+      std::clamp(accent, 0, kAccentCount - 1))];
 }
 
 TextId promptDeviceText(config::PromptDeviceMode mode) {
@@ -216,7 +225,7 @@ int generalPageRowAt(int x, int y) {
 }
 
 int settingsCategoryAt(float x, float y) {
-  if (x < 72 || x > 402 || y < 389 || y >= 753)
+  if (x < 72 || x > 402 || y < 389 || y >= 389 + kCategoryCount * 52)
     return -1;
   const int category = static_cast<int>((y - 389) / 52);
   return category < kCategoryCount ? category : -1;
@@ -282,6 +291,10 @@ void changeSetting(AppSettings &settings, int category, int row,
       settings.audioMuted = !settings.audioMuted;
     else
       settings.fastForwardAudio = (settings.fastForwardAudio + 1) % 2;
+  } else if (category == 6) {
+    if (row == 0)
+      settings.accent = (settings.accent + direction + kAccentCount) %
+                        kAccentCount;
   } else if (category == 3) {
     if (row == 0) {
       const int value =
@@ -303,13 +316,18 @@ void changeSetting(AppSettings &settings, int category, int row,
 }
 
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
-                  int category, int row, int selectedGame, float time,
+                  int category, int row, float time,
                   bool bindingCapture, std::string_view activeControllerName,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
                   float focusOpacity) {
-  const Game &game = games()[static_cast<std::size_t>(selectedGame)];
+  // The background no longer borrows a game's palette: one accent for every
+  // screen, so the picture never changes colour when the library does.
+  Game game{};
+  game.top = {31, 42, 68, 255};
+  game.bottom = {9, 17, 36, 255};
+  game.accent = accentColor(settings.accent);
   // Only one control carries the ring: the rail while the page is being
   // chosen, a setting row once the keys have moved into the page.
   const bool contentFocused = !railFocused;
@@ -327,7 +345,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   text(renderer, 72, 260, tr(TextId::SettingsSubtitle, language), 1,
        {173, 190, 207, 255});
 
-  rounded(renderer, 72, 334, 330, 424, 22, {5, 14, 31, 218});
+  rounded(renderer, 72, 334, 330, 470, 22, {5, 14, 31, 218});
   text(renderer, 103, 357, tr(TextId::Preferences, language), 1,
        {139, 160, 178, 255});
   for (int i = 0; i < kCategoryCount; ++i) {
@@ -511,6 +529,15 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                  {tr(TextId::RemoveCore, language), "DEL", false},
                  {tr(TextId::RefreshCores, language), "R", false}},
                 game.accent);
+  } else if (category == 6) {
+    const std::string accentName = tr(accentText(settings.accent), language);
+    drawSettingRow(renderer, 410, row == 0, contentFocused && row == 0,
+                   tr(TextId::AccentColour, language),
+                   tr(TextId::AccentDescription, language), accentName,
+                   game.accent, 92, focusOpacity);
+    // A swatch so the choice reads as a colour and not only a name.
+    circle(renderer, 1420 - textWidth(accentName, 2) - 24, 456, 10,
+           accentColor(settings.accent));
   } else if (category == 4) {
     drawSettingRow(renderer, 410, true, contentFocused,
                    tr(TextId::RomDirectory, language),

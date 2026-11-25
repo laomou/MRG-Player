@@ -27,6 +27,8 @@ struct AppSettings {
   bool rewind = true;
   // Frames the picture is allowed to run ahead of the input, 0 to 3.
   int runahead = 0;
+  // Accent colour shared by every screen, 0 to 5 (ui::kAccentCount).
+  int accent = 0;
   int selectedGame = 2;
   config::PromptDeviceMode promptDevice = config::PromptDeviceMode::Auto;
   config::ControllerStyle controllerStyle = config::ControllerStyle::Auto;

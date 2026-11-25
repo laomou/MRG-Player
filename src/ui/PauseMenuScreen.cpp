@@ -59,15 +59,15 @@ void drawPauseMenu(
     int stateSlot,
     const std::array<StateSlotView, kStateSlotCount> &slots,
     std::string_view feedback, Uint64 feedbackUntil, i18n::Language language,
-    const config::InputPrompts &prompts) {
+    const config::InputPrompts &prompts, SDL_Color accent) {
   const StateSlotView &current = slots[static_cast<std::size_t>(
       std::clamp(stateSlot, 0, kStateSlotCount - 1))];
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 64});
   rounded(renderer, 968, 72, 568, 772, 28, {0, 0, 0, 45});
   rounded(renderer, 976, 64, 552, 772, 28, {12, 21, 37, 225});
-  rounded(renderer, 1012, 104, 4, 32, 2, {255, 211, 101, 255});
+  rounded(renderer, 1012, 104, 4, 32, 2, accent);
   text(renderer, 1032, 106, tr(TextId::PauseTitle, language), 2,
-       {255, 211, 101, 255});
+       accent);
   text(renderer, 1012, 158, fitLine(std::string(gameTitle), 480, 3), 3,
        {245, 247, 252, 255});
   fill(renderer, 1012, 218, 480, 1, {255, 255, 255, 30});
@@ -77,7 +77,7 @@ void drawPauseMenu(
     const float x = 1012.0f + slot * 164.0f;
     const bool selected = slot == stateSlot;
     rounded(renderer, x, 276, 152, 58, 12,
-            selected ? SDL_Color{255, 211, 101, 255}
+            selected ? accent
                      : SDL_Color{255, 255, 255, 18});
     centeredText(
         renderer, static_cast<int>(x + 76), 291, std::to_string(slot + 1), 2,
@@ -94,7 +94,7 @@ void drawPauseMenu(
   // the slot heading row so it never crowds the action list.
   drawHintRow(renderer, 1492.0f, 234.0f,
               {{tr(TextId::FrameStep, language), prompts.frameStep, false}},
-              {255, 211, 101, 255});
+              accent);
 
   // Thumbnail card for the focused slot, parked over the dimmed game picture.
   if (current.present) {
@@ -121,7 +121,7 @@ void drawPauseMenu(
     if (!current.playTime.empty()) {
       text(renderer, static_cast<int>(kCardX + 10.0f),
            static_cast<int>(kCardY + 280.0f), current.playTime, 1,
-           {255, 211, 101, 255});
+           accent);
     }
   }
   const std::array<TextId, kPauseActionCount> labels{
@@ -134,13 +134,13 @@ void drawPauseMenu(
     const float y = kActionY + action * kActionStep;
     const bool selected = action == selectedAction;
     rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 16,
-            selected ? SDL_Color{255, 211, 101, 255}
+            selected ? accent
                      : SDL_Color{255, 255, 255, 16});
     circle(renderer, 1048, static_cast<int>(y + 22), 14,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
     centeredGlyph(renderer, 1048, static_cast<int>(y + 22), glyphs[action], 2,
-                  selected ? SDL_Color{255, 211, 101, 255}
+                  selected ? accent
                            : SDL_Color{210, 218, 232, 255});
     text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
          2,
@@ -153,12 +153,12 @@ void drawPauseMenu(
   const std::vector<Hint> footer{
       {tr(TextId::ResumeGame, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
+  drawHintRow(renderer, 1492.0f, 806.0f, footer, accent);
 
   if (SDL_GetTicks64() < feedbackUntil && !feedback.empty()) {
     rounded(renderer, 180, 760, 620, 58, 18, {3, 8, 20, 245});
     centeredText(renderer, 490, 776, std::string(feedback), 2,
-                 {255, 211, 101, 255});
+                 accent);
   }
 }
 
@@ -175,16 +175,17 @@ int pauseSlotAt(float x, float y) {
 
 void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
                            i18n::Language language,
-                           const config::InputPrompts &prompts) {
+                           const config::InputPrompts &prompts,
+                           SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 150});
   rounded(renderer, kConfirmX + 8, kConfirmY + 10, kConfirmWidth,
           kConfirmHeight, 28, {0, 0, 0, 70});
   rounded(renderer, kConfirmX, kConfirmY, kConfirmWidth, kConfirmHeight, 28,
           {12, 21, 37, 245});
   rounded(renderer, kConfirmX + 36, kConfirmY + 40, 4, 32, 2,
-          {255, 211, 101, 255});
+          accent);
   text(renderer, kConfirmX + 56, kConfirmY + 42,
-       tr(TextId::PowerCycleTitle, language), 2, {255, 211, 101, 255});
+       tr(TextId::PowerCycleTitle, language), 2, accent);
   text(renderer, kConfirmX + 36, kConfirmY + 110,
        tr(TextId::PowerCycleBody, language), 2, {206, 216, 232, 255});
 
@@ -194,7 +195,7 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
     const bool selected = option == choice;
     rounded(renderer, xs[static_cast<std::size_t>(option)], kConfirmButtonY,
             kConfirmButtonWidth, kConfirmButtonHeight, 18,
-            selected ? SDL_Color{255, 211, 101, 255}
+            selected ? accent
                      : SDL_Color{255, 255, 255, 18});
     centeredText(renderer,
                  static_cast<int>(xs[static_cast<std::size_t>(option)] +
@@ -215,7 +216,7 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
   drawHintRow(renderer, kConfirmX + kConfirmWidth - 36.0f,
               kConfirmY + kConfirmHeight - 52.0f, footer,
-              {255, 211, 101, 255});
+              accent);
 }
 
 int powerCycleChoiceAt(float x, float y) {
@@ -241,13 +242,14 @@ int pauseVideoRowAt(float x, float y) {
 
 void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                          const PauseVideoState &video, i18n::Language language,
-                         const config::InputPrompts &prompts) {
+                         const config::InputPrompts &prompts,
+                         SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 64});
   rounded(renderer, 968, 72, 568, 772, 28, {0, 0, 0, 45});
   rounded(renderer, 976, 64, 552, 772, 28, {12, 21, 37, 225});
-  rounded(renderer, 1012, 104, 4, 32, 2, {255, 211, 101, 255});
+  rounded(renderer, 1012, 104, 4, 32, 2, accent);
   text(renderer, 1032, 106, tr(TextId::PauseTitle, language), 2,
-       {255, 211, 101, 255});
+       accent);
   text(renderer, 1012, 158, tr(TextId::GameDisplayTitle, language), 3,
        {245, 247, 252, 255});
   fill(renderer, 1012, 218, 480, 1, {255, 255, 255, 30});
@@ -271,7 +273,7 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
     const float y = kVideoRowY + index * kVideoRowStep;
     const bool selected = index == row;
     rounded(renderer, kActionX, y, kActionWidth, kVideoRowHeight, 14,
-            selected ? SDL_Color{255, 211, 101, 255}
+            selected ? accent
                      : SDL_Color{255, 255, 255, 16});
     text(renderer, 1032, static_cast<int>(y + 12), titles[index], 2,
          selected ? SDL_Color{24, 24, 39, 255}
@@ -279,7 +281,7 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
     text(renderer, 1472 - textWidth(values[index], 2),
          static_cast<int>(y + 12), values[index], 2,
          selected ? SDL_Color{24, 24, 39, 255}
-                  : SDL_Color{255, 211, 101, 255});
+                  : accent);
     if (index + 1 == kPauseVideoRowCount) {
       text(renderer, 1032, static_cast<int>(y + 42),
            tr(TextId::UseGlobalDefaultsDescription, language), 1,
@@ -295,7 +297,7 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
   const std::vector<Hint> footer{
       {tr(TextId::Back, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
+  drawHintRow(renderer, 1492.0f, 806.0f, footer, accent);
 }
 
 int pauseActionAt(float x, float y) {
@@ -323,13 +325,14 @@ int pauseCoreOptionAt(float x, float y, int scroll) {
 void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
                                const runtime::CoreOptionList &options,
                                i18n::Language language,
-                               const config::InputPrompts &prompts) {
+                               const config::InputPrompts &prompts,
+                               SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 64});
   rounded(renderer, 968, 72, 568, 772, 28, {0, 0, 0, 45});
   rounded(renderer, 976, 64, 552, 772, 28, {12, 21, 37, 225});
-  rounded(renderer, 1012, 104, 4, 32, 2, {255, 211, 101, 255});
+  rounded(renderer, 1012, 104, 4, 32, 2, accent);
   text(renderer, 1032, 106, tr(TextId::PauseTitle, language), 2,
-       {255, 211, 101, 255});
+       accent);
   text(renderer, 1012, 158, tr(TextId::CoreOptions, language), 3,
        {245, 247, 252, 255});
   fill(renderer, 1012, 218, 480, 1, {255, 255, 255, 30});
@@ -351,7 +354,7 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
       const bool selected = index == cursor;
       const float y = kOptionRowY + row * kOptionRowStep;
       rounded(renderer, kActionX, y, kActionWidth, kOptionRowHeight, 14,
-              selected ? SDL_Color{255, 211, 101, 255}
+              selected ? accent
                        : SDL_Color{255, 255, 255, 16});
       const std::string label =
           i18n::coreOptionLabel(option.key, option.label, language);
@@ -368,7 +371,7 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
       text(renderer, 1472 - textWidth(value, 2), static_cast<int>(y + 15),
            value, 2,
            selected ? SDL_Color{24, 24, 39, 255}
-                    : SDL_Color{255, 211, 101, 255});
+                    : accent);
     }
     text(renderer, 1012, 660,
          std::to_string(cursor + 1) + " / " + std::to_string(total), 1,
@@ -377,11 +380,11 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
 
   drawHintRow(renderer, 1492.0f, 700.0f,
               {{tr(TextId::ResetCoreOptions, language), "R", false}},
-              {255, 211, 101, 255});
+              accent);
   const std::vector<Hint> footer{
       {tr(TextId::Back, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, 1492.0f, 806.0f, footer, {255, 211, 101, 255});
+  drawHintRow(renderer, 1492.0f, 806.0f, footer, accent);
 }
 
 } // namespace launcher::ui
