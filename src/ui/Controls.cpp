@@ -23,6 +23,23 @@ int ControlList::focusedId() const {
   return controls_[static_cast<std::size_t>(focus_)].id;
 }
 
+int ControlList::focusedRow() const {
+  if (focus_ < 0 || focus_ >= count())
+    return -1;
+  return controls_[static_cast<std::size_t>(focus_)].row;
+}
+
+bool ControlList::focusRow(int row) {
+  for (int index = 0; index < count(); ++index) {
+    const Control &control = controls_[static_cast<std::size_t>(index)];
+    if (control.row == row && control.enabled) {
+      focus_ = index;
+      return true;
+    }
+  }
+  return false;
+}
+
 void ControlList::focusIndex(int index) {
   if (index < 0 || index >= count())
     return;
@@ -106,19 +123,25 @@ bool FocusGrid::moveVertical(int direction) {
 bool FocusGrid::moveHorizontal(int direction) {
   if (direction == 0 || listCount() < 2)
     return false;
-  int index = active_;
-  for (int step = 0; step < listCount(); ++step) {
-    index = ((index + direction) % listCount() + listCount()) % listCount();
-    // An empty column has nothing to take the keys, so it is stepped over.
-    if (lists_[static_cast<std::size_t>(index)].count() == 0)
-      continue;
-    const bool changed = index != active_;
-    active_ = index;
-    if (lists_[static_cast<std::size_t>(active_)].focusedIndex() < 0)
-      lists_[static_cast<std::size_t>(active_)].focusFirstEnabled();
-    return changed;
+  const int target = active_ + direction;
+  if (target < 0 || target >= listCount())
+    return false;
+  // Page columns line up line by line, so a move between two of them only
+  // happens when the target really holds that line. That keeps the right key
+  // from dropping focus onto an unrelated row, and leaves the two lanes of the
+  // controller page reachable from each other. The rail has no lines of its
+  // own: crossing it hands the keys to the page and keeps the row it remembers.
+  if (active_ != 0 && target != 0) {
+    const int row = lists_[static_cast<std::size_t>(active_)].focusedRow();
+    if (row < 0 || !lists_[static_cast<std::size_t>(target)].focusRow(row))
+      return false;
+  } else if (lists_[static_cast<std::size_t>(target)].count() == 0) {
+    return false;
   }
-  return false;
+  active_ = target;
+  if (lists_[static_cast<std::size_t>(active_)].focusedIndex() < 0)
+    lists_[static_cast<std::size_t>(active_)].focusFirstEnabled();
+  return true;
 }
 
 int FocusGrid::focusedId() const {

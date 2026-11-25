@@ -243,6 +243,35 @@ int main(int argc, char **argv) {
           "The refresh button is the top of the core page column");
   }
   {
+    // The controller page draws its bindings in two lanes, so the right key has
+    // to reach the other half of a binding instead of doing nothing.
+    FocusGrid grid = settingsControls(3);
+    check(grid.listCount() == 3,
+          "The controller page is a rail and two lanes of rows");
+    check(grid.focusList(1) && grid.focusedId() == 0,
+          "Right from the rail lands on the first row, not on a binding");
+    grid.list(1).focusIndex(grid.list(1).indexOfId(4));
+    check(grid.focusedId() == 4, "The A binding is the first binding row");
+    check(grid.moveHorizontal(1) && grid.listIndex() == 2 &&
+              grid.focusedId() == 11,
+          "Right crosses to the binding drawn on the same line");
+    check(!grid.moveHorizontal(1),
+          "The right lane is the end of the page, not a third column");
+    check(grid.moveHorizontal(-1) && grid.focusedId() == 4,
+          "Left comes back to the binding it came from");
+    check(grid.moveHorizontal(-1) && grid.listIndex() == 0,
+          "Left from the left lane returns to the rail");
+    (void)grid.focusList(1);
+    grid.list(1).focusIndex(grid.list(1).indexOfId(2));
+    check(!grid.moveHorizontal(1),
+          "A full width row has no second half to cross into");
+    grid.list(1).focusIndex(grid.list(1).indexOfId(18));
+    check(!grid.moveHorizontal(1),
+          "The dead zone row has no second half either");
+    check(!settingsControls(3).list(2).focusRow(0),
+          "The right lane only holds binding lines");
+  }
+  {
     ControlList list;
     list.reset({{0, true}, {1, false}, {2, true}});
     check(list.focusedId() == 0, "The first enabled control takes focus");
