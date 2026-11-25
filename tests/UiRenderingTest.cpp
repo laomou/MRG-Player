@@ -20,6 +20,37 @@ void check(bool result, const char *message) {
 
 int main(int argc, char **argv) {
   using namespace launcher::ui;
+  const Rect area{10, 20, 100, 60};
+  check(area.contains(10, 20) && !area.contains(110, 20) &&
+            !area.contains(10, 80) && !Rect{}.contains(0, 0),
+        "Rect edges are half-open and empty rectangles are not targets");
+  const auto columns = equalColumns(area, 2, 12);
+  check(columns.item(0).w == 44 && columns.item(1).right() == area.right() &&
+            columns.hit(60, 40) == -1 && columns.hit(70, 40) == 1,
+        "Equal columns divide the available width without clickable gaps");
+  check(equalColumns(area, 0, 12).hit(10, 20) == -1 &&
+            !columns.item(-1).contains(10, 20) &&
+            !columns.item(2).contains(10, 20),
+        "Empty lists and out-of-range items cannot activate controls");
+  const auto fields = labelValueLayout(area, 1000, 12);
+  check(fields.label.w == 44 && fields.value.w == 44 &&
+            fields.label.right() + 12 == fields.value.x &&
+            fields.value.right() == area.right(),
+        "Long values cannot crowd out labels or escape the row");
+  const LinearLayout sections{{10, 20, 100, 20}, 4, 4, Axis::Vertical, 2, 12};
+  check(sections.item(2).y == 80 && sections.hit(50, 75) == -1 &&
+            sections.hit(50, 90) == 2 && sections.hit(50, 124) == -1,
+        "Section spacing participates in both layout and hit testing");
+  const auto panel = panelLayout(area, area.inset(5, 5, 5, 5), 10, 10, 4);
+  check(panel.content.y == panel.header.bottom() + 4 &&
+            panel.content.bottom() + 4 == panel.footer.y,
+        "Panel reserves non-overlapping header content and footer regions");
+  for (const auto dialog : {confirmLayout({420, 300, 760, 290}, 152, 100, 120, 20),
+                            confirmLayout({460, 300, 680, 320}, 170, 48, 24, 20)}) {
+    check(dialog.buttons.item(0).bottom() + 6 < dialog.footer.y &&
+              dialog.buttons.item(1).right() < dialog.bounds.right(),
+          "Confirmation focus rings and footers must not overlap");
+  }
   check(argc == 2, "Font path required");
   check(SDL_Init(SDL_INIT_VIDEO) == 0, SDL_GetError());
   check(initializeTextRenderer(argv[1]), "Font initialization failed");
@@ -32,6 +63,13 @@ int main(int argc, char **argv) {
   check(textWidth("A中文B", 2) ==
             textWidth("A", 2) + textWidth("中文", 2) + textWidth("B", 2),
         "Mixed-script measurement must match rendering runs");
+  check(fitText("中文A", 1000, 2) == "中文A" &&
+            fitText("中文A", 0, 2).empty() &&
+            fitText("中文A", textWidth("...", 2) - 1, 2).empty(),
+        "Text fitting handles empty and too-narrow regions");
+  const int fittedWidth = textWidth("中文...", 2);
+  check(fitText("中文混合ABCD", fittedWidth, 2) == "中文...",
+        "UTF-8 truncation removes whole codepoints and keeps ellipsis in bounds");
   for (int slot = 0; slot < kStateSlotCount; ++slot) {
     check(pauseSlotAt(1012 + slot * 164 + 76, 300) == slot, "Slot hit target");
     check(pauseSlotAt(1012 + slot * 164 + 158, 300) == -1,
@@ -74,11 +112,11 @@ int main(int argc, char **argv) {
         "The last entry on the rail is about");
   check(settingsCategoryAt(500, 420) == -1,
         "The settings body must not activate categories");
-  check(settingsRowAt(1, 1200, 382 + 3 * 106 + 10) == 3,
+  check(settingsRowAt(1, 1200, 410 + 3 * 106 + 10) == 3,
         "Every display row is clickable, not just the first");
-  check(settingsRowAt(1, 1200, 382 + 3 * 106 + 100) == -1,
+  check(settingsRowAt(1, 1200, 410 + 3 * 106 + 100) == -1,
         "The gap under the last display row activates nothing");
-  check(settingsRowAt(2, 1200, 382 + 106 + 10) == 1,
+  check(settingsRowAt(2, 1200, 410 + 106 + 10) == 1,
         "Audio rows map to their own index");
   // The controller page keeps two binding columns on a 34 pixel pitch: the line
   // decides the action, the half of the track decides which of the two pads it
@@ -97,6 +135,36 @@ int main(int argc, char **argv) {
         "Outside the row track activates nothing");
   check(settingsRowAt(6, 1200, 420) == 0, "The theme row is clickable");
   check(settingsRowAt(7, 1200, 420) == 0, "The about row is clickable");
+  for (int category : {1, 2, 4, 6, 7}) {
+    check(settingsRowAt(category, 1200, 409.9f) == -1 &&
+              settingsRowAt(category, 1200, 410) == 0 &&
+              settingsRowAt(category, 1200, 501.9f) == 0 &&
+              settingsRowAt(category, 1200, 502) == -1,
+          "Settings targets must match painted row edges, not stale coordinates");
+  }
+  check(settingsRowAt(3, 970, 518) == -1 &&
+            controllerPageRowAt(970, 518) == -1 &&
+            settingsRowAt(3, 700, 402) == -1,
+        "Neither the binding gutter nor fixed-row gaps activate a setting");
+  check(settingsCategoryAt(200, 400) == -1,
+        "Category spacing must not activate a neighbouring row");
+  check(managementInfoBackAt(800, 650) &&
+            !managementInfoBackAt(800, 619.9f) &&
+            !managementInfoBackAt(800, 688) &&
+            !managementInfoBackAt(100, 100),
+        "Info returns only when its actual Back button is clicked");
+  check(quitConfirmChoiceAt(600, 480) == 0 &&
+            quitConfirmChoiceAt(900, 480) == 1 &&
+            quitConfirmChoiceAt(800, 480) == -1 &&
+            quitConfirmChoiceAt(600, 516) == -1,
+        "Quit dialog paint and hit rectangles agree, including gaps");
+  check(powerCycleChoiceAt(600, 550) == -1 &&
+            powerCycleChoiceAt(800, 500) == -1,
+        "Power-cycle footer and button gap must not confirm");
+  check(managementActionAt(1200, 316) == -1 &&
+            pauseActionAt(1200, 440) == -1 &&
+            confirmationChoiceAt(800, 620) == -1,
+        "Overlay list and confirmation gaps do not activate controls");
   const SDL_Color teal = accentColor(0);
   check(teal.r == 86 && teal.g == 223 && teal.b == 202,
         "The default accent is the logo teal");
@@ -158,7 +226,7 @@ int main(int argc, char **argv) {
   // where the focus starts, the page is reached with right.
   check(settingsCategoryAt(200, 351 + 2 * 52 + 10) == 2,
         "The category rail hit target follows the list");
-  check(settingsRowAt(1, 1200, 382 + 2 * 106 + 20) == 2,
+  check(settingsRowAt(1, 1200, 410 + 2 * 106 + 20) == 2,
         "The display page rows are all clickable");
   // The core page gives every platform its own line, and the refresh button
   // sits on the heading line instead of inside one, so both answer a hit test.
@@ -317,6 +385,162 @@ int main(int argc, char **argv) {
           "A clamped list still moves forwards");
     check(!clamped.move(1), "A clamped list stops at its last control");
   }
+
+  // The management drawer receives the active theme colour instead of owning a
+  // stale yellow accent. Sample an empty part of the selected row so text does
+  // not affect the pixel.
+  SDL_Surface *managementSurface = SDL_CreateRGBSurfaceWithFormat(
+      0, kLogicalWidth, kLogicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
+  check(managementSurface != nullptr, SDL_GetError());
+  SDL_Renderer *managementRenderer =
+      SDL_CreateSoftwareRenderer(managementSurface);
+  check(managementRenderer != nullptr, SDL_GetError());
+  SDL_SetRenderDrawBlendMode(managementRenderer, SDL_BLENDMODE_BLEND);
+  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+       {0, 0, 0, 255});
+  launcher::library::GameEntry managementEntry;
+  managementEntry.title = "F-1 Race";
+  managementEntry.filePath = "f1.nes";
+  managementEntry.platform = launcher::game::GamePlatform::Nes;
+  const launcher::config::InputPrompts managementPrompts{
+      "ENTER", "M", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+  drawGameManagementOverlay(
+      managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,
+      launcher::i18n::Language::English, managementPrompts, teal);
+  SDL_RenderPresent(managementRenderer);
+  const auto *managementRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      280 * managementSurface->pitch);
+  Uint8 managementR, managementG, managementB, managementA;
+  SDL_GetRGBA(managementRow[1450], managementSurface->format, &managementR,
+              &managementG, &managementB, &managementA);
+  check(managementR == teal.r && managementG == teal.g &&
+            managementB == teal.b && managementA == teal.a,
+        "The management selection follows the active theme accent");
+  const auto *managementFocusRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      245 * managementSurface->pitch);
+  SDL_GetRGBA(managementFocusRow[1255], managementSurface->format,
+              &managementR, &managementG, &managementB, &managementA);
+  check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
+            managementB == kFocusColor.b && managementA == kFocusColor.a,
+        "The management selection has the shared focus ring");
+
+  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+       {0, 0, 0, 255});
+  const std::array<StateSlotView, kStateSlotCount> pauseSlots{};
+  drawPauseMenu(managementRenderer, "F-1 Race", 0, 0, pauseSlots, {}, 0,
+                launcher::i18n::Language::English, managementPrompts, teal);
+  SDL_RenderPresent(managementRenderer);
+  const auto *pauseFocusRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      393 * managementSurface->pitch);
+  SDL_GetRGBA(pauseFocusRow[1252], managementSurface->format, &managementR,
+              &managementG, &managementB, &managementA);
+  check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
+            managementB == kFocusColor.b && managementA == kFocusColor.a,
+        "The pause selection has the shared focus ring");
+  const auto pixelEquals = [&](int x, int y, SDL_Color expected) {
+    SDL_RenderPresent(managementRenderer);
+    const auto *pixels = reinterpret_cast<const Uint32 *>(
+        static_cast<const Uint8 *>(managementSurface->pixels) +
+        y * managementSurface->pitch);
+    Uint8 pr, pg, pb, pa;
+    SDL_GetRGBA(pixels[x], managementSurface->format, &pr, &pg, &pb, &pa);
+    return pr == expected.r && pg == expected.g && pb == expected.b &&
+           pa == expected.a;
+  };
+  const auto clearPreview = [&] {
+    fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+         {0, 0, 0, 255});
+  };
+  launcher::runtime::CoreOption option;
+  option.key = "test_option";
+  option.label = "Example option";
+  option.values.push_back({"Enabled", "enabled"});
+  // Exercise each theme rather than allowing a shared control to silently
+  // revert to teal (or the old management yellow). Chinese and English labels
+  // use the same geometry and focus primitive.
+  for (int theme = 0; theme < kAccentCount; ++theme) {
+    const SDL_Color accent = accentColor(theme);
+    for (const auto language : {launcher::i18n::Language::English,
+                                launcher::i18n::Language::SimplifiedChinese}) {
+      clearPreview();
+      drawGameManagementOverlay(managementRenderer, managementEntry, 0,
+          ManagementDialog::Menu, 0, false, language, managementPrompts, accent);
+      check(pixelEquals(1450, 280, accent) && pixelEquals(1255, 245, kFocusColor),
+            "Management rows retain every theme accent and the system focus ring");
+      clearPreview();
+      drawGameManagementOverlay(managementRenderer, managementEntry, 4,
+          ManagementDialog::Menu, 0, false, language, managementPrompts, accent);
+      check(pixelEquals(1480, 660, {255, 157, 150, 255}),
+            "Destructive selections retain semantic red across themes");
+      clearPreview();
+      drawGameManagementOverlay(managementRenderer, managementEntry, 0,
+          ManagementDialog::Info, 0, false, language, managementPrompts, accent);
+      check(pixelEquals(1100, 650, accent) && pixelEquals(800, 617, kFocusColor),
+            "The Info Back button has the active accent and focus ring");
+      for (int choice = 0; choice < 2; ++choice) {
+        clearPreview();
+        drawGameManagementOverlay(managementRenderer, managementEntry, 0,
+            ManagementDialog::ConfirmRemoveRom, choice, false, language,
+            managementPrompts, accent);
+        check(pixelEquals(570 + 450 * choice, 650, accent) &&
+                  pixelEquals(570 + 450 * choice, 592, kFocusColor),
+              "Both management choices use shared theme-aware buttons");
+        clearPreview();
+        drawQuitConfirm(managementRenderer, choice, language, managementPrompts, accent);
+        check(pixelEquals(630 + 340 * choice, 505, accent) &&
+                  pixelEquals(630 + 340 * choice, 449, kFocusColor),
+              "Quit confirmation choices keep their accent and ring");
+        clearPreview();
+        drawPowerCycleConfirm(managementRenderer, choice, language, managementPrompts, accent);
+        check(pixelEquals(648 + 304 * choice, 523, accent) &&
+                  pixelEquals(648 + 304 * choice, 467, kFocusColor),
+              "Power-cycle choices use the same button and focus geometry");
+      }
+      clearPreview();
+      drawPauseMenu(managementRenderer, "F-1 Race", 0, 0, pauseSlots, {}, 0,
+                    language, managementPrompts, accent);
+      check(pixelEquals(1470, 420, accent) && pixelEquals(1252, 393, kFocusColor),
+            "Pause actions retain theme accent and focus ring");
+      clearPreview();
+      drawPauseVideoPanel(managementRenderer, 0, {}, language, managementPrompts, accent);
+      check(pixelEquals(1450, 360, accent) && pixelEquals(1252, 297, kFocusColor),
+            "Display rows retain theme accent and focus ring");
+      clearPreview();
+      drawPauseCoreOptionsPanel(managementRenderer, 0, 0, {option}, language,
+                                managementPrompts, accent);
+      check(pixelEquals(1252, 343, accent) && pixelEquals(1252, 297, kFocusColor),
+            "Core option rows retain theme accent and focus ring");
+      launcher::AppSettings settings;
+      settings.accent = theme;
+      settings.language = language == launcher::i18n::Language::English ? 0 : 1;
+      for (int category : {0, 1, 3, 5}) {
+        clearPreview();
+        drawSettings(managementRenderer, settings, category, 0, 0, false, {},
+                     launcher::config::ControllerStyle::Xbox, {},
+                     managementPrompts, false, 1);
+        const int top = category == 0 ? 376 : (category == 1 ? 410 :
+                        (category == 3 ? 372 : 396));
+        check(pixelEquals(900, top - 3, kFocusColor),
+              "Every settings row style shares the focus primitive");
+      }
+    }
+    // The primitive, rather than each screen, fades selection and ring together.
+    const Rect bounds{100, 100, 300, 70};
+    for (bool focused : {false, true}) {
+      clearPreview();
+      drawSelectionPlate(managementRenderer, bounds, 12, {10, 20, 30, 255},
+                         {accent.r, accent.g, accent.b, 90}, true, focused, 0);
+      check(pixelEquals(250, 97, {0, 0, 0, 255}),
+            "Unfocused or zero-opacity controls have no focus ring");
+      check(pixelEquals(250, 135, {10, 20, 30, 255}) == focused,
+            "Only keyboard focus fades selection; an unfocused selected page stays tinted");
+    }
+  }
+  SDL_DestroyRenderer(managementRenderer);
+  SDL_FreeSurface(managementSurface);
 
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);

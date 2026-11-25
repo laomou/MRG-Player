@@ -400,7 +400,7 @@ int main() {
           launcher::config::ControllerStyle::Generic);
   ok &=
       check(keyboardPrompts.confirm == "ENTER" &&
-                keyboardPrompts.manage == "X" && keyboardPrompts.back == "ESC",
+                keyboardPrompts.manage == "M" && keyboardPrompts.back == "ESC",
             "keyboard prompt set matches launcher controls");
 
   // A ROM whose name is not ASCII has to survive import, rescan and metadata

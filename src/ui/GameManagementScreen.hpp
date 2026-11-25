@@ -17,8 +17,10 @@ void drawGameManagementOverlay(SDL_Renderer *renderer,
                                int selectedAction, ManagementDialog dialog,
                                int confirmationChoice, bool saveDataPresent,
                                i18n::Language language,
-                               const config::InputPrompts &prompts);
+                               const config::InputPrompts &prompts,
+                               SDL_Color accent);
 int managementActionAt(float x, float y);
 int confirmationChoiceAt(float x, float y);
+bool managementInfoBackAt(float x, float y);
 
 } // namespace launcher::ui
