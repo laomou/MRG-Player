@@ -118,6 +118,7 @@ add_executable(mrg-player
   src/library/GameLibrary.cpp
   src/runtime/RuntimeRegistry.cpp
   src/model/Game.cpp
+  src/ui/Controls.cpp
   src/ui/CoverCache.cpp
   src/ui/GameManagementScreen.cpp
   src/platform/RomFilePicker.cpp
@@ -300,6 +301,7 @@ endif()
 if(BUILD_TESTING)
   add_executable(ui-rendering-test
     tests/UiRenderingTest.cpp
+    src/ui/Controls.cpp
     src/ui/Primitives.cpp
     src/ui/HomeScreen.cpp
     src/ui/PauseMenuScreen.cpp
