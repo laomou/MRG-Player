@@ -152,7 +152,9 @@ private:
 
   game::GamePlatform platform_ = game::GamePlatform::Unknown;
   config::InputBindings bindings_{};
-  std::array<std::uint8_t, config::kPlayerCount> inputMask_{};
+  // One bit per config::InputAction, sixteen wide so the two turbo bits never
+  // collide with a console button bit.
+  std::array<std::uint16_t, config::kPlayerCount> inputMask_{};
   std::array<AxisState, config::kPlayerCount> axes_{};
   std::array<SDL_JoystickID, config::kPlayerCount> controllerIds_{};
   VideoOptions video_{};

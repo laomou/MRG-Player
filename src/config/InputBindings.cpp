@@ -7,20 +7,28 @@ namespace launcher::config {
 
 InputBindings defaultInputBindings() {
   InputBindings bindings;
-  bindings.keyboard = {SDLK_z,    SDLK_x,   SDLK_RSHIFT, SDLK_RETURN,
-                       SDLK_UP,   SDLK_DOWN, SDLK_LEFT,  SDLK_RIGHT,
-                       SDLK_c,    SDLK_v};
+  bindings.keyboard = {SDLK_z,    SDLK_x,    SDLK_RSHIFT, SDLK_RETURN,
+                       SDLK_UP,   SDLK_DOWN, SDLK_LEFT,   SDLK_RIGHT,
+                       SDLK_c,    SDLK_v,    SDLK_f,      SDLK_j,
+                       SDLK_q,    SDLK_e};
+  // Six face buttons plus two shoulders is what a Super Nintendo or Genesis
+  // pad asks for, so the turbo pulses moved off the face buttons — a pulse
+  // there would press the real Y or B every other frame — and onto the two
+  // stick clicks, which no console action uses.
   bindings.controller = {
-      SDL_CONTROLLER_BUTTON_A,         SDL_CONTROLLER_BUTTON_X,
-      SDL_CONTROLLER_BUTTON_BACK,      SDL_CONTROLLER_BUTTON_START,
-      SDL_CONTROLLER_BUTTON_DPAD_UP,   SDL_CONTROLLER_BUTTON_DPAD_DOWN,
-      SDL_CONTROLLER_BUTTON_DPAD_LEFT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
-      SDL_CONTROLLER_BUTTON_Y,         SDL_CONTROLLER_BUTTON_B};
+      SDL_CONTROLLER_BUTTON_A,            SDL_CONTROLLER_BUTTON_X,
+      SDL_CONTROLLER_BUTTON_BACK,         SDL_CONTROLLER_BUTTON_START,
+      SDL_CONTROLLER_BUTTON_DPAD_UP,      SDL_CONTROLLER_BUTTON_DPAD_DOWN,
+      SDL_CONTROLLER_BUTTON_DPAD_LEFT,    SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
+      SDL_CONTROLLER_BUTTON_LEFTSTICK,    SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+      SDL_CONTROLLER_BUTTON_Y,            SDL_CONTROLLER_BUTTON_B,
+      SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER};
   // Player 2 shares the pad layout (a second pad uses the same buttons) but
   // gets its own keys so one keyboard can drive both ports.
   bindings.keyboardPlayer2 = {SDLK_g, SDLK_h, SDLK_r, SDLK_t,
                               SDLK_w, SDLK_s, SDLK_a, SDLK_d,
-                              SDLK_b, SDLK_n};
+                              SDLK_b, SDLK_n, SDLK_i, SDLK_k,
+                              SDLK_o, SDLK_p};
   bindings.controllerPlayer2 = bindings.controller;
   bindings.analogDeadZone = 16000;
   return bindings;
@@ -52,8 +60,8 @@ bool turboPulseOn(std::uint64_t frame) noexcept {
 
 const char *inputActionName(InputAction action) noexcept {
   static constexpr const char *kNames[kInputActionCount] = {
-      "A",   "B",     "SELECT",  "START", "UP",
-      "DOWN", "LEFT", "RIGHT", "TURBO A", "TURBO B"};
+      "A",     "B",     "SELECT",  "START",  "UP",      "DOWN",   "LEFT",
+      "RIGHT", "TURBO A", "TURBO B", "X",    "Y",       "L",      "R"};
   const std::size_t index = static_cast<std::size_t>(action);
   return index < kInputActionCount ? kNames[index] : "?";
 }

@@ -33,6 +33,9 @@ constexpr const char *kStateMagic = "MRGLIBRETRO1";
 constexpr std::size_t kMaximumRomSize = 64U * 1024U * 1024U;
 constexpr std::size_t kMaximumSaveRamSize = 1024U * 1024U;
 constexpr std::size_t kMaximumStateSize = 64U * 1024U * 1024U;
+// A core may announce a picture of any size before it draws one. Refusing past
+// this keeps a hostile or broken core from asking for an unbounded buffer.
+constexpr std::size_t kMaximumFramePixels = 4096U * 4096U;
 constexpr std::uint32_t kFastForwardDivisor = 4;
 constexpr std::uint32_t kSlowMotionFactor = 2;
 constexpr int kAudioBufferSamples = 1024;
@@ -43,11 +46,18 @@ constexpr std::size_t kRewindMaximumSnapshots = 300;
 constexpr std::size_t kRewindMaximumBytes = 32U * 1024U * 1024U;
 constexpr int kMaximumRunaheadFrames = 3;
 
-// Console action order of config::InputAction, mapped onto libretro joypad ids.
-constexpr std::array<unsigned, config::kCoreActionCount> kLibretroButtons{
-    RETRO_DEVICE_ID_JOYPAD_A,      RETRO_DEVICE_ID_JOYPAD_B,    RETRO_DEVICE_ID_JOYPAD_SELECT,
-    RETRO_DEVICE_ID_JOYPAD_START,  RETRO_DEVICE_ID_JOYPAD_UP,   RETRO_DEVICE_ID_JOYPAD_DOWN,
-    RETRO_DEVICE_ID_JOYPAD_LEFT,   RETRO_DEVICE_ID_JOYPAD_RIGHT};
+// The libretro joypad id every config::InputAction drives, in enum order. Turbo
+// is a front-end pulse and has no id of its own, so it is marked instead of
+// borrowing one: a shared id would make the turbo keys press a real button.
+constexpr unsigned kNoCoreButton = ~0U;
+constexpr std::array<unsigned, config::kInputActionCount> kActionButtons{
+    RETRO_DEVICE_ID_JOYPAD_A,      RETRO_DEVICE_ID_JOYPAD_B,
+    RETRO_DEVICE_ID_JOYPAD_SELECT, RETRO_DEVICE_ID_JOYPAD_START,
+    RETRO_DEVICE_ID_JOYPAD_UP,     RETRO_DEVICE_ID_JOYPAD_DOWN,
+    RETRO_DEVICE_ID_JOYPAD_LEFT,   RETRO_DEVICE_ID_JOYPAD_RIGHT,
+    kNoCoreButton,                 kNoCoreButton,
+    RETRO_DEVICE_ID_JOYPAD_X,      RETRO_DEVICE_ID_JOYPAD_Y,
+    RETRO_DEVICE_ID_JOYPAD_L,      RETRO_DEVICE_ID_JOYPAD_R};
 
 bool readFile(const std::string &path, std::vector<std::uint8_t> &bytes, std::size_t limit = kMaximumRomSize) {
   std::ifstream input(paths::fromUtf8(path), std::ios::binary | std::ios::ate);
@@ -417,12 +427,14 @@ void LibretroRuntime::setAction(int player, config::InputAction action, bool pre
   if (player < 0 || player >= static_cast<int>(config::kPlayerCount))
     return;
   const std::size_t index = static_cast<std::size_t>(action);
-  const std::uint8_t bit = static_cast<std::uint8_t>(1U << index);
-  std::uint8_t &mask = inputMask_[static_cast<std::size_t>(player)];
+  if (index >= config::kInputActionCount)
+    return;
+  const std::uint16_t bit = static_cast<std::uint16_t>(1U << index);
+  std::uint16_t &mask = inputMask_[static_cast<std::size_t>(player)];
   if (pressed)
-    mask |= bit;
+    mask = static_cast<std::uint16_t>(mask | bit);
   else
-    mask &= static_cast<std::uint8_t>(~bit);
+    mask = static_cast<std::uint16_t>(mask & static_cast<std::uint16_t>(~bit));
   // The joypad mask is rebuilt from inputMask_ on every core query, so a turbo
   // release needs no extra work here.
 }
@@ -462,14 +474,16 @@ void LibretroRuntime::setControllerAxis(int player, SDL_GameControllerAxis axis,
 
 std::uint16_t LibretroRuntime::joypadMask(int player) const noexcept {
   const std::size_t port = static_cast<std::size_t>(player);
+  const std::uint16_t held = inputMask_[port];
   std::uint16_t mask = 0;
-  for (std::size_t index = 0; index < config::kCoreActionCount; ++index) {
-    if ((inputMask_[port] & static_cast<std::uint8_t>(1U << index)) != 0)
-      mask = static_cast<std::uint16_t>(mask | (1U << kLibretroButtons[index]));
+  for (std::size_t index = 0; index < config::kInputActionCount; ++index) {
+    if (kActionButtons[index] == kNoCoreButton)
+      continue;
+    if ((held & static_cast<std::uint16_t>(1U << index)) != 0)
+      mask = static_cast<std::uint16_t>(mask | (1U << kActionButtons[index]));
   }
-  const std::uint8_t held = inputMask_[port];
   const auto holds = [held](config::InputAction action) noexcept {
-    return (held & static_cast<std::uint8_t>(1U << static_cast<std::size_t>(action))) != 0;
+    return (held & static_cast<std::uint16_t>(1U << static_cast<std::size_t>(action))) != 0;
   };
   if (turboPulse_ && holds(config::InputAction::TurboA))
     mask = static_cast<std::uint16_t>(mask | (1U << RETRO_DEVICE_ID_JOYPAD_A));
@@ -604,8 +618,12 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
       return true;
     }
     case RETRO_ENVIRONMENT_SET_VARIABLES:
-    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
       return declareCoreOptionsV1(static_cast<const retro_variable *>(data));
+    case RETRO_ENVIRONMENT_SET_CORE_OPTIONS:
+      // Version 1 still has two declaration shapes: the old key/description
+      // strings and the definition array with labels and defaults.
+      return declareCoreOptionsV1Definitions(
+          static_cast<const retro_core_option_definition *>(data));
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2:
       return declareCoreOptionsV2(static_cast<const retro_core_options_v2 *>(data));
     case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2_INTL: {
@@ -651,15 +669,23 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
     return;
   if (width == 0 || height == 0)
     return;
-  if (width != width_ || height != height_ || frame_.empty()) {
-    width_ = width;
-    height_ = height;
-    frame_.assign(static_cast<std::size_t>(width) * height, 0xFF000000U);
+  // The buffer is sized from the frame the core just handed over, never from
+  // the geometry it announced earlier: SET_GEOMETRY may advertise a larger
+  // picture before a frame of that size exists, and the copy below writes
+  // width * height pixels whatever width_ happens to say.
+  const std::size_t required =
+      static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+  if (required > kMaximumFramePixels)
+    return;
+  if (frame_.size() != required) {
+    frame_.assign(required, 0xFF000000U);
     if (texture_ != nullptr) {
       SDL_DestroyTexture(texture_);
       texture_ = nullptr;
     }
   }
+  width_ = width;
+  height_ = height;
   if (data == nullptr || renderer_ == nullptr)
     return;
   const bool wide = pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888;
@@ -898,7 +924,9 @@ void LibretroRuntime::setRunaheadFrames(int frames) noexcept {
 }
 
 bool LibretroRuntime::rewindStep() noexcept {
-  if (!active_ || !rewindEnabled_)
+  // Rewind needs the snapshot on screen plus the one before it; with fewer the
+  // history is empty and there is nothing to roll back to.
+  if (!active_ || !rewindEnabled_ || rewind_.size() < 2)
     return false;
   // The newest snapshot was taken right after the frame on screen, so it
   // describes the machine the player is already looking at. Dropping it first
@@ -1149,11 +1177,23 @@ StateStatus LibretroRuntime::loadState(int slot, std::string &error) {
     error = "Save state is incompatible or damaged";
     return StateStatus::Failed;
   }
+  const std::string savedName(reinterpret_cast<const char *>(bytes.data() + magicEnd + 1),
+                              nameEnd - magicEnd - 1);
   const std::string payloadSize(reinterpret_cast<const char *>(bytes.data() + nameEnd + 1), sizeEnd - nameEnd - 1);
   const std::size_t expected = static_cast<std::size_t>(std::strtoull(payloadSize.c_str(), nullptr, 10));
   const std::size_t offset = sizeEnd + 1;
-  if (expected == 0 || offset + expected > bytes.size()) {
+  // Subtract instead of adding: offset + expected could wrap for a header that
+  // claims a payload near the size limit.
+  if (expected == 0 || offset >= bytes.size() ||
+      expected > bytes.size() - offset) {
     error = "Save state is incompatible or damaged";
+    return StateStatus::Failed;
+  }
+  // The header records the core that wrote the state. Feeding another core's
+  // bytes to unserialize is how a save silently corrupts the running game.
+  if (savedName != name_) {
+    error = savedName.empty() ? "This save state does not name its core"
+                              : "This save state belongs to " + savedName;
     return StateStatus::Failed;
   }
   if (!core_.unserialize(bytes.data() + offset, expected)) {

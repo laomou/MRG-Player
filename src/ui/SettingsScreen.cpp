@@ -35,7 +35,9 @@ constexpr int kFixedRowCount = 4;
 constexpr int kColumnGutter = 16;
 constexpr int kColumnWidth = (kTrackWidth - kColumnGutter) / 2;
 constexpr int kRightColumnX = kTrackX + kColumnWidth + kColumnGutter;
-constexpr std::size_t kBindingsPerColumn = 5;
+// Seven rows per column: the pad actions (A/B/X/Y/L/R with select and start)
+// plus the two turbo rows, with the dead-zone slider under both columns.
+constexpr std::size_t kBindingsPerColumn = 7;
 static_assert(config::kInputActionCount == 2 * kBindingsPerColumn);
 
 // The general page carries five rows now, so its rows are slightly shorter
@@ -76,10 +78,10 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
                     const std::string &description, const std::string &value,
                     SDL_Color accent, int height = 92,
                     float focusOpacity = 1.0f) {
-  // Two markers, split by meaning: the wash and the bar mark the row the keys
-  // are acting on, exactly like the tint on the category rail, and the ring
-  // only appears when the keys are actually in the page. The ring goes on last
-  // so it stays a line rather than a wash over the plate.
+  // The wash marks the row the keys are acting on, exactly like the tint on the
+  // category rail, and the ring only appears when the keys are actually in the
+  // page. The ring goes on last so it stays a line rather than a wash over the
+  // plate.
   const SDL_Color plate{7, 17, 34, 188};
   rounded(renderer, 466, static_cast<float>(y), 1010,
           static_cast<float>(height), 17, plate);
@@ -87,8 +89,6 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
     rounded(renderer, 466, static_cast<float>(y), 1010,
             static_cast<float>(height), 17,
             {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
-    rounded(renderer, 466, static_cast<float>(y), 5,
-            static_cast<float>(height), 2, accent);
   }
   const int titleY = y + (height - 58) / 2;
   text(renderer, 498, titleY, title, 2,
@@ -116,14 +116,12 @@ void drawCompactRow(SDL_Renderer *renderer, int x, int y, int width,
     rounded(renderer, static_cast<float>(x), static_cast<float>(y),
             static_cast<float>(width), 29, 9,
             {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
-    rounded(renderer, static_cast<float>(x), static_cast<float>(y), 5, 29, 2,
-            accent);
   }
-  text(renderer, x + 26, y + 7, title, 1,
+  text(renderer, x + 26, y + 4, title, 1,
        selected || focused ? SDL_Color{255, 255, 255, 255}
                            : SDL_Color{184, 198, 216, 255});
   const int valueX = x + width - 20 - textWidth(value, 1);
-  text(renderer, valueX, y + 7, value, 1,
+  text(renderer, valueX, y + 4, value, 1,
        selected || focused ? accent : SDL_Color{205, 215, 226, 255});
   if (focused)
     drawFocusRing(renderer, static_cast<float>(x), static_cast<float>(y),
@@ -352,17 +350,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   for (int i = 0; i < kCategoryCount; ++i) {
     const int y = 389 + i * 52;
     if (i == category) {
-      // The tint and the bar always mark the page on screen; the ring only
-      // appears when the keys are actually on the rail.
+      // The tint always marks the page on screen; the ring only appears when
+      // the keys are actually on the rail.
       rounded(renderer, 91, static_cast<float>(y), 292, 48, 14,
               {game.accent.r, game.accent.g, game.accent.b,
                accentWashAlpha(game.accent)});
-      rounded(renderer, 91, static_cast<float>(y), 5, 48, 2, game.accent);
       if (railFocused)
         drawFocusRing(renderer, 91, static_cast<float>(y), 292, 48, 14,
                       focusOpacity);
     }
-    text(renderer, 116, y + 14, tr(categoryText(i), language), 2,
+    text(renderer, 116, y + 10, tr(categoryText(i), language), 2,
          i == category ? SDL_Color{255, 255, 255, 255}
                        : SDL_Color{165, 183, 199, 255});
   }

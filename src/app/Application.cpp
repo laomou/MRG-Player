@@ -1377,7 +1377,10 @@ int Application::run(int argc, char **argv) {
         const std::string dropped =
             event.drop.file != nullptr ? event.drop.file : "";
         SDL_free(event.drop.file);
-        (void)importGame(dropped, true);
+        // File drops are a home-only action; never import behind a modal or
+        // replace a running/paused game. The SDL payload is freed in all cases.
+        if (screen == Screen::Home && !quitConfirm)
+          (void)importGame(dropped, true);
         continue;
       }
       if (event.type == SDL_CONTROLLERDEVICEADDED) {
@@ -1433,6 +1436,14 @@ int Application::run(int argc, char **argv) {
       // and pause branches, is what stops a click from answering the dialog and
       // then acting on the screen behind it.
       if (quitConfirm) {
+        // The dialog owns the presses, but releases still belong to the game:
+        // a button held when the dialog opened must not stay pressed after it
+        // closes, and the game keeps running underneath the dialog.
+        if (activeRuntime && (event.type == SDL_KEYUP ||
+                              event.type == SDL_CONTROLLERBUTTONUP ||
+                              event.type == SDL_CONTROLLERAXISMOTION)) {
+          activeRuntime->handleEvent(event);
+        }
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
           const SDL_Keycode key = event.key.keysym.sym;
           if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP ||

@@ -13,18 +13,24 @@
 namespace launcher {
 namespace {
 
+// Index-aligned with config::InputAction: a name is read back into the action
+// that sits in the same slot, so these lists may only ever grow at the end.
 constexpr std::array<const char *, config::kInputActionCount> kKeyNames{
-    "key_a",  "key_b",    "key_select", "key_start",  "key_up",
-    "key_down", "key_left", "key_right", "key_turbo_a", "key_turbo_b"};
+    "key_a",    "key_b",    "key_select",  "key_start",   "key_up",
+    "key_down", "key_left", "key_right",   "key_turbo_a", "key_turbo_b",
+    "key_x",    "key_y",    "key_l",       "key_r"};
 constexpr std::array<const char *, config::kInputActionCount> kPadNames{
-    "pad_a",  "pad_b",    "pad_select", "pad_start",  "pad_up",
-    "pad_down", "pad_left", "pad_right", "pad_turbo_a", "pad_turbo_b"};
+    "pad_a",    "pad_b",    "pad_select",  "pad_start",   "pad_up",
+    "pad_down", "pad_left", "pad_right",   "pad_turbo_a", "pad_turbo_b",
+    "pad_x",    "pad_y",    "pad_l",       "pad_r"};
 constexpr std::array<const char *, config::kInputActionCount> kKey2Names{
-    "key2_a",  "key2_b",    "key2_select", "key2_start",  "key2_up",
-    "key2_down", "key2_left", "key2_right", "key2_turbo_a", "key2_turbo_b"};
+    "key2_a",    "key2_b",    "key2_select",  "key2_start",   "key2_up",
+    "key2_down", "key2_left", "key2_right",   "key2_turbo_a", "key2_turbo_b",
+    "key2_x",    "key2_y",    "key2_l",       "key2_r"};
 constexpr std::array<const char *, config::kInputActionCount> kPad2Names{
-    "pad2_a",  "pad2_b",    "pad2_select", "pad2_start",  "pad2_up",
-    "pad2_down", "pad2_left", "pad2_right", "pad2_turbo_a", "pad2_turbo_b"};
+    "pad2_a",    "pad2_b",    "pad2_select",  "pad2_start",   "pad2_up",
+    "pad2_down", "pad2_left", "pad2_right",   "pad2_turbo_a", "pad2_turbo_b",
+    "pad2_x",    "pad2_y",    "pad2_l",       "pad2_r"};
 
 } // namespace
 

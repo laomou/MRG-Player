@@ -19,21 +19,25 @@ void check(bool condition, const std::string &what) {
 
 int main() {
   using launcher::config::InputAction;
-  using launcher::config::kCoreActionCount;
   using launcher::config::kInputActionCount;
   using launcher::config::kPlayerCount;
 
-  check(kInputActionCount == 10, "ten bindable actions");
-  check(kCoreActionCount == 8, "eight actions reach the console");
-  check(kInputActionCount == kCoreActionCount + 2, "two turbo actions");
+  check(kInputActionCount == 14, "fourteen bindable actions");
   check(kPlayerCount == 2, "two controller ports");
 
-  // Turbo keeps its own slot at each end of the enum so the core mapping
-  // stays a prefix.
-  check(static_cast<std::size_t>(InputAction::TurboB) == kInputActionCount - 1,
-        "turbo B is the last action");
-  check(static_cast<std::size_t>(InputAction::Right) == kCoreActionCount - 1,
-        "right is the last console action");
+  // The eight d-pad and classic buttons keep their slots, the turbo pair keeps
+  // the slots it always had, and the extra face and shoulder buttons follow —
+  // appending only, so a saved settings.ini still means what it meant.
+  check(static_cast<std::size_t>(InputAction::Right) == 7,
+        "right closes the classic button block");
+  check(static_cast<std::size_t>(InputAction::TurboA) == 8,
+        "turbo A keeps its slot");
+  check(static_cast<std::size_t>(InputAction::TurboB) == 9,
+        "turbo B keeps its slot");
+  check(static_cast<std::size_t>(InputAction::X) == 10,
+        "X follows the turbo pair");
+  check(static_cast<std::size_t>(InputAction::R) == kInputActionCount - 1,
+        "R is the last action");
 
   const launcher::config::InputBindings defaults =
       launcher::config::defaultInputBindings();
@@ -45,18 +49,43 @@ int main() {
   check(defaults.keyboard[static_cast<std::size_t>(InputAction::TurboB)] ==
             SDLK_v,
         "player 1 turbo B is V");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::X)] == SDLK_f,
+        "player 1 X is F");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::Y)] == SDLK_j,
+        "player 1 Y is J");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::L)] == SDLK_q,
+        "player 1 L is Q");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::R)] == SDLK_e,
+        "player 1 R is E");
+  // Turbo moved to the stick clicks: a pad that presses Y or B for a turbo
+  // pulse could never press the real Y or B at the same time.
   check(defaults.controller[static_cast<std::size_t>(InputAction::TurboA)] ==
-            SDL_CONTROLLER_BUTTON_Y,
-        "pad turbo A is Y");
+            SDL_CONTROLLER_BUTTON_LEFTSTICK,
+        "pad turbo A is the left stick click");
   check(defaults.controller[static_cast<std::size_t>(InputAction::TurboB)] ==
+            SDL_CONTROLLER_BUTTON_RIGHTSTICK,
+        "pad turbo B is the right stick click");
+  check(defaults.controller[static_cast<std::size_t>(InputAction::X)] ==
+            SDL_CONTROLLER_BUTTON_Y,
+        "pad X is the Y button, as on a Super Nintendo pad");
+  check(defaults.controller[static_cast<std::size_t>(InputAction::Y)] ==
             SDL_CONTROLLER_BUTTON_B,
-        "pad turbo B is B");
+        "pad Y is the B button");
+  check(defaults.controller[static_cast<std::size_t>(InputAction::L)] ==
+            SDL_CONTROLLER_BUTTON_LEFTSHOULDER,
+        "pad L is the left shoulder");
+  check(defaults.controller[static_cast<std::size_t>(InputAction::R)] ==
+            SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
+        "pad R is the right shoulder");
   check(defaults.keyboardPlayer2[static_cast<std::size_t>(InputAction::TurboA)] ==
             SDLK_b,
         "player 2 turbo A is B");
+  check(defaults.keyboardPlayer2[static_cast<std::size_t>(InputAction::X)] ==
+            SDLK_i,
+        "player 2 X is I");
   // Player 2 must not collide with the keys player 1 uses for the same console
   // buttons, otherwise one keypress drives both ports.
-  for (std::size_t index = 0; index < kCoreActionCount; ++index) {
+  for (std::size_t index = 0; index < kInputActionCount; ++index) {
     check(defaults.keyboard[index] != defaults.keyboardPlayer2[index],
           "player 2 keys are distinct from player 1");
   }
@@ -67,6 +96,10 @@ int main() {
   check(std::string(launcher::config::inputActionName(InputAction::TurboB)) ==
             "TURBO B",
         "turbo B is named");
+  check(std::string(launcher::config::inputActionName(InputAction::X)) == "X",
+        "X is named");
+  check(std::string(launcher::config::inputActionName(InputAction::R)) == "R",
+        "R is named");
 
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.

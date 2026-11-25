@@ -23,16 +23,24 @@ enum class InputAction : std::size_t {
   // button is pulsed by the runtime, so games see a burst of fast presses.
   TurboA,
   TurboB,
+  // The buttons only the wider pads have: the extra face pair of the SNES and
+  // the shoulder pair of the SNES, the GBA and the Genesis. They stay at the
+  // end of the enum because the settings file is index-aligned with it; a new
+  // action appended here never moves a stored binding to another action.
+  X,
+  Y,
+  L,
+  R,
   Count
 };
 
 inline constexpr std::size_t kInputActionCount =
     static_cast<std::size_t>(InputAction::Count);
 
-// The actions that map one-to-one onto a console controller. Everything from
-// here on is front-end behaviour (turbo) and never reaches the core directly.
-inline constexpr std::size_t kCoreActionCount = 8;
-static_assert(kCoreActionCount <= kInputActionCount);
+// Every action is one bit of the held-input mask, which is sixteen bits wide to
+// match the libretro joypad id space.
+static_assert(kInputActionCount <= 16,
+              "the held-input mask holds one bit per action");
 
 // Turbo keeps the button pressed for kTurboHalfFrames frames and released for
 // the next kTurboHalfFrames. Two frames each way is 15 presses per second on an

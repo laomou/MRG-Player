@@ -5,6 +5,17 @@
 #include <filesystem>
 #include <string>
 
+#if !defined(_WIN32)
+#include <spawn.h>
+#include <sys/wait.h>
+
+#include <cerrno>
+#include <vector>
+
+// posix_spawnp reads the caller's environment to search PATH for the fetcher.
+extern char **environ;
+#endif
+
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -130,16 +141,43 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
   return written != 0;
 }
 #else
+namespace {
+
+// Runs one program with its own argument vector. posix_spawnp searches PATH
+// like a shell would, but nothing the caller passes is ever parsed as shell
+// syntax, so a URL or a path cannot become a command.
+bool runProgram(const std::vector<std::string> &arguments) {
+  std::vector<char *> argv;
+  argv.reserve(arguments.size() + 1);
+  for (const std::string &argument : arguments)
+    argv.push_back(const_cast<char *>(argument.c_str()));
+  argv.push_back(nullptr);
+  pid_t pid = 0;
+  if (posix_spawnp(&pid, argv.front(), nullptr, nullptr, argv.data(), environ) != 0)
+    return false;
+  int status = 0;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno != EINTR)
+      return false;
+  }
+  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+}  // namespace
+
 bool downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
                   std::uint64_t &written, std::string &error) {
-  (void)maximumBytes;
   written = 0;
-  const std::string quotedUrl = "'" + url + "'";
-  const std::string targetArgument = "'" + target + "'";
-  const std::string curl = "curl -fsSL --retry 2 --max-time 120 -o " + targetArgument + " " + quotedUrl;
-  if (std::system(curl.c_str()) != 0) {
-    const std::string wget = "wget -q -T 60 -O " + targetArgument + " " + quotedUrl;
-    if (std::system(wget.c_str()) != 0) {
+  // The cap is applied twice: curl refuses a body larger than the limit before
+  // it writes anything, and the result is checked afterwards because wget has
+  // no equivalent option and older curls ignore it for chunked replies.
+  std::vector<std::string> curl{"curl", "-fsSL", "--retry", "2", "--max-time", "120"};
+  if (maximumBytes != 0) {
+    curl.insert(curl.end(), {"--max-filesize", std::to_string(maximumBytes)});
+  }
+  curl.insert(curl.end(), {"-o", target, url});
+  if (!runProgram(curl)) {
+    if (!runProgram({"wget", "-q", "-T", "60", "-O", target, url})) {
       error = "The download failed; install curl or wget, or fetch the file by hand";
       return false;
     }
@@ -147,7 +185,15 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
   std::error_code code;
   written = fs::file_size(paths::fromUtf8(target), code);
   if (code) {
+    written = 0;
     error = "The downloaded file was not written";
+    return false;
+  }
+  if (maximumBytes != 0 && written > maximumBytes) {
+    std::error_code ignored;
+    fs::remove(paths::fromUtf8(target), ignored);
+    written = 0;
+    error = "The download is larger than the allowed size (" + std::to_string(maximumBytes) + " bytes)";
     return false;
   }
   return true;
