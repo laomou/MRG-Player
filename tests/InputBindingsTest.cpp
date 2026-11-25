@@ -101,6 +101,16 @@ int main() {
   check(std::string(launcher::config::inputActionName(InputAction::R)) == "R",
         "R is named");
 
+  const auto keyboardPrompts = launcher::config::inputPrompts(
+      launcher::config::InputDeviceKind::KeyboardMouse,
+      launcher::config::ControllerStyle::Auto);
+  check(keyboardPrompts.manage == "M",
+        "keyboard management uses M instead of the gameplay X key");
+  const auto xboxPrompts = launcher::config::inputPrompts(
+      launcher::config::InputDeviceKind::Controller,
+      launcher::config::ControllerStyle::Xbox);
+  check(xboxPrompts.manage == "X", "controller management keeps the X button");
+
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.
   int presses = 0;

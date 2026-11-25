@@ -63,13 +63,12 @@ void drawButtonGlyph(SDL_Renderer *renderer, int x, int y,
 
 void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
               int selectedAction, bool saveDataPresent, i18n::Language language,
-              const config::InputPrompts &prompts) {
+              const config::InputPrompts &prompts, SDL_Color themeAccent) {
   rounded(renderer, kPanelX - 8, kPanelY + 8, 562, 804, 28, {0, 0, 0, 42});
   rounded(renderer, kPanelX, kPanelY, 546, 804, 28, {12, 21, 37, 232});
   text(renderer, 1014, 84, tr(TextId::ManageGame, language), 3,
        {246, 248, 252, 255});
-  text(renderer, 1014, 132, fitLine(entry.title, 482, 2), 2,
-       {255, 220, 114, 255});
+  text(renderer, 1014, 132, fitLine(entry.title, 482, 2), 2, themeAccent);
   const auto &platform = game::platformDescriptor(entry.platform);
   text(renderer, 1014, 171,
        std::string(platform.displayName) + "  /  " +
@@ -103,26 +102,27 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
     const float y = actionTop(index);
     const bool selected = index == selectedAction;
     const bool destructive = index >= 4;
-    const SDL_Color accent = destructive ? SDL_Color{255, 157, 150, 255}
-                                         : SDL_Color{255, 211, 101, 255};
+    const SDL_Color rowAccent =
+        destructive ? SDL_Color{255, 157, 150, 255} : themeAccent;
     rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 12,
-            selected      ? accent
+            selected      ? rowAccent
             : destructive ? SDL_Color{255, 108, 104, 12}
                           : SDL_Color{255, 255, 255, 12});
     drawButtonGlyph(renderer, 1052, static_cast<int>(y + 34), glyphs[index],
                     selected ? SDL_Color{23, 23, 39, 255}
                              : SDL_Color{255, 255, 255, 18},
-                    selected ? accent : SDL_Color{205, 213, 230, 255});
+                    selected ? rowAccent : SDL_Color{205, 213, 230, 255});
     text(renderer, 1090,
          static_cast<int>(y + (descriptions[index].empty() ? 24 : 8)),
          tr(labels[index], language), 2,
          selected      ? SDL_Color{20, 24, 35, 255}
-         : destructive ? accent
+         : destructive ? rowAccent
                        : SDL_Color{241, 245, 251, 255});
     if (!descriptions[index].empty()) {
       text(renderer, 1090, static_cast<int>(y + 39),
            fitLine(descriptions[index], 390, 1), 1,
-           selected ? SDL_Color{70, 57, 39, 255} : SDL_Color{165, 181, 204, 255});
+           selected ? SDL_Color{38, 48, 54, 255}
+                    : SDL_Color{165, 181, 204, 255});
     }
   }
   fill(renderer, 1014, 592, 482, 1, {255, 157, 150, 36});
@@ -131,16 +131,15 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
   const std::vector<Hint> hints{
       {tr(TextId::Back, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, kPanelX + 514.0f, 806.0f, hints,
-              SDL_Color{255, 211, 101, 255});
+  drawHintRow(renderer, kPanelX + 514.0f, 806.0f, hints, themeAccent);
 }
 
 void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
                       ManagementDialog dialog, int confirmationChoice,
-                      i18n::Language language) {
+                      i18n::Language language, SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 205});
   rounded(renderer, 305, 150, 990, 600, 34, {8, 16, 31, 255});
-  fill(renderer, 305, 150, 990, 9, {255, 205, 99, 255});
+  fill(renderer, 305, 150, 990, 9, accent);
   circle(renderer, 409, 254, 40, {255, 98, 94, 36});
   centeredText(renderer, 409, 243, "!", 4, {255, 133, 128, 255});
   const bool removeRom = dialog == ManagementDialog::ConfirmRemoveRom;
@@ -183,8 +182,7 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
     const float x = 369.0f + choice * 450.0f;
     const bool selected = choice == confirmationChoice;
     rounded(renderer, x, 595, 412, 66, 18,
-            selected ? SDL_Color{255, 211, 101, 255}
-                     : SDL_Color{255, 98, 94, 34});
+            selected ? accent : SDL_Color{255, 98, 94, 34});
     centeredText(renderer, static_cast<int>(x + 206), 615,
                  tr(labels[choice], language), 2,
                  selected ? SDL_Color{23, 23, 38, 255}
@@ -217,15 +215,14 @@ std::string lastPlayedText(std::int64_t timestamp, i18n::Language language) {
 }
 
 void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
-              bool saveDataPresent, i18n::Language language) {
+              bool saveDataPresent, i18n::Language language, SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 205});
   rounded(renderer, 355, 145, 890, 610, 32, {8, 16, 31, 255});
   text(renderer, 415, 195, tr(TextId::GameInfo, language), 4,
        {255, 255, 255, 255});
   text(renderer, 415, 251, tr(TextId::Title, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 415, 279, fitLine(entry.title, 760, 3), 3,
-       {255, 220, 114, 255});
+  text(renderer, 415, 279, fitLine(entry.title, 760, 3), 3, accent);
   text(renderer, 415, 337, tr(TextId::File, language), 1, {132, 145, 169, 255});
   text(renderer, 415, 365,
        fitLine(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 760,
@@ -245,8 +242,7 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
        {132, 145, 169, 255});
   text(renderer, 415, 537,
        tr(entry.favorite ? TextId::On : TextId::Off, language), 2,
-       entry.favorite ? SDL_Color{255, 220, 114, 255}
-                      : SDL_Color{180, 190, 210, 255});
+       entry.favorite ? accent : SDL_Color{180, 190, 210, 255});
   text(renderer, 790, 509, tr(TextId::SaveData, language), 1,
        {132, 145, 169, 255});
   text(renderer, 790, 537,
@@ -255,7 +251,7 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
        2,
        saveDataPresent ? SDL_Color{132, 220, 157, 255}
                        : SDL_Color{180, 190, 210, 255});
-  rounded(renderer, 415, 620, 770, 68, 18, {255, 211, 101, 255});
+  rounded(renderer, 415, 620, 770, 68, 18, accent);
   centeredText(renderer, 800, 642, tr(TextId::Back, language), 2,
                {23, 23, 38, 255});
 }
@@ -267,14 +263,17 @@ void drawGameManagementOverlay(SDL_Renderer *renderer,
                                int selectedAction, ManagementDialog dialog,
                                int confirmationChoice, bool saveDataPresent,
                                i18n::Language language,
-                               const config::InputPrompts &prompts) {
+                               const config::InputPrompts &prompts,
+                               SDL_Color accent) {
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {3, 7, 16, 65});
-  drawMenu(renderer, entry, selectedAction, saveDataPresent, language, prompts);
+  drawMenu(renderer, entry, selectedAction, saveDataPresent, language, prompts,
+           accent);
   if (dialog == ManagementDialog::ConfirmRemoveRom ||
       dialog == ManagementDialog::ConfirmDeleteSave) {
-    drawConfirmation(renderer, entry, dialog, confirmationChoice, language);
+    drawConfirmation(renderer, entry, dialog, confirmationChoice, language,
+                     accent);
   } else if (dialog == ManagementDialog::Info) {
-    drawInfo(renderer, entry, saveDataPresent, language);
+    drawInfo(renderer, entry, saveDataPresent, language, accent);
   }
 }
 

@@ -143,7 +143,7 @@ std::string controllerButtonPrompt(SDL_GameControllerButton button,
 
 InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
   if (device == InputDeviceKind::KeyboardMouse)
-    return {"ENTER", "X", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+    return {"ENTER", "M", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
   std::string category = "LB/RB";
   if (style == ControllerStyle::Nintendo)
     category = "L/R";

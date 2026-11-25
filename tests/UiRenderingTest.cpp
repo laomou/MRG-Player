@@ -318,6 +318,40 @@ int main(int argc, char **argv) {
     check(!clamped.move(1), "A clamped list stops at its last control");
   }
 
+  // The management drawer receives the active theme colour instead of owning a
+  // stale yellow accent. Sample an empty part of the selected row so text does
+  // not affect the pixel.
+  SDL_Surface *managementSurface = SDL_CreateRGBSurfaceWithFormat(
+      0, kLogicalWidth, kLogicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
+  check(managementSurface != nullptr, SDL_GetError());
+  SDL_Renderer *managementRenderer =
+      SDL_CreateSoftwareRenderer(managementSurface);
+  check(managementRenderer != nullptr, SDL_GetError());
+  SDL_SetRenderDrawBlendMode(managementRenderer, SDL_BLENDMODE_BLEND);
+  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+       {0, 0, 0, 255});
+  launcher::library::GameEntry managementEntry;
+  managementEntry.title = "F-1 Race";
+  managementEntry.filePath = "f1.nes";
+  managementEntry.platform = launcher::game::GamePlatform::Nes;
+  const launcher::config::InputPrompts managementPrompts{
+      "ENTER", "M", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+  drawGameManagementOverlay(
+      managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,
+      launcher::i18n::Language::English, managementPrompts, teal);
+  SDL_RenderPresent(managementRenderer);
+  const auto *managementRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      280 * managementSurface->pitch);
+  Uint8 managementR, managementG, managementB, managementA;
+  SDL_GetRGBA(managementRow[1450], managementSurface->format, &managementR,
+              &managementG, &managementB, &managementA);
+  check(managementR == teal.r && managementG == teal.g &&
+            managementB == teal.b && managementA == teal.a,
+        "The management selection follows the active theme accent");
+  SDL_DestroyRenderer(managementRenderer);
+  SDL_FreeSurface(managementSurface);
+
   SDL_Surface *surface =
       SDL_CreateRGBSurfaceWithFormat(0, 100, 100, 32, SDL_PIXELFORMAT_RGBA32);
   check(surface != nullptr, SDL_GetError());
