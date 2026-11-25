@@ -124,6 +124,9 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
            selected ? SDL_Color{38, 48, 54, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
+    if (selected)
+      drawFocusRing(renderer, kActionX, y, kActionWidth, kActionHeight, 12.0f,
+                    1.0f);
   }
   fill(renderer, 1014, 592, 482, 1, {255, 157, 150, 36});
   // The legend belongs to the drawer, not to the shelf it covers.
@@ -254,6 +257,7 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
   rounded(renderer, 415, 620, 770, 68, 18, accent);
   centeredText(renderer, 800, 642, tr(TextId::Back, language), 2,
                {23, 23, 38, 255});
+  drawFocusRing(renderer, 415.0f, 620.0f, 770.0f, 68.0f, 18.0f, 1.0f);
 }
 
 } // namespace

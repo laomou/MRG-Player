@@ -145,6 +145,9 @@ void drawPauseMenu(
     text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
          2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
+    if (selected)
+      drawFocusRing(renderer, kActionX, y, kActionWidth, kActionHeight, 16.0f,
+                    1.0f);
   }
 
   fill(renderer, 1012, 790, 480, 1, {255, 255, 255, 30});
@@ -288,6 +291,9 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
            selected ? SDL_Color{70, 57, 39, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
+    if (selected)
+      drawFocusRing(renderer, kActionX, y, kActionWidth, kVideoRowHeight, 14.0f,
+                    1.0f);
   }
 
   text(renderer, 1012, 642,
@@ -372,6 +378,9 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
            value, 2,
            selected ? SDL_Color{24, 24, 39, 255}
                     : accent);
+      if (selected)
+        drawFocusRing(renderer, kActionX, y, kActionWidth, kOptionRowHeight,
+                      14.0f, 1.0f);
     }
     text(renderer, 1012, 660,
          std::to_string(cursor + 1) + " / " + std::to_string(total), 1,

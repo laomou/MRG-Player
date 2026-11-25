@@ -349,6 +349,29 @@ int main(int argc, char **argv) {
   check(managementR == teal.r && managementG == teal.g &&
             managementB == teal.b && managementA == teal.a,
         "The management selection follows the active theme accent");
+  const auto *managementFocusRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      245 * managementSurface->pitch);
+  SDL_GetRGBA(managementFocusRow[1255], managementSurface->format,
+              &managementR, &managementG, &managementB, &managementA);
+  check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
+            managementB == kFocusColor.b && managementA == kFocusColor.a,
+        "The management selection has the shared focus ring");
+
+  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+       {0, 0, 0, 255});
+  const std::array<StateSlotView, kStateSlotCount> pauseSlots{};
+  drawPauseMenu(managementRenderer, "F-1 Race", 0, 0, pauseSlots, {}, 0,
+                launcher::i18n::Language::English, managementPrompts, teal);
+  SDL_RenderPresent(managementRenderer);
+  const auto *pauseFocusRow = reinterpret_cast<const Uint32 *>(
+      static_cast<const Uint8 *>(managementSurface->pixels) +
+      393 * managementSurface->pitch);
+  SDL_GetRGBA(pauseFocusRow[1252], managementSurface->format, &managementR,
+              &managementG, &managementB, &managementA);
+  check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
+            managementB == kFocusColor.b && managementA == kFocusColor.a,
+        "The pause selection has the shared focus ring");
   SDL_DestroyRenderer(managementRenderer);
   SDL_FreeSurface(managementSurface);
 
