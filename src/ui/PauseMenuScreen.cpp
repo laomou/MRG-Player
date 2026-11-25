@@ -133,9 +133,9 @@ void drawPauseMenu(
   for (int action = 0; action < kPauseActionCount; ++action) {
     const float y = kActionY + action * kActionStep;
     const bool selected = action == selectedAction;
-    rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 16,
-            selected ? accent
-                     : SDL_Color{255, 255, 255, 16});
+    drawFocusablePlate(renderer, kActionX, y, kActionWidth, kActionHeight, 16,
+                       selected ? accent : SDL_Color{255, 255, 255, 16},
+                       selected);
     circle(renderer, 1048, static_cast<int>(y + 22), 14,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
@@ -145,9 +145,6 @@ void drawPauseMenu(
     text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
          2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
-    if (selected)
-      drawFocusRing(renderer, kActionX, y, kActionWidth, kActionHeight, 16.0f,
-                    1.0f);
   }
 
   fill(renderer, 1012, 790, 480, 1, {255, 255, 255, 30});
@@ -196,10 +193,11 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
   const std::array<float, 2> xs{kConfirmCancelX, kConfirmPowerX};
   for (int option = 0; option < 2; ++option) {
     const bool selected = option == choice;
-    rounded(renderer, xs[static_cast<std::size_t>(option)], kConfirmButtonY,
-            kConfirmButtonWidth, kConfirmButtonHeight, 18,
-            selected ? accent
-                     : SDL_Color{255, 255, 255, 18});
+    drawFocusablePlate(renderer, xs[static_cast<std::size_t>(option)],
+                       kConfirmButtonY, kConfirmButtonWidth,
+                       kConfirmButtonHeight, 18,
+                       selected ? accent : SDL_Color{255, 255, 255, 18},
+                       selected);
     centeredText(renderer,
                  static_cast<int>(xs[static_cast<std::size_t>(option)] +
                                   kConfirmButtonWidth / 2.0f),
@@ -207,11 +205,6 @@ void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
                  tr(labels[static_cast<std::size_t>(option)], language), 2,
                  selected ? SDL_Color{24, 24, 39, 255}
                           : SDL_Color{230, 235, 245, 255});
-    if (selected) {
-      drawFocusRing(renderer, xs[static_cast<std::size_t>(option)],
-                    kConfirmButtonY, kConfirmButtonWidth, kConfirmButtonHeight,
-                    18.0f, 1.0f);
-    }
   }
   // Cancel sits on the left button, so its key is written first.
   const std::vector<Hint> footer{
@@ -275,9 +268,10 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
   for (int index = 0; index < kPauseVideoRowCount; ++index) {
     const float y = kVideoRowY + index * kVideoRowStep;
     const bool selected = index == row;
-    rounded(renderer, kActionX, y, kActionWidth, kVideoRowHeight, 14,
-            selected ? accent
-                     : SDL_Color{255, 255, 255, 16});
+    drawFocusablePlate(renderer, kActionX, y, kActionWidth, kVideoRowHeight,
+                       14,
+                       selected ? accent : SDL_Color{255, 255, 255, 16},
+                       selected);
     text(renderer, 1032, static_cast<int>(y + 12), titles[index], 2,
          selected ? SDL_Color{24, 24, 39, 255}
                   : SDL_Color{241, 245, 251, 255});
@@ -291,9 +285,6 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
            selected ? SDL_Color{70, 57, 39, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
-    if (selected)
-      drawFocusRing(renderer, kActionX, y, kActionWidth, kVideoRowHeight, 14.0f,
-                    1.0f);
   }
 
   text(renderer, 1012, 642,
@@ -359,9 +350,10 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
           options[static_cast<std::size_t>(index)];
       const bool selected = index == cursor;
       const float y = kOptionRowY + row * kOptionRowStep;
-      rounded(renderer, kActionX, y, kActionWidth, kOptionRowHeight, 14,
-              selected ? accent
-                       : SDL_Color{255, 255, 255, 16});
+      drawFocusablePlate(renderer, kActionX, y, kActionWidth,
+                         kOptionRowHeight, 14,
+                         selected ? accent : SDL_Color{255, 255, 255, 16},
+                         selected);
       const std::string label =
           i18n::coreOptionLabel(option.key, option.label, language);
       text(renderer, 1032, static_cast<int>(y + 15),
@@ -378,9 +370,6 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
            value, 2,
            selected ? SDL_Color{24, 24, 39, 255}
                     : accent);
-      if (selected)
-        drawFocusRing(renderer, kActionX, y, kActionWidth, kOptionRowHeight,
-                      14.0f, 1.0f);
     }
     text(renderer, 1012, 660,
          std::to_string(cursor + 1) + " / " + std::to_string(total), 1,

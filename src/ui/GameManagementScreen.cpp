@@ -104,10 +104,11 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
     const bool destructive = index >= 4;
     const SDL_Color rowAccent =
         destructive ? SDL_Color{255, 157, 150, 255} : themeAccent;
-    rounded(renderer, kActionX, y, kActionWidth, kActionHeight, 12,
-            selected      ? rowAccent
-            : destructive ? SDL_Color{255, 108, 104, 12}
-                          : SDL_Color{255, 255, 255, 12});
+    drawFocusablePlate(renderer, kActionX, y, kActionWidth, kActionHeight, 12,
+                       selected      ? rowAccent
+                       : destructive ? SDL_Color{255, 108, 104, 12}
+                                     : SDL_Color{255, 255, 255, 12},
+                       selected);
     drawButtonGlyph(renderer, 1052, static_cast<int>(y + 34), glyphs[index],
                     selected ? SDL_Color{23, 23, 39, 255}
                              : SDL_Color{255, 255, 255, 18},
@@ -124,9 +125,6 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
            selected ? SDL_Color{38, 48, 54, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
-    if (selected)
-      drawFocusRing(renderer, kActionX, y, kActionWidth, kActionHeight, 12.0f,
-                    1.0f);
   }
   fill(renderer, 1014, 592, 482, 1, {255, 157, 150, 36});
   // The legend belongs to the drawer, not to the shelf it covers.
@@ -184,14 +182,13 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
   for (int choice = 0; choice < 2; ++choice) {
     const float x = 369.0f + choice * 450.0f;
     const bool selected = choice == confirmationChoice;
-    rounded(renderer, x, 595, 412, 66, 18,
-            selected ? accent : SDL_Color{255, 98, 94, 34});
+    drawFocusablePlate(renderer, x, 595, 412, 66, 18,
+                       selected ? accent : SDL_Color{255, 98, 94, 34},
+                       selected);
     centeredText(renderer, static_cast<int>(x + 206), 615,
                  tr(labels[choice], language), 2,
                  selected ? SDL_Color{23, 23, 38, 255}
                           : SDL_Color{255, 170, 166, 255});
-    if (selected)
-      drawFocusRing(renderer, x, 595.0f, 412.0f, 66.0f, 18.0f, 1.0f);
   }
   centeredText(renderer, 800, 696, tr(TextId::SafeDefaultHint, language), 1,
                {122, 135, 159, 255});
@@ -254,10 +251,9 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
        2,
        saveDataPresent ? SDL_Color{132, 220, 157, 255}
                        : SDL_Color{180, 190, 210, 255});
-  rounded(renderer, 415, 620, 770, 68, 18, accent);
+  drawFocusablePlate(renderer, 415, 620, 770, 68, 18, accent, true);
   centeredText(renderer, 800, 642, tr(TextId::Back, language), 2,
                {23, 23, 38, 255});
-  drawFocusRing(renderer, 415.0f, 620.0f, 770.0f, 68.0f, 18.0f, 1.0f);
 }
 
 } // namespace

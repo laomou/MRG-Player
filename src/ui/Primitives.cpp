@@ -709,6 +709,14 @@ int textCenteredY(const std::string &value, int centerY, int scale) {
   return static_cast<int>(std::lround((top - gOffsetY) / gScale));
 }
 
+void drawFocusablePlate(SDL_Renderer *renderer, float x, float y, float width,
+                        float height, float radius, SDL_Color plate,
+                        bool focused, float focusOpacity) {
+  rounded(renderer, x, y, width, height, radius, plate);
+  if (focused)
+    drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
+}
+
 void drawButton(SDL_Renderer *renderer, float x, float y, float width,
                 float height, float radius, const std::string &label, int scale,
                 SDL_Color plate, SDL_Color rim, SDL_Color labelColor,
@@ -717,13 +725,12 @@ void drawButton(SDL_Renderer *renderer, float x, float y, float width,
     rounded(renderer, x - 1.0f, y - 1.0f, width + 2.0f, height + 2.0f,
             radius + 1.0f, rim);
   }
-  rounded(renderer, x, y, width, height, radius, plate);
+  drawFocusablePlate(renderer, x, y, width, height, radius, plate, focused,
+                     focusOpacity);
   const int centerX = static_cast<int>(std::lround(x + width / 2.0f));
   const int centerY = static_cast<int>(std::lround(y + height / 2.0f));
   centeredText(renderer, centerX, textCenteredY(label, centerY, scale), label,
                scale, labelColor);
-  if (focused)
-    drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
 }
 
 void setOutputSize(int outputWidth, int outputHeight) {

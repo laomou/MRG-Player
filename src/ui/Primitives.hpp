@@ -80,6 +80,14 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
 [[nodiscard]] int textCenteredY(const std::string &value, int centerY,
                                 int scale);
 
+// A reusable control surface for menu rows and buttons. Keeping the plate and
+// focus state in one call prevents a screen from filling a selected row but
+// forgetting the system focus ring. Callers may draw their icon and text after
+// this; the ring is outside the plate, so their content cannot cover it.
+void drawFocusablePlate(SDL_Renderer *renderer, float x, float y, float width,
+                        float height, float radius, SDL_Color plate,
+                        bool focused, float focusOpacity = 1.0f);
+
 // A button: plate, optional hairline rim, a label centred with textCenteredY,
 // and the shared focus ring when focused. Buttons go through this so the label
 // is centred by construction and focus looks the same everywhere.
