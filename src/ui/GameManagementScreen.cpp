@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "game/GamePlatform.hpp"
 #include "i18n/Localization.hpp"
@@ -22,10 +23,10 @@ using i18n::tr;
 constexpr float kPanelX = 982.0f;
 constexpr float kPanelY = 48.0f;
 constexpr float kActionX = 1014.0f;
-constexpr float kActionY = 288.0f;
+constexpr float kActionY = 248.0f;
 constexpr float kActionWidth = 482.0f;
 constexpr float kActionHeight = 68.0f;
-constexpr float kActionStep = 80.0f;
+constexpr float kActionStep = 86.0f;
 
 float actionTop(int index) {
   return kActionY + index * kActionStep + (index >= 4 ? 18.0f : 0.0f);
@@ -77,8 +78,6 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
               language),
        1, {180, 195, 213, 255});
   fill(renderer, 1014, 213, 482, 1, {255, 255, 255, 30});
-  text(renderer, 1014, 239, tr(TextId::ChooseManagementAction, language), 1,
-       {164, 180, 201, 255});
 
   // Frequent actions first; destructive actions are separated at the bottom.
   const std::array<TextId, kManagementActionCount> labels{
@@ -88,13 +87,16 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
       TextId::Cancel,
       TextId::RemoveFromLibrary,
       TextId::DeleteSaveData};
-  const std::array<TextId, kManagementActionCount> descriptions{
-      TextId::StartDescription,
-      TextId::FavoriteDescription,
-      TextId::GameInfoDescription,
-      TextId::CancelDescription,
-      TextId::RemoveRomDescription,
-      saveDataPresent ? TextId::DeleteSaveDescription : TextId::NoSaveData};
+  // Actions whose label already says everything carry no second line; the row
+  // then centres the label instead of leaving a hole underneath it.
+  const std::array<std::string, kManagementActionCount> descriptions{
+      std::string(),
+      tr(TextId::FavoriteDescription, language),
+      tr(TextId::GameInfoDescription, language),
+      std::string(),
+      tr(TextId::RemoveRomDescription, language),
+      tr(saveDataPresent ? TextId::DeleteSaveDescription : TextId::NoSaveData,
+         language)};
   const std::array<std::string, kManagementActionCount> glyphs{
       prompts.confirm, "*", "i", prompts.back, "-", "!"};
   for (int index = 0; index < kManagementActionCount; ++index) {
@@ -111,18 +113,26 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
                     selected ? SDL_Color{23, 23, 39, 255}
                              : SDL_Color{255, 255, 255, 18},
                     selected ? accent : SDL_Color{205, 213, 230, 255});
-    text(renderer, 1090, static_cast<int>(y + 8), tr(labels[index], language),
-         2,
+    text(renderer, 1090,
+         static_cast<int>(y + (descriptions[index].empty() ? 24 : 8)),
+         tr(labels[index], language), 2,
          selected      ? SDL_Color{20, 24, 35, 255}
          : destructive ? accent
                        : SDL_Color{241, 245, 251, 255});
-    text(renderer, 1090, static_cast<int>(y + 39),
-         fitLine(tr(descriptions[index], language), 390, 1), 1,
-         selected ? SDL_Color{70, 57, 39, 255} : SDL_Color{165, 181, 204, 255});
+    if (!descriptions[index].empty()) {
+      text(renderer, 1090, static_cast<int>(y + 39),
+           fitLine(descriptions[index], 390, 1), 1,
+           selected ? SDL_Color{70, 57, 39, 255} : SDL_Color{165, 181, 204, 255});
+    }
   }
-  fill(renderer, 1014, 608, 482, 1, {255, 157, 150, 36});
-  text(renderer, 1014, 807, tr(TextId::RomAndSaveSeparate, language), 1,
-       {165, 181, 204, 255});
+  fill(renderer, 1014, 592, 482, 1, {255, 157, 150, 36});
+  // The legend belongs to the drawer, not to the shelf it covers.
+  fill(renderer, 1014, 790, 482, 1, {255, 255, 255, 30});
+  const std::vector<Hint> hints{
+      {tr(TextId::Back, language), prompts.back, false},
+      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
+  drawHintRow(renderer, kPanelX + 514.0f, 806.0f, hints,
+              SDL_Color{255, 211, 101, 255});
 }
 
 void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,

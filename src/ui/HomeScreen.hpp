@@ -22,7 +22,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
               float focusOpacity, SDL_Color accent,
-              CoverSource *covers = nullptr);
+              CoverSource *covers = nullptr, bool showFooter = true);
 void moveSelection(int &selectedGame, int direction, int count);
 
 // Two actions when a game is selected, none when the library is empty.

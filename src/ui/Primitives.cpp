@@ -811,7 +811,6 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
   }
   fill(renderer, 82, 548, 315, 40, {150, 67, 61, 120});
   fill(renderer, 82, 588, 315, 17, {85, 47, 54, 150});
-  fill(renderer, 1110, 510, 390, 40, {150, 67, 61, 110});
   for (int i = 0; i < 3; ++i)
     fill(renderer, 198.0f + i * 52.0f, 454, 48, 48,
          {game.accent.r, game.accent.g, game.accent.b, 135});

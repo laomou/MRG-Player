@@ -96,10 +96,10 @@ int main(int argc, char **argv) {
   check(powerCycleChoiceAt(900, 530) == 1, "Power-cycle confirmation target");
   check(powerCycleChoiceAt(600, 300) == -1, "Dialog text must not confirm");
   for (int action = 0; action < kManagementActionCount; ++action)
-    check(managementActionAt(1200, 288 + action * 80 + (action >= 4 ? 18 : 0) +
+    check(managementActionAt(1200, 248 + action * 86 + (action >= 4 ? 18 : 0) +
                                        34) == action,
           "Management hit target must follow display order");
-  check(managementActionAt(1200, 612) == -1,
+  check(managementActionAt(1200, 586) == -1,
         "Danger section separator must not activate");
   check(confirmationChoiceAt(500, 620) == 0, "Cancel target preserved");
   check(confirmationChoiceAt(950, 620) == 1, "Confirmation target preserved");
@@ -147,6 +147,16 @@ int main(int argc, char **argv) {
         "The category rail hit target follows the list");
   check(settingsRowAt(1, 1200, 410 + 2 * 106 + 20) == 2,
         "The display page rows are all clickable");
+  // The core page gives every platform its own line, and the refresh button
+  // sits on the heading line instead of inside one, so both answer a hit test.
+  check(settingsRowAt(5, 1200, 418 + 2 * 56 + 20) == 2,
+        "The core list maps a click to its platform");
+  check(settingsRowAt(5, 1200, 418 + 48 + 4) == -1,
+        "The gap between core rows activates nothing");
+  check(settingsRowAt(5, 1200, 300) == -1,
+        "The core heading line is not a row");
+  check(coreRefreshAt(1400, 348) && !coreRefreshAt(1400, 414),
+        "The refresh button is its own target");
 
   // The widgets speak canvas units, but they are drawn in output pixels, so a
   // window that is wider than 16:9 letterboxes the canvas and the pointer maps

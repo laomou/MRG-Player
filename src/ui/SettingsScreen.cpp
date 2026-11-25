@@ -54,6 +54,20 @@ constexpr int kSettingRowStep = 106;
 constexpr int kSettingRowHeight = 92;
 constexpr int kInstallerRowCount = 5;
 
+// The core page gives every platform one 48 pixel line on a 56 pixel pitch,
+// with the installed counter and the refresh button on the heading line. The
+// columns are fixed so the platform name, the core file, and the status never
+// wander between rows.
+constexpr int kCoreRowY = 418;
+constexpr int kCoreRowStep = 56;
+constexpr int kCoreRowHeight = 48;
+constexpr int kCoreRefreshX = 1330;
+constexpr int kCoreRefreshY = 331;
+constexpr int kCoreRefreshWidth = 146;
+constexpr int kCoreRefreshHeight = 34;
+constexpr int kCoreColumnCoreX = 900;
+constexpr int kCorePillRight = 1450;
+
 TextId categoryText(int category) {
   constexpr std::array<TextId, kCategoryCount> ids{
       TextId::General,    TextId::Display,     TextId::Audio,
@@ -90,11 +104,15 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
             static_cast<float>(height), 17,
             {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
   }
-  const int titleY = y + (height - 58) / 2;
+  // A row without a description puts the label itself on the centre line, so the
+  // page keeps one rhythm instead of a ragged column of top-aligned labels.
+  const bool hasDescription = !description.empty();
+  const int titleY = hasDescription ? y + (height - 58) / 2 : y + (height - 34) / 2;
   text(renderer, 498, titleY, title, 2,
        selected || focused ? SDL_Color{255, 255, 255, 255}
                            : SDL_Color{247, 248, 252, 255});
-  text(renderer, 498, titleY + 34, description, 1, {148, 169, 187, 255});
+  if (hasDescription)
+    text(renderer, 498, titleY + 34, description, 1, {148, 169, 187, 255});
   const int valueX = 1420 - textWidth(value, 2);
   text(renderer, valueX, y + (height - 24) / 2, value, 2,
        selected || focused ? accent : SDL_Color{205, 215, 226, 255});
@@ -238,12 +256,12 @@ int settingsRowAt(int category, float x, float y) {
   if (category == 3)
     return controllerPageRowAt(static_cast<int>(x), static_cast<int>(y));
   if (category == 5) {
-    if (y < 408)
+    if (y < kCoreRowY)
       return -1;
-    const int row = (static_cast<int>(y) - 408) / 56;
+    const int row = (static_cast<int>(y) - kCoreRowY) / kCoreRowStep;
     if (row < 0 || row >= kInstallerRowCount)
       return -1;
-    if ((static_cast<int>(y) - 408) % 56 >= kRowHeight)
+    if ((static_cast<int>(y) - kCoreRowY) % kCoreRowStep >= kCoreRowHeight)
       return -1;
     return row;
   }
@@ -256,6 +274,13 @@ int settingsRowAt(int category, float x, float y) {
       kSettingRowHeight)
     return -1;
   return row;
+}
+
+bool coreRefreshAt(float x, float y) {
+  // Re-reading the disk is the one control that is not a list row, so it gets
+  // its own rectangle instead of a row index.
+  return x >= kCoreRefreshX && x <= kCoreRefreshX + kCoreRefreshWidth &&
+         y >= kCoreRefreshY && y <= kCoreRefreshY + kCoreRefreshHeight;
 }
 
 void changeSetting(AppSettings &settings, int category, int row,
@@ -406,8 +431,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   } else if (category == 1) {
     drawSettingRow(
         renderer, 410, row == 0, contentFocused && row == 0,
-        tr(TextId::DisplayMode, language),
-        tr(TextId::DisplayModeDescription, language),
+        tr(TextId::DisplayMode, language), std::string(),
         tr(settings.fullscreen ? TextId::Fullscreen : TextId::Windowed,
            language),
         game.accent, 92, focusOpacity);
@@ -440,8 +464,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    game.accent, 92, focusOpacity);
     drawSettingRow(
         renderer, 622, row == 2, contentFocused && row == 2,
-        tr(TextId::FastForwardAudio, language),
-        tr(TextId::FastForwardAudioDescription, language),
+        tr(TextId::FastForwardAudio, language), std::string(),
         tr(settings.fastForwardAudio != 0 ? TextId::FastForwardAudioKeep
                                           : TextId::FastForwardAudioSilent,
            language),
@@ -508,26 +531,71 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                 {{tr(TextId::ResetBindingsHint, language), "R", false}},
                 game.accent);
   } else if (category == 5) {
-    for (std::size_t index = 0; index < cores.size() && index < 5; ++index) {
-      const CoreRow &entry = cores[index];
-      const std::string value =
-          entry.size.empty()
-              ? entry.core + "  " + entry.status
-              : entry.core + "  " + entry.size + "  " + entry.status;
-      drawCompactRow(renderer, kTrackX,
-                     kCompactStartY + 8 + static_cast<int>(index) * 56,
-                     kTrackWidth,
-                     row == static_cast<int>(index),
-                     contentFocused && row == static_cast<int>(index),
-                     entry.platform, value, game.accent, focusOpacity);
+    // The refresh button shares the heading line with the page title, so the
+    // table below starts on a clean row. A hairline rim keeps it readable as a
+    // button on the dark page.
+    rounded(renderer, static_cast<float>(kCoreRefreshX - 1),
+            static_cast<float>(kCoreRefreshY - 1),
+            static_cast<float>(kCoreRefreshWidth + 2),
+            static_cast<float>(kCoreRefreshHeight + 2), 12.0f,
+            SDL_Color{58, 84, 112, 90});
+    rounded(renderer, static_cast<float>(kCoreRefreshX),
+            static_cast<float>(kCoreRefreshY),
+            static_cast<float>(kCoreRefreshWidth),
+            static_cast<float>(kCoreRefreshHeight), 11.0f,
+            SDL_Color{26, 42, 64, 235});
+    const std::string refresh = tr(TextId::RefreshCores, language);
+    text(renderer,
+         kCoreRefreshX + (kCoreRefreshWidth - textWidth(refresh, 1)) / 2,
+         kCoreRefreshY + 12, refresh, 1, {232, 238, 246, 255});
+
+    // Column captions: the status column is right aligned to the same edge the
+    // pills below it use.
+    text(renderer, kTrackX + 28, kCoreRowY - 22,
+         tr(TextId::ColumnPlatform, language), 1, {120, 140, 162, 255});
+    text(renderer, kCoreColumnCoreX, kCoreRowY - 22,
+         tr(TextId::ColumnCore, language), 1, {120, 140, 162, 255});
+    const std::string statusCaption = tr(TextId::ColumnStatus, language);
+    text(renderer, kCorePillRight - textWidth(statusCaption, 1), kCoreRowY - 22,
+         statusCaption, 1, {120, 140, 162, 255});
+
+    for (int index = 0; index < kInstallerRowCount; ++index) {
+      const int y = kCoreRowY + index * kCoreRowStep;
+      const bool hasRow = index < static_cast<int>(cores.size());
+      const bool selected = row == index;
+      rounded(renderer, static_cast<float>(kTrackX), static_cast<float>(y),
+              static_cast<float>(kTrackWidth),
+              static_cast<float>(kCoreRowHeight), 12.0f,
+              SDL_Color{10, 20, 38, 210});
+      if (selected)
+        rounded(renderer, static_cast<float>(kTrackX), static_cast<float>(y),
+                static_cast<float>(kTrackWidth),
+                static_cast<float>(kCoreRowHeight), 12.0f,
+                SDL_Color{game.accent.r, game.accent.g, game.accent.b, 90});
+      if (selected && contentFocused)
+        drawFocusRing(renderer, static_cast<float>(kTrackX),
+                      static_cast<float>(y), static_cast<float>(kTrackWidth),
+                      static_cast<float>(kCoreRowHeight), 12.0f,
+                      focusOpacity);
+      if (!hasRow)
+        continue;
+      const CoreRow &entry = cores[static_cast<std::size_t>(index)];
+      text(renderer, kTrackX + 28, y + 15, entry.platform, 2,
+           selected ? SDL_Color{255, 255, 255, 255}
+                    : SDL_Color{232, 238, 246, 255});
+      text(renderer, kCoreColumnCoreX, y + 19, entry.core, 1,
+           {176, 193, 211, 255});
+      const int pillWidth = textWidth(entry.status, 1) + 26;
+      rounded(renderer, static_cast<float>(kCorePillRight - pillWidth),
+              static_cast<float>(y + 9), static_cast<float>(pillWidth), 30.0f,
+              15.0f,
+              entry.installed
+                  ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
+                  : SDL_Color{26, 40, 60, 180});
+      text(renderer, kCorePillRight - pillWidth + 13, y + 17, entry.status, 1,
+           entry.installed ? game.accent
+                           : SDL_Color{150, 168, 188, 255});
     }
-    text(renderer, kTrackX, 700, tr(TextId::CoreSnapshotNote, language), 1,
-         {144, 165, 184, 255});
-    drawHintRow(renderer, 1528.0f, 784.0f,
-                {{tr(TextId::InstallCore, language), prompts.confirm, false},
-                 {tr(TextId::RemoveCore, language), "DEL", false},
-                 {tr(TextId::RefreshCores, language), "R", false}},
-                game.accent);
   } else if (category == 6) {
     const std::string accentName = tr(accentText(settings.accent), language);
     drawSettingRow(renderer, 410, row == 0, contentFocused && row == 0,
@@ -553,9 +621,20 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   // direction keys are never written down, the way a console never labels them.
   // Back sits on the left like the cancel button of every dialog, so the
   // action that acts stays on the right.
-  const std::vector<Hint> footer{
-      {tr(TextId::Back, language), prompts.back, false},
-      {tr(TextId::ChangeControl, language), prompts.change, true}};
+  // The core page spends its action key on the selected platform instead of
+  // editing a value, so the legend is built per page.
+  std::vector<Hint> footer{{tr(TextId::Back, language), prompts.back, false}};
+  if (category == 5) {
+    const bool installedRow =
+        row >= 0 && row < static_cast<int>(cores.size()) &&
+        cores[static_cast<std::size_t>(row)].installed;
+    footer.push_back({tr(installedRow ? TextId::CoreDetails : TextId::InstallCore,
+                         language),
+                      prompts.confirm, true});
+  } else {
+    footer.push_back(
+        {tr(TextId::ChangeControl, language), prompts.change, true});
+  }
   drawHintRow(renderer, 1528.0f, 836.0f, footer, game.accent);
 }
 
