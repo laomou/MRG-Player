@@ -85,7 +85,8 @@ void drawSettingRow(SDL_Renderer *renderer, int y, bool selected,
           static_cast<float>(height), 17, plate);
   if (selected) {
     rounded(renderer, 466, static_cast<float>(y), 1010,
-            static_cast<float>(height), 17, {accent.r, accent.g, accent.b, 54});
+            static_cast<float>(height), 17,
+            {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
     rounded(renderer, 466, static_cast<float>(y), 5,
             static_cast<float>(height), 2, accent);
   }
@@ -114,7 +115,7 @@ void drawCompactRow(SDL_Renderer *renderer, int x, int y, int width,
   if (selected) {
     rounded(renderer, static_cast<float>(x), static_cast<float>(y),
             static_cast<float>(width), 29, 9,
-            {accent.r, accent.g, accent.b, 54});
+            {accent.r, accent.g, accent.b, accentWashAlpha(accent)});
     rounded(renderer, static_cast<float>(x), static_cast<float>(y), 5, 29, 2,
             accent);
   }
@@ -354,7 +355,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
       // The tint and the bar always mark the page on screen; the ring only
       // appears when the keys are actually on the rail.
       rounded(renderer, 91, static_cast<float>(y), 292, 48, 14,
-              {game.accent.r, game.accent.g, game.accent.b, 54});
+              {game.accent.r, game.accent.g, game.accent.b,
+               accentWashAlpha(game.accent)});
       rounded(renderer, 91, static_cast<float>(y), 5, 48, 2, game.accent);
       if (railFocused)
         drawFocusRing(renderer, 91, static_cast<float>(y), 292, 48, 14,
@@ -536,7 +538,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    tr(TextId::AccentDescription, language), accentName,
                    game.accent, 92, focusOpacity);
     // A swatch so the choice reads as a colour and not only a name.
-    circle(renderer, 1420 - textWidth(accentName, 2) - 24, 456, 10,
+    circle(renderer, 1420 - textWidth(accentName, 2) - 30, 456, 10,
            accentColor(settings.accent));
   } else if (category == 4) {
     drawSettingRow(renderer, 410, true, contentFocused,

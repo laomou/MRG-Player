@@ -21,6 +21,12 @@ inline constexpr SDL_Color kAccentPalette[kAccentCount] = {
     {255, 211, 89, 255},  // Yellow.
 };
 
+// Warm hues thin out over the navy plate: at the same opacity orange and
+// yellow read as brown, so they get a lighter wash than teal, blue and purple.
+[[nodiscard]] inline Uint8 accentWashAlpha(SDL_Color accent) noexcept {
+  return accent.r > accent.b ? 42 : 54;
+}
+
 [[nodiscard]] inline SDL_Color accentColor(int index) noexcept {
   const int wrapped = ((index % kAccentCount) + kAccentCount) % kAccentCount;
   return kAccentPalette[static_cast<std::size_t>(wrapped)];
