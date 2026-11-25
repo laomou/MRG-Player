@@ -270,6 +270,28 @@ int main(int argc, char **argv) {
           "The dead zone row has no second half either");
     check(!settingsControls(3).list(2).focusRow(0),
           "The right lane only holds binding lines");
+    // The lanes end on a line that spans the whole page, so the down key has to
+    // leave the lane instead of stopping on the last binding.
+    check(grid.focusList(2) && grid.focusedId() == 11,
+          "The right lane starts on RIGHT");
+    grid.list(2).focusIndex(grid.list(2).count() - 1);
+    check(grid.focusedId() == 17, "R is the last binding of the right lane");
+    check(grid.moveVertical(1) && grid.listIndex() == 1 &&
+              grid.focusedId() == 18,
+          "Down from the last binding reaches the dead zone below it");
+    check(!grid.moveVertical(1),
+          "The dead zone is the bottom of the controller page");
+    check(grid.moveVertical(-1) && grid.focusedId() == 10,
+          "Up from the dead zone returns to the binding line");
+    check(grid.moveVertical(-1) && grid.focusedId() == 9,
+          "The left lane keeps walking up from there");
+    (void)grid.focusList(2);
+    grid.list(2).focusIndex(0);
+    check(grid.moveVertical(-1) && grid.listIndex() == 1 &&
+              grid.focusedId() == 3,
+          "Up from the first binding reaches the editing line above it");
+    check(grid.moveVertical(1) && grid.focusedId() == 4,
+          "Down from that line returns to the first binding");
   }
   {
     ControlList list;
