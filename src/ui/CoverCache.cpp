@@ -253,11 +253,15 @@ void CoverCache::startDownload(const library::GameEntry &game) {
         fs::remove(paths::fromUtf8(partial), code);
         continue;
       }
-      std::ifstream input(paths::fromUtf8(partial), std::ios::binary);
+      // The probe closes before the rename: Windows refuses to replace a file
+      // that is still open, which would leave the cover as a .part forever.
       std::vector<std::uint8_t> head(8, 0);
-      input.read(reinterpret_cast<char *>(head.data()), static_cast<std::streamsize>(head.size()));
-      const std::size_t read = static_cast<std::size_t>(input.gcount());
-      head.resize(read);
+      {
+        std::ifstream input(paths::fromUtf8(partial), std::ios::binary);
+        input.read(reinterpret_cast<char *>(head.data()),
+                   static_cast<std::streamsize>(head.size()));
+        head.resize(static_cast<std::size_t>(input.gcount()));
+      }
       std::error_code code;
       if (bytes != 0 && looksLikeImage(head)) {
         fs::remove(paths::fromUtf8(target), code);

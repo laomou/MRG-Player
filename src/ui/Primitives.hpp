@@ -21,7 +21,13 @@ void shutdownTextRenderer();
 // is where the jagged widget text came from. A window that is not 16:9 gets the
 // canvas letterboxed, and every draw call still speaks canvas units.
 void setOutputSize(int outputWidth, int outputHeight);
-// Maps a window coordinate, such as a mouse event, onto the canvas.
+// The window size in the units SDL reports mouse positions in. A HiDPI display
+// hands out points that are smaller than the framebuffer it renders into, so the
+// pointer has to be scaled up by that ratio before it meets the canvas.
+void setWindowSize(int windowWidth, int windowHeight);
+// Maps a window coordinate, such as a mouse event, onto the canvas. Window
+// points are converted to output pixels first, so a click lands on the widget
+// it was aimed at whatever the display scaling is.
 void windowToCanvas(float windowX, float windowY, float &canvasX,
                     float &canvasY);
 // Where the canvas landed in output pixels, so the console picture can be

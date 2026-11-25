@@ -30,6 +30,15 @@ float gScale = 1.0f;
 float gOffsetX = 0.0f;
 float gOffsetY = 0.0f;
 
+// The sizes the last frame reported: output is the framebuffer the widgets are
+// drawn into, window is the surface SDL measures mouse positions against. On a
+// HiDPI display the second is smaller than the first, and a pointer that is not
+// scaled up by that ratio lands short of the control it was aimed at.
+int gOutputWidth = 0;
+int gOutputHeight = 0;
+int gWindowWidth = 0;
+int gWindowHeight = 0;
+
 constexpr int kSubRows = 4;
 
 float deviceX(float value) { return gOffsetX + value * gScale; }
@@ -677,6 +686,8 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
 }
 
 void setOutputSize(int outputWidth, int outputHeight) {
+  gOutputWidth = outputWidth;
+  gOutputHeight = outputHeight;
   const runtime::CanvasTransform frame =
       runtime::fitCanvas(outputWidth, outputHeight);
   const float delta = std::abs(frame.scale - gScale);
@@ -694,6 +705,11 @@ void setOutputSize(int outputWidth, int outputHeight) {
   closeFonts();
 }
 
+void setWindowSize(int windowWidth, int windowHeight) {
+  gWindowWidth = windowWidth;
+  gWindowHeight = windowHeight;
+}
+
 void windowToCanvas(float windowX, float windowY, float &canvasX,
                     float &canvasY) {
   if (gScale <= 0.0f) {
@@ -701,8 +717,18 @@ void windowToCanvas(float windowX, float windowY, float &canvasX,
     canvasY = windowY;
     return;
   }
-  canvasX = (windowX - gOffsetX) / gScale;
-  canvasY = (windowY - gOffsetY) / gScale;
+  // An event speaks window points; the canvas transform speaks framebuffer
+  // pixels. Scaling first keeps a 2x display from halving every click.
+  const float pixelX = gWindowWidth > 0 && gOutputWidth > 0
+                           ? static_cast<float>(gOutputWidth) /
+                                 static_cast<float>(gWindowWidth)
+                           : 1.0f;
+  const float pixelY = gWindowHeight > 0 && gOutputHeight > 0
+                           ? static_cast<float>(gOutputHeight) /
+                                 static_cast<float>(gWindowHeight)
+                           : 1.0f;
+  canvasX = (windowX * pixelX - gOffsetX) / gScale;
+  canvasY = (windowY * pixelY - gOffsetY) / gScale;
 }
 
 void canvasRect(float &x, float &y, float &width, float &height) {

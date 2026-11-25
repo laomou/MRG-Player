@@ -1140,10 +1140,10 @@ int Application::run(int argc, char **argv) {
   // Runs the footer entry the direction keys are pointing at, so the same
   // action is reachable from the row and from its button.
   auto activateHomeAction = [&] {
-    if (!selectedEntryAvailable()) {
-      running = false;
+    // An empty library has no footer entry, so there is nothing to run; quitting
+    // stays on the Escape key and the top-right control.
+    if (!selectedEntryAvailable())
       return;
-    }
     if (homeAction == 0)
       (void)startSelected();
     else if (homeAction == 1)
@@ -1428,6 +1428,67 @@ int Application::run(int argc, char **argv) {
           activeRuntime->releaseInput();
       }
 
+      // The quit dialog is modal: it takes every event from every device, and
+      // nothing below this point sees one. Keeping it here, ahead of the game
+      // and pause branches, is what stops a click from answering the dialog and
+      // then acting on the screen behind it.
+      if (quitConfirm) {
+        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+          const SDL_Keycode key = event.key.keysym.sym;
+          if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP ||
+              key == SDLK_DOWN) {
+            quitChoice = 1 - quitChoice;
+          } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (key == SDLK_ESCAPE || key == SDLK_b) {
+            quitConfirm = false;
+          }
+        } else if (event.type == SDL_CONTROLLERBUTTONDOWN) {
+          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
+              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
+            quitChoice = 1 - quitChoice;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
+            if (quitChoice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+            quitConfirm = false;
+          }
+        } else if (event.type == SDL_MOUSEMOTION ||
+                   event.type == SDL_MOUSEBUTTONDOWN) {
+          const bool motion = event.type == SDL_MOUSEMOTION;
+          float x = 0.0f;
+          float y = 0.0f;
+          ui::windowToCanvas(
+              motion ? static_cast<float>(event.motion.x)
+                     : static_cast<float>(event.button.x),
+              motion ? static_cast<float>(event.motion.y)
+                     : static_cast<float>(event.button.y),
+              x, y);
+          const int choice = ui::quitConfirmChoiceAt(x, y);
+          if (motion) {
+            if (choice >= 0)
+              quitChoice = choice;
+          } else if (event.button.button == SDL_BUTTON_RIGHT) {
+            quitConfirm = false;
+          } else if (event.button.button == SDL_BUTTON_LEFT && choice >= 0) {
+            quitChoice = choice;
+            if (choice == 1)
+              running = false;
+            else
+              quitConfirm = false;
+          }
+        }
+        continue;
+      }
+
       if (screen == Screen::Settings && bindingCapture) {
         const std::size_t player =
             static_cast<std::size_t>(std::clamp(settings.bindingsPlayer, 0, 1));
@@ -1479,42 +1540,6 @@ int Application::run(int argc, char **argv) {
           (screen == Screen::Game || screen == Screen::Pause)) {
         toggleMute();
         continue;
-      }
-
-      if (quitConfirm) {
-        // The dialog is modal: while it is open nothing else sees the keys.
-        if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-          const SDL_Keycode key = event.key.keysym.sym;
-          if (key == SDLK_LEFT || key == SDLK_RIGHT || key == SDLK_UP ||
-              key == SDLK_DOWN) {
-            quitChoice = 1 - quitChoice;
-          } else if (key == SDLK_RETURN || key == SDLK_SPACE) {
-            if (quitChoice == 1)
-              running = false;
-            else
-              quitConfirm = false;
-          } else if (key == SDLK_ESCAPE || key == SDLK_b) {
-            quitConfirm = false;
-          }
-          continue;
-        }
-        if (event.type == SDL_CONTROLLERBUTTONDOWN) {
-          if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT ||
-              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT ||
-              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP ||
-              event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-            quitChoice = 1 - quitChoice;
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
-            if (quitChoice == 1)
-              running = false;
-            else
-              quitConfirm = false;
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
-                     event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
-            quitConfirm = false;
-          }
-          continue;
-        }
       }
 
       if (screen == Screen::Game) {
@@ -1826,7 +1851,8 @@ int Application::run(int argc, char **argv) {
             homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
             homeFocus = ui::HomeFocus::Pills;
-          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards) {
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards &&
+                     ui::homeActionCount(selectedEntryAvailable()) > 0) {
             homeFocus = ui::HomeFocus::Actions;
             homeAction = 0;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Actions) {
@@ -1936,19 +1962,6 @@ int Application::run(int argc, char **argv) {
         float x = 0.0f;
         float y = 0.0f;
         ui::windowToCanvas(event.button.x, event.button.y, x, y);
-        if (quitConfirm) {
-          const int choice = ui::quitConfirmChoiceAt(x, y);
-          if (event.button.button == SDL_BUTTON_LEFT && choice >= 0) {
-            quitChoice = choice;
-            if (choice == 1)
-              running = false;
-            else
-              quitConfirm = false;
-          } else if (event.button.button == SDL_BUTTON_RIGHT) {
-            quitConfirm = false;
-          }
-          break;
-        }
         if (screen == Screen::Home) {
           const int clickedCard = ui::homeCardAt(
               x, y, static_cast<int>(gameLibrary.slotCount()), homeRow);
@@ -2078,7 +2091,8 @@ int Application::run(int argc, char **argv) {
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
             if (homeFocus == ui::HomeFocus::Pills) {
               homeFocus = ui::HomeFocus::Cards;
-            } else if (homeFocus == ui::HomeFocus::Cards) {
+            } else if (homeFocus == ui::HomeFocus::Cards &&
+                       ui::homeActionCount(selectedEntryAvailable()) > 0) {
               homeFocus = ui::HomeFocus::Actions;
               homeAction = 0;
             }
@@ -2289,6 +2303,12 @@ int Application::run(int argc, char **argv) {
     int outputHeight = 0;
     if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0)
       ui::setOutputSize(outputWidth, outputHeight);
+    // Mouse positions arrive in window points, which are not the pixels above
+    // when the display scales the window, so the pointer mapping gets both.
+    int windowWidth = 0;
+    int windowHeight = 0;
+    SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+    ui::setWindowSize(windowWidth, windowHeight);
     // Nothing paints the bars around the canvas, so clear the whole
     // framebuffer; otherwise a window that is not exactly 16:9 shows whatever
     // the framebuffer held.
