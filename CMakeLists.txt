@@ -215,6 +215,7 @@ add_library(mrg-platform STATIC
   src/config/AppPaths.cpp
   src/config/InputBindings.cpp
   src/game/GamePlatform.cpp
+  src/input/BrickInput.cpp
   src/util/ImageFile.cpp
   src/util/Utf8Path.cpp
 )
@@ -341,6 +342,13 @@ if(BUILD_TESTING)
   target_compile_options(input-bindings-test PRIVATE ${MRG_WARNING_FLAGS})
   target_link_libraries(input-bindings-test PRIVATE mrg-platform)
   add_test(NAME input-bindings COMMAND input-bindings-test)
+
+  add_executable(brick-input-test tests/BrickInputTest.cpp)
+  target_include_directories(brick-input-test PRIVATE src)
+  target_compile_features(brick-input-test PRIVATE cxx_std_17)
+  target_compile_options(brick-input-test PRIVATE ${MRG_WARNING_FLAGS})
+  target_link_libraries(brick-input-test PRIVATE mrg-platform)
+  add_test(NAME brick-input COMMAND brick-input-test)
 
   # Cover names and box art URLs are pure string work, so they can be checked
   # without the network or a renderer.

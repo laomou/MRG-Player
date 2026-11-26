@@ -22,6 +22,7 @@
 #include "config/InputBindings.hpp"
 #include "config/Settings.hpp"
 #include "i18n/Localization.hpp"
+#include "input/BrickInput.hpp"
 #include "library/GameLibrary.hpp"
 #include "library/RomScanner.hpp"
 #include "model/Game.hpp"
@@ -133,6 +134,25 @@ SDL_GameController *openPreferredController(std::string_view preferredGuid) {
              ? nullptr
              : SDL_GameControllerOpen(candidates.front().deviceIndex);
 }
+
+#if defined(MRG_PLATFORM_BRICK)
+SDL_Joystick *openBrickJoystick() {
+  for (int index = 0; index < SDL_NumJoysticks(); ++index) {
+    if (SDL_IsGameController(index))
+      continue;
+    SDL_Joystick *joystick = SDL_JoystickOpen(index);
+    if (joystick == nullptr)
+      continue;
+    const char *name = SDL_JoystickName(joystick);
+    std::fprintf(stderr, "Brick raw joystick: %s, %d buttons, %d axes\n",
+                 name != nullptr ? name : "unknown",
+                 SDL_JoystickNumButtons(joystick),
+                 SDL_JoystickNumAxes(joystick));
+    return joystick;
+  }
+  return nullptr;
+}
+#endif
 
 std::string openedControllerGuid(SDL_GameController *controller) {
   if (controller == nullptr)
@@ -335,6 +355,10 @@ int Application::run(int argc, char **argv) {
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
   SDL_GameController *controller2 = nullptr;
+#if defined(MRG_PLATFORM_BRICK)
+  SDL_Joystick *brickJoystick = openBrickJoystick();
+  input::BrickInputAdapter brickInput;
+#endif
   auto instanceIdOf = [](SDL_GameController *pad) -> SDL_JoystickID {
     return pad != nullptr
                ? SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad))
@@ -371,6 +395,14 @@ int Application::run(int argc, char **argv) {
   auto syncPlayerControllers = [&] {
     if (!activeRuntime)
       return;
+#if defined(MRG_PLATFORM_BRICK)
+    if (brickJoystick != nullptr) {
+      activeRuntime->setPlayerController(
+          0, SDL_JoystickInstanceID(brickJoystick));
+      activeRuntime->setPlayerController(1, instanceIdOf(controller));
+      return;
+    }
+#endif
     activeRuntime->setPlayerController(0, instanceIdOf(controller));
     activeRuntime->setPlayerController(1, instanceIdOf(controller2));
   };
@@ -575,6 +607,17 @@ int Application::run(int argc, char **argv) {
     return name;
   };
   auto activeControllerName = [&]() -> std::string {
+#if defined(MRG_PLATFORM_BRICK)
+    if (brickJoystick != nullptr) {
+      const char *rawName = SDL_JoystickName(brickJoystick);
+      std::string combined =
+          "P1 " + std::string(rawName != nullptr ? rawName : "Brick controls");
+      const std::string second = controllerLabel(controller);
+      if (!second.empty())
+        combined += "   P2 " + second;
+      return combined;
+    }
+#endif
     if (controller == nullptr && controller2 == nullptr)
       return {};
     const std::string first = controllerLabel(controller);
@@ -585,14 +628,23 @@ int Application::run(int argc, char **argv) {
     return combined;
   };
   auto resolvedControllerStyle = [&] {
+#if defined(MRG_PLATFORM_BRICK)
+    if (brickJoystick != nullptr &&
+        settings.controllerStyle == config::ControllerStyle::Auto)
+      return config::ControllerStyle::Generic;
+#endif
     const SDL_GameControllerType detected =
         controller != nullptr ? SDL_GameControllerGetType(controller)
                               : SDL_CONTROLLER_TYPE_UNKNOWN;
     return config::resolveControllerStyle(settings.controllerStyle, detected);
   };
   auto currentPrompts = [&] {
+    bool controllerConnected = controller != nullptr;
+#if defined(MRG_PLATFORM_BRICK)
+    controllerConnected = controllerConnected || brickJoystick != nullptr;
+#endif
     const config::InputDeviceKind device = config::resolvePromptDevice(
-        settings.promptDevice, lastInputDevice, controller != nullptr);
+        settings.promptDevice, lastInputDevice, controllerConnected);
     return config::inputPrompts(device, resolvedControllerStyle());
   };
   // Cycling assigns the pad for the port currently being edited, skipping the
@@ -892,6 +944,9 @@ int Application::run(int argc, char **argv) {
     activeRuntime->setFastForward(false);
     activeRuntime->setSlowMotion(false);
     rewindHeld = false;
+#if defined(MRG_PLATFORM_BRICK)
+    brickInput.reset();
+#endif
     pauseSessionClock();
     pauseAction = 0;
     pauseConfirmingPower = false;
@@ -1042,6 +1097,17 @@ int Application::run(int argc, char **argv) {
     std::printf("screenshot: %s\n", path.c_str());
     return path;
   };
+#if defined(MRG_PLATFORM_BRICK)
+  auto adjustVolume = [&](int direction) {
+    settings.volume = std::clamp(settings.volume + direction * 10, 0, 100);
+    if (activeRuntime)
+      activeRuntime->setVolume(settings.volume);
+    saveSettings(settings);
+    showBanner(std::string(i18n::tr(i18n::TextId::MasterVolume,
+                                    currentLanguage())) +
+               ": " + std::to_string(settings.volume) + "%");
+  };
+#endif
   auto toggleMute = [&] {
     settings.audioMuted = !settings.audioMuted;
     saveSettings(settings);
@@ -1489,6 +1555,35 @@ int Application::run(int argc, char **argv) {
     }
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
+#if defined(MRG_PLATFORM_BRICK)
+      const bool fromBrick =
+          brickJoystick != nullptr &&
+          ((event.type == SDL_JOYBUTTONDOWN ||
+            event.type == SDL_JOYBUTTONUP)
+               ? event.jbutton.which == SDL_JoystickInstanceID(brickJoystick)
+               : (event.type == SDL_JOYAXISMOTION &&
+                  event.jaxis.which == SDL_JoystickInstanceID(brickJoystick)));
+      if (fromBrick)
+        lastInputDevice = config::InputDeviceKind::Controller;
+      if (fromBrick && (screen != Screen::Game || quitConfirm)) {
+        const input::BrickUiTranslation translated =
+            brickInput.translateForUi(event);
+        if (translated.command == input::BrickUiCommand::VolumeDown)
+          adjustVolume(-1);
+        else if (translated.command == input::BrickUiCommand::VolumeUp)
+          adjustVolume(1);
+        if (translated.consumed && !translated.hasEvent)
+          continue;
+        if (translated.hasEvent)
+          event = translated.event;
+      } else if (fromBrick && event.type == SDL_JOYBUTTONDOWN &&
+                 (event.jbutton.button == input::kBrickButtonVolumeDown ||
+                  event.jbutton.button == input::kBrickButtonVolumeUp)) {
+        adjustVolume(event.jbutton.button == input::kBrickButtonVolumeUp ? 1
+                                                                         : -1);
+        continue;
+      }
+#endif
       if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP ||
           event.type == SDL_MOUSEBUTTONDOWN ||
           event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL ||
@@ -1562,6 +1657,31 @@ int Application::run(int argc, char **argv) {
         syncPlayerControllers();
         continue;
       }
+
+#if defined(MRG_PLATFORM_BRICK)
+      if (event.type == SDL_JOYDEVICEADDED) {
+        if (brickJoystick == nullptr &&
+            !SDL_IsGameController(event.jdevice.which)) {
+          brickJoystick = SDL_JoystickOpen(event.jdevice.which);
+          brickInput.reset();
+          syncPlayerControllers();
+        }
+        continue;
+      }
+      if (event.type == SDL_JOYDEVICEREMOVED) {
+        if (brickJoystick != nullptr &&
+            SDL_JoystickInstanceID(brickJoystick) == event.jdevice.which) {
+          SDL_JoystickClose(brickJoystick);
+          brickJoystick = nullptr;
+          brickInput.reset();
+          if (activeRuntime)
+            activeRuntime->releaseInput();
+          brickJoystick = openBrickJoystick();
+          syncPlayerControllers();
+        }
+        continue;
+      }
+#endif
 
       if (event.type == SDL_WINDOWEVENT &&
           event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
@@ -1700,28 +1820,12 @@ int Application::run(int argc, char **argv) {
             activeRuntime->setFastForward(event.type == SDL_KEYDOWN);
           continue;
         }
-        if ((event.type == SDL_CONTROLLERBUTTONDOWN ||
-             event.type == SDL_CONTROLLERBUTTONUP) &&
-            event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-          if (activeRuntime)
-            activeRuntime->setFastForward(event.type ==
-                                          SDL_CONTROLLERBUTTONDOWN);
-          continue;
-        }
         if ((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
             event.key.keysym.sym == SDLK_LSHIFT) {
           if (event.type == SDL_KEYDOWN && event.key.repeat != 0)
             continue;
           if (activeRuntime)
             activeRuntime->setSlowMotion(event.type == SDL_KEYDOWN);
-          continue;
-        }
-        if ((event.type == SDL_CONTROLLERBUTTONDOWN ||
-             event.type == SDL_CONTROLLERBUTTONUP) &&
-            event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER) {
-          if (activeRuntime)
-            activeRuntime->setSlowMotion(event.type ==
-                                         SDL_CONTROLLERBUTTONDOWN);
           continue;
         }
         if ((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
@@ -1731,19 +1835,18 @@ int Application::run(int argc, char **argv) {
           rewindHeld = event.type == SDL_KEYDOWN;
           continue;
         }
-        if ((event.type == SDL_CONTROLLERBUTTONDOWN ||
-             event.type == SDL_CONTROLLERBUTTONUP) &&
-            event.cbutton.button == SDL_CONTROLLER_BUTTON_LEFTSTICK) {
-          rewindHeld = event.type == SDL_CONTROLLERBUTTONDOWN;
-          continue;
-        }
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0 &&
             event.key.keysym.sym == SDLK_ESCAPE) {
           enterPause();
         } else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
-                   (event.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE ||
-                    event.cbutton.button == SDL_CONTROLLER_BUTTON_Y)) {
+                   event.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
           enterPause();
+#if defined(MRG_PLATFORM_BRICK)
+        } else if (fromBrick && input::brickMenuPressed(event)) {
+          enterPause();
+        } else if (fromBrick && activeRuntime) {
+          activeRuntime->handleRawJoystickEvent(event);
+#endif
         } else if (activeRuntime) {
           activeRuntime->handleEvent(event);
         }
@@ -2626,6 +2729,10 @@ int Application::run(int argc, char **argv) {
     SDL_GameControllerClose(controller);
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
+#if defined(MRG_PLATFORM_BRICK)
+  if (brickJoystick != nullptr)
+    SDL_JoystickClose(brickJoystick);
+#endif
   clearStateSlots();
   // Cached textures belong to this renderer, so drop them first.
   coverCache.shutdown();
