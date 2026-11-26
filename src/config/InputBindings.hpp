@@ -97,6 +97,11 @@ struct InputPrompts {
   std::string change;
   std::string horizontal;
   std::string frameStep;
+  // True only while the keyboard owns the prompts. A couple of shortcuts
+  // answer to a keyboard key and nothing else -- resetting the bindings, and
+  // holding the rewind key -- so the settings page has to know whether it may
+  // write those keys down at all.
+  bool keyboard = false;
 };
 
 InputBindings defaultInputBindings();

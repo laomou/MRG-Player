@@ -162,7 +162,7 @@ std::string controllerButtonPrompt(SDL_GameControllerButton button,
 
 InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
   if (device == InputDeviceKind::KeyboardMouse)
-    return {"ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+    return {"ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".", true};
   std::string category = "LB/RB";
   if (style == ControllerStyle::Nintendo)
     category = "L/R";
@@ -173,7 +173,8 @@ InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
           category,
           controllerButtonPrompt(SDL_CONTROLLER_BUTTON_A, style),
           "D-PAD",
-          "RB"};
+          "RB",
+          false};
 }
 
 } // namespace launcher::config

@@ -501,9 +501,13 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
          tr(settings.rewind ? TextId::On : TextId::Off, language)},
         {TextId::Runahead, runahead},
     }};
-    constexpr std::array<TextId, kGeneralRowCount> descriptions{
+    // Rewind answers to a held key and nothing else, so the keyboard
+    // reads which key holds it while a pad reads what it does instead.
+    const std::array<TextId, kGeneralRowCount> descriptions{
         TextId::LanguageDescription, TextId::StartupDescription,
-        TextId::RememberDescription, TextId::RewindDescription,
+        TextId::RememberDescription,
+        prompts.keyboard ? TextId::RewindDescription
+                         : TextId::RewindPadDescription,
         TextId::RunaheadDescription};
     for (int index = 0; index < kGeneralRowCount; ++index) {
       drawSettingRow(renderer, kGeneralRows.item(index),
@@ -603,11 +607,13 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         std::to_string(settings.input.analogDeadZone), game.accent,
         focusOpacity);
     // The reset hint sits on the heading line: with fourteen bindings on the
-    // page the list needs the room under it.
-    drawHintRow(renderer, static_cast<float>(kTrackX + kTrackWidth),
-                static_cast<float>(kContentDescriptionY),
-                {{tr(TextId::ResetBindingsHint, language), "R", false}},
-                game.accent);
+    // page the list needs the room under it. R is a keyboard key and only the
+    // keyboard answers to it, so a pad with no such key gets no hint at all.
+    if (prompts.keyboard)
+      drawHintRow(renderer, static_cast<float>(kTrackX + kTrackWidth),
+                  static_cast<float>(kContentDescriptionY),
+                  {{tr(TextId::ResetBindingsHint, language), "R", false}},
+                  game.accent);
   } else if (category == 5) {
     // The refresh button shares the heading line with the page title, so the
     // table below starts on a clean row. A hairline rim keeps it readable as a

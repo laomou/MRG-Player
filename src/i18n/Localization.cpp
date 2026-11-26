@@ -44,6 +44,7 @@ constexpr Entry kText[]{
     {"KEEP THE HIGHLIGHTED GAME", "保留当前选中的游戏"},
     {"REWIND", "倒带"},
     {"HOLD BACKSPACE TO STEP BACK", "按住退格键回退"},
+    {"STEP BACK THROUGH THE LAST FEW SECONDS", "回看几秒前的画面"},
     {"RUNAHEAD", "预判帧"},
     {"SHOW THE PICTURE A FEW FRAMES EARLY", "让画面提前若干帧显示"},
     {"1 FRAME", "1 帧"},
