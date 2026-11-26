@@ -12,6 +12,36 @@ using i18n::tr;
 constexpr std::array<InputAction, 4> kDirections{
     InputAction::Up, InputAction::Down, InputAction::Left, InputAction::Right};
 
+// The bundled CJK font has no U+00B7 glyph. Keep the localized separator
+// in the model, but measure a fixed gap and paint a circle instead of tofu.
+constexpr const char *kDotSeparator = " · ";
+constexpr std::size_t kDotSeparatorBytes = 4;
+int separatedTextWidth(const std::string &value, int scale) {
+  int width = 0;
+  std::size_t begin = 0;
+  for (;;) {
+    const auto end = value.find(kDotSeparator, begin);
+    width += textWidth(value.substr(begin, end - begin), scale);
+    if (end == std::string::npos) return width;
+    width += 12 * scale;
+    begin = end + kDotSeparatorBytes;
+  }
+}
+void drawSeparatedText(SDL_Renderer *renderer, int x, int centerY,
+                       const std::string &value, int scale, SDL_Color color) {
+  std::size_t begin = 0;
+  for (;;) {
+    const auto end = value.find(kDotSeparator, begin);
+    const auto part = value.substr(begin, end - begin);
+    text(renderer, x, textCenteredY(part, centerY, scale), part, scale, color);
+    x += textWidth(part, scale);
+    if (end == std::string::npos) return;
+    circle(renderer, x + 6 * scale, centerY, 2, color);
+    x += 12 * scale;
+    begin = end + kDotSeparatorBytes;
+  }
+}
+
 std::string pauseKey(ControlHelpDevice device) {
   if (device == ControlHelpDevice::Brick)
     return "MENU";
@@ -151,7 +181,8 @@ void drawControlHelp(SDL_Renderer *renderer, const ControlHelp &help, int page,
   drawPanel(renderer, panel, 20, {12, 21, 37, 245},
             panel.translated(0, 8), {0, 0, 0, 45});
   text(renderer, x, panel.y + 27, tr(TextId::ControlHelp, language), 3, accent);
-  text(renderer, x, panel.y + 77, help.subtitle, 1, {174, 188, 208, 255});
+  drawSeparatedText(renderer, x, panel.y + 87, help.subtitle, 1,
+                    {174, 188, 208, 255});
   fill(renderer, x, panel.y + 119, panel.w - 64, 1, {255, 255, 255, 30});
   text(renderer, x, panel.y + 134, help.source, 1, accent);
   text(renderer, right - 160, panel.y + 134, tr(TextId::GameButtons, language), 1,
@@ -205,16 +236,16 @@ void drawGameEntryHint(SDL_Renderer *renderer, const std::string &key,
   };
   const std::string label = tr(TextId::PauseEntryHint, language);
   const float keyWidth = static_cast<float>(textWidth(key, 2) + 24);
-  const float width = keyWidth + textWidth(label, 2) + 60;
+  const float width = keyWidth + separatedTextWidth(label, 2) + 60;
   const Rect box{(kCanvasWidth - width) / 2, static_cast<float>(kCanvasHeight - 88),
                  width, 58};
   rounded(renderer, box.x, box.y, box.w, box.h, 12, fade({12, 21, 37, 240}));
   rounded(renderer, box.x + 14, box.y + 11, keyWidth, 36, 7, fade(accent));
   centeredGlyph(renderer, box.x + 14 + keyWidth / 2, box.y + box.h / 2, key,
                 2, fade({24, 24, 39, 255}));
-  text(renderer, box.x + keyWidth + 32,
-       textCenteredY(label, static_cast<int>(box.y + box.h / 2), 2), label, 2,
-       fade({240, 244, 250, 255}));
+  drawSeparatedText(renderer, box.x + keyWidth + 32,
+                    static_cast<int>(box.y + box.h / 2), label, 2,
+                    fade({240, 244, 250, 255}));
 }
 
 } // namespace launcher::ui

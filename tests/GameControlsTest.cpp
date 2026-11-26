@@ -162,6 +162,13 @@ void testGameControls(const char *fontPath) {
         p = pixel(static_cast<int>(layout.back.centerX()), static_cast<int>(layout.back.y - 3));
         check(p.r == kFocusColor.r && p.g == kFocusColor.g && p.b == kFocusColor.b,
               "Help Back carries the shared white focus ring");
+        const int subtitleDotX = static_cast<int>(layout.panel.x + 32) +
+            textWidth(std::string(game::platformDescriptor(GamePlatform::Gba).displayName), 1) + 6;
+        const int subtitleDotY = static_cast<int>(layout.panel.y + 87);
+        p = pixel(subtitleDotX, subtitleDotY);
+        check(p.r == 174 && p.g == 188 && p.b == 208 &&
+                  pixel(subtitleDotX, subtitleDotY - 4).r < 50,
+              "Subtitle separator is a painted dot, not a missing-glyph box");
         if (theme == 0 && language == Language::SimplifiedChinese)
           snapshot("controls-" + std::to_string(static_cast<int>(device)));
         clear();
@@ -169,8 +176,27 @@ void testGameControls(const char *fontPath) {
         check(pixel(kCanvasWidth / 2, kCanvasHeight - 84).b > 0,
               "Entry strip renders at native canvas coordinates");
         check(pixel(0, 0).b == 0, "Entry strip leaves the game outside it untouched");
+        const std::string label = i18n::tr(i18n::TextId::PauseEntryHint, language);
+        const auto separator = label.find(" · ");
+        check(separator != std::string::npos, "Hint contains a separator");
+        const int beforeWidth = textWidth(label.substr(0, separator), 2);
+        const int afterWidth = textWidth(label.substr(separator + 4), 2);
+        const int keyWidth = textWidth(model.pauseKey, 2) + 24;
+        const int boxWidth = keyWidth + beforeWidth + 24 + afterWidth + 60;
+        const int dotX = static_cast<int>((kCanvasWidth - boxWidth) / 2.0f +
+                                         keyWidth + 32) + beforeWidth + 12;
+        const int dotY = kCanvasHeight - 59;
+        p = pixel(dotX, dotY);
+        check(p.r == 240 && p.g == 244 && p.b == 250 &&
+                  pixel(dotX - 4, dotY - 4).r < 50 &&
+                  pixel(dotX + 4, dotY + 4).r < 50,
+              "Entry separator paints a centered circle without a tofu box");
         if (theme == 0 && language == Language::SimplifiedChinese)
           snapshot("entry-" + std::to_string(static_cast<int>(device)));
+        clear();
+        drawGameEntryHint(renderer, model.pauseKey, 2700, language, accent);
+        p = pixel(dotX, dotY);
+        check(p.r > 80 && p.r < 160, "Separator fades with the rest of the hint");
         clear();
         drawGameEntryHint(renderer, model.pauseKey, 3000, language, accent);
         check(pixel(kCanvasWidth / 2, kCanvasHeight - 84).b == 0,
