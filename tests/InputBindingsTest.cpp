@@ -41,22 +41,37 @@ int main() {
 
   const launcher::config::InputBindings defaults =
       launcher::config::defaultInputBindings();
-  check(defaults.keyboard[static_cast<std::size_t>(InputAction::A)] == SDLK_z,
-        "player 1 A is Z");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::A)] == SDLK_x,
+        "player 1 A is X");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::B)] == SDLK_z,
+        "player 1 B is Z");
   check(defaults.keyboard[static_cast<std::size_t>(InputAction::TurboA)] ==
             SDLK_c,
         "player 1 turbo A is C");
   check(defaults.keyboard[static_cast<std::size_t>(InputAction::TurboB)] ==
             SDLK_v,
         "player 1 turbo B is V");
-  check(defaults.keyboard[static_cast<std::size_t>(InputAction::X)] == SDLK_f,
-        "player 1 X is F");
-  check(defaults.keyboard[static_cast<std::size_t>(InputAction::Y)] == SDLK_j,
-        "player 1 Y is J");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::X)] == SDLK_s,
+        "player 1 X is S");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::Y)] == SDLK_a,
+        "player 1 Y is A");
   check(defaults.keyboard[static_cast<std::size_t>(InputAction::L)] == SDLK_q,
         "player 1 L is Q");
-  check(defaults.keyboard[static_cast<std::size_t>(InputAction::R)] == SDLK_e,
-        "player 1 R is E");
+  check(defaults.keyboard[static_cast<std::size_t>(InputAction::R)] == SDLK_w,
+        "player 1 R is W");
+
+  launcher::config::InputBindings legacy = defaults;
+  legacy.keyboard = {SDLK_z,    SDLK_x,    SDLK_RSHIFT, SDLK_RETURN,
+                     SDLK_UP,   SDLK_DOWN, SDLK_LEFT,   SDLK_RIGHT,
+                     SDLK_c,    SDLK_v,    SDLK_f,      SDLK_j,
+                     SDLK_q,    SDLK_e};
+  check(launcher::config::migrateLegacyKeyboardDefaults(legacy),
+        "former keyboard defaults are migrated");
+  check(legacy.keyboard == defaults.keyboard,
+        "former keyboard defaults become the conventional layout");
+  legacy.keyboard[static_cast<std::size_t>(InputAction::A)] = SDLK_k;
+  check(!launcher::config::migrateLegacyKeyboardDefaults(legacy),
+        "custom keyboard layouts are not migrated");
   // Turbo moved to the stick clicks: a pad that presses Y or B for a turbo
   // pulse could never press the real Y or B at the same time.
   check(defaults.controller[static_cast<std::size_t>(InputAction::TurboA)] ==
@@ -104,12 +119,13 @@ int main() {
   const auto keyboardPrompts = launcher::config::inputPrompts(
       launcher::config::InputDeviceKind::KeyboardMouse,
       launcher::config::ControllerStyle::Auto);
-  check(keyboardPrompts.manage == "M",
-        "keyboard management uses M instead of the gameplay X key");
+  check(keyboardPrompts.confirm == "ENTER",
+        "keyboard actions use the shared confirm key");
   const auto xboxPrompts = launcher::config::inputPrompts(
       launcher::config::InputDeviceKind::Controller,
       launcher::config::ControllerStyle::Xbox);
-  check(xboxPrompts.manage == "X", "controller management keeps the X button");
+  check(xboxPrompts.confirm == "A",
+        "controller actions use the shared confirm button");
 
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.

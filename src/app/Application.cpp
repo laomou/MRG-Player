@@ -2019,10 +2019,6 @@ int Application::run(int argc, char **argv) {
             const int direction = key == SDLK_PAGEDOWN ? 1 : -1;
             selectedGame =
                 std::clamp(selectedGame + direction * 7, 0, count - 1);
-          } else if (key == SDLK_m) {
-            // Keyboard M is the explicit launcher shortcut. Controller X stays
-            // available below, while gameplay X is always sent to the core.
-            (void)openManagement(ui::ManagementDialog::Menu);
           } else if (key == SDLK_DELETE)
             (void)openManagement(ui::ManagementDialog::ConfirmRemoveRom);
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
@@ -2240,8 +2236,6 @@ int Application::run(int argc, char **argv) {
             } else {
               (void)startSelected();
             }
-          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_X) {
-            (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                      event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
             quitConfirm = true;

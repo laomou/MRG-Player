@@ -76,6 +76,11 @@ struct InputBindings {
   int analogDeadZone = 16000;
 };
 
+// Upgrades only the exact former P1 default, leaving every customized layout
+// untouched. Returns true when a migration was applied.
+[[nodiscard]] bool
+migrateLegacyKeyboardDefaults(InputBindings &bindings) noexcept;
+
 [[nodiscard]] std::array<SDL_Keycode, kInputActionCount> &
 keyboardBindings(InputBindings &bindings, std::size_t player) noexcept;
 [[nodiscard]] const std::array<SDL_Keycode, kInputActionCount> &
@@ -87,7 +92,6 @@ controllerBindings(const InputBindings &bindings, std::size_t player) noexcept;
 
 struct InputPrompts {
   std::string confirm;
-  std::string manage;
   std::string back;
   std::string category;
   std::string change;

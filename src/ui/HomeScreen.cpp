@@ -282,7 +282,7 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
     hints.push_back(
         {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
     hints.push_back({i18n::tr(i18n::TextId::ManageGame, language),
-                     prompts.manage, false});
+                     prompts.confirm, false});
   }
   return hints;
 }
