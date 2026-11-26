@@ -159,6 +159,21 @@ std::vector<std::string> splitMetadataLine(const std::string &line) {
 
 } // namespace
 
+std::string contentIdForPath(const std::string &path,
+                             game::GamePlatform platform) {
+  if (platform == game::GamePlatform::Unknown)
+    return {};
+  std::vector<std::uint8_t> bytes;
+  std::string ignored;
+  if (!readGame(paths::fromUtf8(path), platform, bytes, ignored))
+    return {};
+  return hashSuffix(hashBytes(bytes));
+}
+
+std::string titleForPath(const std::string &path) {
+  return displayTitle(paths::fromUtf8(path));
+}
+
 GameLibrary::GameLibrary(std::string directoryOverride)
     : directoryOverride_(std::move(directoryOverride)) {}
 

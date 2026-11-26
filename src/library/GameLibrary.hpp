@@ -24,6 +24,16 @@ struct GameEntry {
 
 enum class ImportStatus { Imported, AlreadyPresent, Failed };
 
+// The id an import would give this file. Opening a ROM straight from the card
+// reuses it, so the same game keeps one save file, one cover and one play-time
+// record whether it is started from the library or from the desktop.
+[[nodiscard]] std::string contentIdForPath(const std::string &path,
+                                          game::GamePlatform platform);
+
+// The name to show for a file outside the library: the stem with the content-id
+// suffix of an imported copy removed.
+[[nodiscard]] std::string titleForPath(const std::string &path);
+
 class GameLibrary {
 public:
   explicit GameLibrary(std::string directoryOverride = {});

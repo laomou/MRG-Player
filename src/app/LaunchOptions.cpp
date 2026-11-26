@@ -5,7 +5,6 @@
 #include "i18n/Localization.hpp"
 
 namespace launcher {
-#if defined(MRG_ENABLE_SMOKE_TESTS)
 namespace {
 
 bool argumentValue(int &index, int argc, char **argv,
@@ -26,14 +25,22 @@ bool argumentValue(int &index, int argc, char **argv,
   return false;
 }
 
+// A lone path is spelled like a value, not like a flag: an Emus package calls
+// its emulator as `launch.sh "<rom>"`, so MRG has to accept that shape too.
+bool isBarePath(const std::string &argument) {
+  return argument.size() > 1 && argument[0] != '-';
+}
+
 } // namespace
-#endif
 
 LaunchOptions parseLaunchOptions(int argc, char **argv) {
   LaunchOptions options;
   for (int i = 1; i < argc; ++i) {
     const std::string argument = argv[i];
-    bool known = argument == "--language=en" || argument == "--language=zh";
+    const bool romOption =
+        argument == "--rom" || argument.rfind("--rom=", 0) == 0;
+    bool known = argument == "--language=en" || argument == "--language=zh" ||
+                 romOption;
 
     // The scripted runs exist for CI only; a release build rejects their flags
     // like any other unknown option.
@@ -90,6 +97,23 @@ LaunchOptions parseLaunchOptions(int argc, char **argv) {
     } else if (argument == "--language=zh") {
       options.languageOverride =
           static_cast<int>(i18n::Language::SimplifiedChinese);
+    }
+
+    if (romOption) {
+      std::string value;
+      if (argumentValue(i, argc, argv, argument, "--rom", value) &&
+          !value.empty()) {
+        options.romPath = value;
+        options.directGame = true;
+      } else if (options.error.empty()) {
+        options.error = "--rom needs a ROM path";
+      }
+    } else if (isBarePath(argument) && options.romPath.empty()) {
+      options.romPath = argument;
+      options.directGame = true;
+      known = true;
+    } else if (isBarePath(argument) && options.error.empty()) {
+      options.error = "Unexpected argument: " + argument;
     }
 
     if (!known && options.error.empty())
