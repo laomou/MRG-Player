@@ -149,11 +149,22 @@ std::optional<config::InputAction> brickButtonAction(Uint8 button) noexcept {
 }
 
 std::optional<SDL_GameControllerAxis> brickAxis(Uint8 axis) noexcept {
-  if (axis == 0)
+  switch (axis) {
+  case 0:
     return SDL_CONTROLLER_AXIS_LEFTX;
-  if (axis == 1)
+  case 1:
     return SDL_CONTROLLER_AXIS_LEFTY;
-  return std::nullopt;
+  case 2:
+    return SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+  case 3:
+    return SDL_CONTROLLER_AXIS_RIGHTX;
+  case 4:
+    return SDL_CONTROLLER_AXIS_RIGHTY;
+  case 5:
+    return SDL_CONTROLLER_AXIS_TRIGGERRIGHT;
+  default:
+    return std::nullopt;
+  }
 }
 
 bool brickMenuPressed(const SDL_Event &event) noexcept {

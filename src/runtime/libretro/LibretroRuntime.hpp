@@ -70,10 +70,16 @@ public:
 
 private:
   struct AxisState {
+    Sint16 leftX = 0;
+    Sint16 leftY = 0;
+    Sint16 rightX = 0;
+    Sint16 rightY = 0;
     bool up = false;
     bool down = false;
     bool left = false;
     bool right = false;
+    bool l2 = false;
+    bool r2 = false;
   };
 
   // Environment callback: what the core asks the front end for.

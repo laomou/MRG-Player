@@ -19,7 +19,11 @@ int main() {
   assert(!brickButtonAction(kBrickButtonMenu));
   assert(brickAxis(0) == SDL_CONTROLLER_AXIS_LEFTX);
   assert(brickAxis(1) == SDL_CONTROLLER_AXIS_LEFTY);
-  assert(!brickAxis(2));
+  assert(brickAxis(2) == SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+  assert(brickAxis(3) == SDL_CONTROLLER_AXIS_RIGHTX);
+  assert(brickAxis(4) == SDL_CONTROLLER_AXIS_RIGHTY);
+  assert(brickAxis(5) == SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
+  assert(!brickAxis(6));
 
   BrickInputAdapter adapter;
   SDL_Event source{};
