@@ -25,6 +25,12 @@ using launcher::library::ImportStatus;
 using launcher::runtime::RuntimeRegistry;
 using launcher::runtime::SaveDataStatus;
 
+#if defined(_WIN32)
+constexpr char kPathListSeparator = ';';
+#else
+constexpr char kPathListSeparator = ':';
+#endif
+
 bool check(bool condition, const std::string &message) {
   if (!condition)
     std::cerr << "FAIL: " << message << '\n';
@@ -473,12 +479,15 @@ int main() {
               "write a file that is not a game");
 
   SDL_setenv("MRG_ROM_DIRS",
-             (cardRoms.string() + ":" + (root / "missing").string()).c_str(), 1);
+             (cardRoms.string() + kPathListSeparator +
+              (root / "missing").string())
+                 .c_str(),
+             1);
   const std::vector<std::string> cardDirectories =
       launcher::config::romSearchDirectories();
   ok &= check(cardDirectories.size() == 1 &&
                   cardDirectories.front() == cardRoms.string(),
-              "MRG_ROM_DIRS is split on ':' and missing folders are dropped");
+              "MRG_ROM_DIRS is split into folders and missing ones dropped");
   const std::vector<std::string> cardGames =
       launcher::library::findGames(cardDirectories);
   ok &= check(cardGames.size() == 2,

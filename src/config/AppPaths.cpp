@@ -14,6 +14,14 @@ namespace launcher::config {
 namespace {
 namespace fs = std::filesystem;
 
+// The pak ships a list of folders; Windows uses ';' because ':' belongs to the
+// drive letter.
+#if defined(_WIN32)
+constexpr char kPathListSeparator = ';';
+#else
+constexpr char kPathListSeparator = ':';
+#endif
+
 std::string preferenceRoot(const char *product) {
   char *path = SDL_GetPrefPath("MRG", product);
   if (path == nullptr)
@@ -55,7 +63,7 @@ std::string dataRoot() {
   if (const char *override = std::getenv("MRG_DATA_DIR");
       override != nullptr && override[0] != '\0') {
     std::string root(override);
-    while (root.size() > 1 && root.back() == '/')
+    while (root.size() > 1 && (root.back() == '/' || root.back() == '\\'))
       root.pop_back();
     return root + '/';
   }
@@ -111,18 +119,18 @@ std::vector<std::string> romSearchDirectories() {
 
   // A pak or a device launcher names the folders directly: the bundled roms/
   // next to the executable, the card's own Roms tree, and whatever the user
-  // added. ':' separated, as on the device; paths are absolute there, and a
-  // relative entry is read as relative to the executable.
+  // added. Separated the way the host names a list; paths are absolute there,
+  // and a relative entry is read as relative to the executable.
   if (const char *override = std::getenv("MRG_ROM_DIRS");
       override != nullptr && override[0] != '\0') {
     const std::string executablePath = executableDirectory();
     const std::string list(override);
     std::size_t begin = 0;
     while (begin <= list.size()) {
-      const std::size_t end = list.find(':', begin);
+      const std::size_t end = list.find(kPathListSeparator, begin);
       std::string entry = list.substr(
           begin, end == std::string::npos ? std::string::npos : end - begin);
-      if (!entry.empty() && entry.front() != '/')
+      if (!entry.empty() && !paths::fromUtf8(entry).is_absolute())
         entry = executablePath + entry;
       add(entry);
       if (end == std::string::npos)
