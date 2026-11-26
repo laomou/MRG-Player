@@ -1,0 +1,19 @@
+{
+  "label": "GBA",
+  "icon": "",
+  "icontop": "icon.png",
+  "themecolor": "FF00FF",
+  "launch": "launch.sh",
+  "rompath": "../../Roms/GBA",
+  "imgpath": "../../Imgs/GBA",
+  "useswap": 0,
+  "shortname": 0,
+  "hidebios": 1,
+  "extlist": "gba|agb|gbz|zip",
+  "launchlist": [
+    {
+      "name": "MRG Player",
+      "launch": "launch.sh"
+    }
+  ]
+}

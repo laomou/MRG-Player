@@ -1,0 +1,19 @@
+{
+  "label": "GB",
+  "icon": "",
+  "icontop": "icon.png",
+  "themecolor": "00FF00",
+  "launch": "launch.sh",
+  "rompath": "../../Roms/GB",
+  "imgpath": "../../Imgs/GB",
+  "useswap": 0,
+  "shortname": 0,
+  "hidebios": 0,
+  "extlist": "gb|gbc|zip",
+  "launchlist": [
+    {
+      "name": "MRG Player",
+      "launch": "launch.sh"
+    }
+  ]
+}

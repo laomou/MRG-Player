@@ -183,6 +183,41 @@ means NES, and the game keeps the content-hash identity an import would assign â
 in the library shares one save file, one cover and one play-time record either way. A missing file
 or a platform without an installed core prints the reason on stderr and exits with status 1.
 
+### Launcher tiles instead of RetroArch
+
+The stock desktop does not scan `Roms/`: it lists whatever `Emus/<SYS>/config.json` declares, one
+tile per package. `extras/emus/` holds a package for each system this build has a core for, so a card
+can show games directly:
+
+```bash
+cp -r extras/emus/* /mnt/SDCARD/Emus/
+```
+
+A package is three files. `config.json` carries the label, the ROM folder, the extension list and the
+theme colour the desktop uses, all copied from the stock packages. `icon.png` is the tile art.
+`launch.sh` is what replaces RetroArch:
+
+```sh
+SDCARD=${SDCARD_PATH:-/mnt/SDCARD}
+exec "$SDCARD/Apps/MRG.pak/launch.sh" "$*"
+```
+
+The desktop hands the ROM over as a bare path, which is the shape described above, so the tile starts
+that one game and the player exits when the game is left â€” the desktop gets its screen back without a
+frontend in between.
+
+| Package | Tile lists | Starts |
+|---|---|---|
+| `FC` | `Roms/FC` (`.nes`, `.fds`, `.zip`) | FCEUmm |
+| `SFC` | `Roms/SFC` (`.sfc`, `.smc`, `.zip`) | Snes9x |
+| `MD` | `Roms/MD` (`.md`, `.gen`, `.bin`, `.zip`) | Genesis Plus GX |
+| `GB` | `Roms/GB` (`.gb`, `.gbc`, `.zip`) | mGBA |
+| `GBA` | `Roms/GBA` (`.gba`, `.zip`) | mGBA |
+
+Only these five are packaged on purpose: a system without an installed core would list its ROMs and
+then refuse to start them. One caveat while replacing a stock install: if the card still holds the
+stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
+
 ## Controls
 
 ### Launcher
