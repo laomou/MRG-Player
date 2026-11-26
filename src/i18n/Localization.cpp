@@ -208,7 +208,17 @@ constexpr Entry kText[]{
     {"VIEW DETAILS", "查看详情"},
     {"IMPORTED THE GAMES IN THE ROM FOLDERS", "已导入 ROM 文件夹里的游戏"},
     {"NO NEW GAMES IN THE ROM FOLDERS", "ROM 文件夹里没有新游戏"},
-    {"NO GAMES FOUND IN THE ROM FOLDERS", "ROM 文件夹里没有找到游戏"}};
+    {"NO GAMES FOUND IN THE ROM FOLDERS", "ROM 文件夹里没有找到游戏"},
+    {"CONTROLS", "操作说明"},
+    {"Pause · View controls", "暂停 · 查看操作说明"},
+    {"KEYBOARD", "键盘按键"},
+    {"CONTROLLER", "手柄按键"},
+    {"BUILT-IN CONTROLS", "掌机按键"},
+    {"GAME BUTTONS", "游戏按键"},
+    {"DIRECTION", "方向"},
+    {"PAUSE MENU", "暂停菜单"},
+    {"See the game for in-game actions.", "具体游戏动作以游戏内说明为准。"},
+    {"UNBOUND", "未绑定"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

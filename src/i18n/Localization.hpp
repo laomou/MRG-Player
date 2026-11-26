@@ -201,6 +201,16 @@ enum class TextId {
   RomFolderImported,
   RomFolderAlreadyImported,
   RomFolderEmpty,
+  ControlHelp,
+  PauseEntryHint,
+  KeyboardKeys,
+  ControllerKeys,
+  BuiltInControls,
+  GameButtons,
+  Direction,
+  PauseMenuControl,
+  ControlHelpNote,
+  Unbound,
   Count
 };
 
