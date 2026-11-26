@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "library/CoverNames.hpp"
 #include "library/GameLibrary.hpp"
@@ -28,7 +29,9 @@ class CoverCache : public CoverSource {
 
   // Creates the directory, writes covers/names.json the first time, and loads
   // the name mapping. A malformed mapping is reported and then ignored.
-  void initialize(const std::string &directory);
+  // cardRoots are the Imgs/ folders that came with the games; art found there
+  // is used as is and nothing is downloaded for that game.
+  void initialize(const std::string &directory, std::vector<std::string> cardRoots = {});
 
   // Joins the worker and drops every texture. Must run before the renderer.
   void shutdown();
@@ -57,11 +60,19 @@ class CoverCache : public CoverSource {
   };
 
   [[nodiscard]] std::string pathFor(const std::string &id) const;
-  [[nodiscard]] SDL_Texture *loadCover(SDL_Renderer *renderer, const std::string &id);
-  [[nodiscard]] SDL_Texture *loadWallpaper(SDL_Renderer *renderer, const std::string &id);
+  // The art that came with the game on a card, or an empty string when neither
+  // the card nor its Imgs/ folder has one. The answer is remembered per game so
+  // a card is not probed again on every frame.
+  [[nodiscard]] std::string cardCoverPath(const library::GameEntry &game);
+  [[nodiscard]] SDL_Texture *loadCover(SDL_Renderer *renderer, const std::string &id,
+                                       const std::string &path);
+  [[nodiscard]] SDL_Texture *loadWallpaper(SDL_Renderer *renderer, const std::string &id,
+                                           const std::string &path);
   void startDownload(const library::GameEntry &game);
 
   std::string directory_;
+  std::vector<std::string> cardRoots_;
+  std::map<std::string, std::string> cardCovers_;
   library::CoverNames names_;
   std::map<std::string, SDL_Texture *> covers_;
   std::map<std::string, SDL_Texture *> wallpapers_;

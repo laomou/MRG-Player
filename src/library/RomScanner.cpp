@@ -19,7 +19,9 @@ constexpr int kMaxDepth = 4;
 constexpr std::size_t kMaxFiles = 2000;
 
 bool isGameFile(const fs::path &path) {
-  return game::platformFromExtension(paths::toUtf8(path)) !=
+  // The system folder decides when there is one, so a .bin inside Roms/MD is a
+  // game while a README.md next to it is not.
+  return game::detectPlatform(paths::toUtf8(path)) !=
          game::GamePlatform::Unknown;
 }
 
