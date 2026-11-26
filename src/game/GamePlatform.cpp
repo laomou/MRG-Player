@@ -15,14 +15,15 @@ namespace fs = std::filesystem;
 
 constexpr std::uintmax_t kMaximumGameSize = 64U * 1024U * 1024U;
 
-constexpr PlatformDescriptor kUnknown{GamePlatform::Unknown, "unknown", "UNKNOWN", "GAME FILE", "unknown"};
+constexpr PlatformDescriptor kUnknown{GamePlatform::Unknown, "unknown", "UNKNOWN", "GAME FILE", "unknown",
+                                    ""};
 
 constexpr std::array<PlatformDescriptor, 5> kDescriptors{{
-    {GamePlatform::Nes, "nes", "NES", ".NES ROM", "nes"},
-    {GamePlatform::Gba, "gba", "GAME BOY ADVANCE", ".GBA ROM", "gba"},
-    {GamePlatform::Snes, "snes", "SUPER NES", ".SFC ROM", "snes"},
-    {GamePlatform::GameBoy, "gb", "GAME BOY", ".GB ROM", "gb"},
-    {GamePlatform::Genesis, "genesis", "MEGA DRIVE", ".MD ROM", "genesis"},
+    {GamePlatform::Nes, "nes", "NES", ".NES ROM", "nes", "FC"},
+    {GamePlatform::Gba, "gba", "GAME BOY ADVANCE", ".GBA ROM", "gba", "GBA"},
+    {GamePlatform::Snes, "snes", "SUPER NES", ".SFC ROM", "snes", "SFC"},
+    {GamePlatform::GameBoy, "gb", "GAME BOY", ".GB ROM", "gb", "GB"},
+    {GamePlatform::Genesis, "genesis", "MEGA DRIVE", ".MD ROM", "genesis", "MD"},
 }};
 
 struct ExtensionMap {
@@ -43,10 +44,64 @@ constexpr std::array<ExtensionMap, 9> kExtensions{{
     {".gen", GamePlatform::Genesis},
 }};
 
+struct DirectoryMap {
+  std::string_view directory;
+  GamePlatform platform;
+};
+
+// The system folders the stock launcher writes on a card. Its own list also has
+// ARCADE, NEOGEO, PCE, PS and MS; no runtime here serves those yet, so a file in
+// one of them stays Unknown instead of being handed to a wrong core.
+constexpr std::array<DirectoryMap, 10> kDirectories{{
+    {"fc", GamePlatform::Nes},
+    {"nes", GamePlatform::Nes},
+    {"sfc", GamePlatform::Snes},
+    {"snes", GamePlatform::Snes},
+    {"md", GamePlatform::Genesis},
+    {"genesis", GamePlatform::Genesis},
+    {"megadrive", GamePlatform::Genesis},
+    {"gb", GamePlatform::GameBoy},
+    {"gbc", GamePlatform::GameBoy},
+    {"gba", GamePlatform::Gba},
+}};
+
+// A ROM set ships its readme and licence next to the games, and .md is both a
+// Mega Drive extension and the extension of a readme.
+constexpr std::array<std::string_view, 7> kDocumentationStems{{
+    "readme", "license", "licence", "copying", "changelog", "changes", "credits",
+}};
+
 std::string lowerAscii(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
+}
+
+bool isDocumentation(const fs::path &path) {
+  std::string stem = lowerAscii(paths::toUtf8(path.filename()));
+  const std::size_t dot = stem.find('.');
+  if (dot != std::string::npos)
+    stem.resize(dot);
+  return std::find(kDocumentationStems.begin(), kDocumentationStems.end(), stem) !=
+         kDocumentationStems.end();
+}
+
+// The system a folder name names. Emulator packs install as "FC (FCEUmm)"
+// folders, so a written-out qualifier is accepted as well. Nothing shorter is:
+// an unrelated folder that merely starts with the letters of a system, such as
+// a scratch directory called "nes-old", must not decide anything.
+GamePlatform platformForDirectoryName(std::string_view name) {
+  for (const DirectoryMap &entry : kDirectories) {
+    if (name == entry.directory)
+      return entry.platform;
+    if (name.size() > entry.directory.size() &&
+        name.compare(0, entry.directory.size(), entry.directory) == 0) {
+      const char next = name[entry.directory.size()];
+      if (next == ' ' || next == '(')
+        return entry.platform;
+    }
+  }
+  return GamePlatform::Unknown;
 }
 
 } // namespace
@@ -67,6 +122,34 @@ GamePlatform platformFromExtension(const std::string &path) noexcept {
       return entry.platform;
   }
   return GamePlatform::Unknown;
+}
+
+GamePlatform platformFromDirectory(const std::string &path) noexcept {
+  fs::path parent = paths::fromUtf8(path).parent_path();
+  // Roms/FC/<game> is the stock layout; the second level covers a card that
+  // groups the systems once more (Roms/Consoles/FC/<game>) without letting a
+  // folder further up decide what a game is.
+  for (int level = 0; level < 2 && !parent.empty(); ++level) {
+    const std::string name = lowerAscii(paths::toUtf8(parent.filename()));
+    if (!name.empty()) {
+      const GamePlatform platform = platformForDirectoryName(name);
+      if (platform != GamePlatform::Unknown)
+        return platform;
+    }
+    parent = parent.parent_path();
+  }
+  return GamePlatform::Unknown;
+}
+
+GamePlatform detectPlatform(const std::string &path) noexcept {
+  // A readme beside the games is documentation, not a ROM, even when its
+  // extension is a game one.
+  if (isDocumentation(paths::fromUtf8(path)))
+    return GamePlatform::Unknown;
+  const GamePlatform fromDirectory = platformFromDirectory(path);
+  if (fromDirectory != GamePlatform::Unknown)
+    return fromDirectory;
+  return platformFromExtension(path);
 }
 
 std::vector<std::string> gameExtensions() {

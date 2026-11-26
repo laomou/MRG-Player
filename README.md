@@ -117,9 +117,24 @@ On Linux the new root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from
 
 The legacy files are retained. Existing MRG Player destinations are never overwritten.
 
+### Folders on a card
+
+A device build has no file dialog, so the folders named by `MRG_ROM_DIRS` are the way in. The
+launcher reads the layout a stock card already uses and lets the folder name the platform:
+`Roms/FC/`, `Roms/SFC/`, `Roms/MD/`, `Roms/GB/`, and `Roms/GBA/` (also accepted: `NES`,
+`SNES`, `GENESIS`, `MEGADRIVE`, `GBC`, and a trailing qualifier such as `FC (FCEUmm)`). So a
+`.bin` under `Roms/MD/` is a Mega Drive game, a `.md` under `Roms/SFC/` is a SNES game, and a
+`.nes` outside any of those folders still counts on its extension alone. The files a ROM set ships
+beside its games — `README.md`, `license.txt`, `CHANGELOG.md` and the like — are never imported,
+even when the extension says they could be: `.md` is both a Mega Drive ROM and a Markdown document.
+
 Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
 ### Box art
+
+Art that came with the games on a card is used before anything is downloaded:
+`Imgs/<system>/<title>.png` (or `.jpg`) beside the `Roms/` tree, with the system folder named the
+way the card names it, so `Imgs/FC/F1赛车.png` covers `Roms/FC/F1赛车.nes`.
 
 A card shows art when the data root has a PNG for the game: `covers/<game id>.png`, where the id
 is the 16-hex suffix of the managed file (`library/nes/超级马里奥__0f3a...c1.nes` →

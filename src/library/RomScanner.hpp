@@ -18,9 +18,10 @@ struct RomScanSummary {
 };
 
 // Game files under the folders, in a stable order. Dot entries are skipped,
-// per-system subfolders such as Roms/nes/ are searched, and the walk stops at
-// a fixed depth and file count so a card full of unrelated files cannot stall
-// the launcher.
+// per-system subfolders such as Roms/FC/ are searched and name the platform of
+// what they hold, documentation shipped with a ROM set is left out, and the
+// walk stops at a fixed depth and file count so a card full of unrelated files
+// cannot stall the launcher.
 [[nodiscard]] std::vector<std::string> findGames(const std::vector<std::string> &directories);
 
 // Imports every game found under the folders. Files the library already holds

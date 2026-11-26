@@ -118,9 +118,11 @@ std::string writeTemplateIfMissing(const fs::path &path) {
 
 CoverCache::~CoverCache() { shutdown(); }
 
-void CoverCache::initialize(const std::string &directory) {
+void CoverCache::initialize(const std::string &directory,
+                            std::vector<std::string> cardRoots) {
   shutdown();
   directory_ = directory;
+  cardRoots_ = std::move(cardRoots);
   const fs::path root = paths::fromUtf8(directory_);
   std::error_code code;
   fs::create_directories(root, code);
@@ -168,12 +170,40 @@ void CoverCache::shutdown() {
     SDL_DestroyTexture(entry.second);
   wallpapers_.clear();
   attempted_.clear();
+  cardCovers_.clear();
+  cardRoots_.clear();
   directory_.clear();
   names_.clear();
 }
 
 std::string CoverCache::pathFor(const std::string &id) const {
   return paths::toUtf8(paths::fromUtf8(directory_) / (id + ".png"));
+}
+
+std::string CoverCache::cardCoverPath(const library::GameEntry &game) {
+  const auto known = cardCovers_.find(game.id);
+  if (known != cardCovers_.end())
+    return known->second;
+  std::string found;
+  // The stock launcher keeps one folder per system, named the way it names the
+  // folders under Roms/, with the art named after the game.
+  const std::string system(game::platformDescriptor(game.platform).cardDirectory);
+  if (!system.empty() && !game.title.empty()) {
+    for (const std::string &root : cardRoots_) {
+      for (const char *extension : {".png", ".jpg"}) {
+        const fs::path candidate = paths::fromUtf8(root) / system / (game.title + extension);
+        std::error_code code;
+        if (fs::is_regular_file(candidate, code) && !code) {
+          found = paths::toUtf8(candidate);
+          break;
+        }
+      }
+      if (!found.empty())
+        break;
+    }
+  }
+  cardCovers_[game.id] = found;
+  return found;
 }
 
 SDL_Texture *CoverCache::cover(SDL_Renderer *renderer, const library::GameEntry &game) {
@@ -183,7 +213,11 @@ SDL_Texture *CoverCache::cover(SDL_Renderer *renderer, const library::GameEntry 
   const std::string path = pathFor(game.id);
   std::error_code code;
   if (fs::is_regular_file(paths::fromUtf8(path), code))
-    return loadCover(renderer, game.id);
+    return loadCover(renderer, game.id, path);
+  // Art that shipped with the game beats anything a download could bring.
+  const std::string card = cardCoverPath(game);
+  if (!card.empty())
+    return loadCover(renderer, game.id, card);
   // One download at a time. A card that asks while another download is running
   // stays unmarked on purpose: it gets its turn on a later frame instead of
   // being written off for the rest of the session.
@@ -201,15 +235,19 @@ SDL_Texture *CoverCache::wallpaper(SDL_Renderer *renderer, const library::GameEn
     return cached->second;
   const std::string path = pathFor(game.id);
   std::error_code code;
-  if (!fs::is_regular_file(paths::fromUtf8(path), code))
-    return nullptr;
-  return loadWallpaper(renderer, game.id);
+  if (fs::is_regular_file(paths::fromUtf8(path), code))
+    return loadWallpaper(renderer, game.id, path);
+  const std::string card = cardCoverPath(game);
+  if (!card.empty())
+    return loadWallpaper(renderer, game.id, card);
+  return nullptr;
 }
 
-SDL_Texture *CoverCache::loadCover(SDL_Renderer *renderer, const std::string &id) {
+SDL_Texture *CoverCache::loadCover(SDL_Renderer *renderer, const std::string &id,
+                                     const std::string &path) {
   io::Image image;
   std::string error;
-  if (!io::loadImage(pathFor(id), image, error)) {
+  if (!io::loadImage(path, image, error)) {
     std::fprintf(stderr, "covers: %s\n", error.c_str());
     covers_[id] = nullptr;
     return nullptr;
@@ -219,10 +257,11 @@ SDL_Texture *CoverCache::loadCover(SDL_Renderer *renderer, const std::string &id
   return texture;
 }
 
-SDL_Texture *CoverCache::loadWallpaper(SDL_Renderer *renderer, const std::string &id) {
+SDL_Texture *CoverCache::loadWallpaper(SDL_Renderer *renderer, const std::string &id,
+                                         const std::string &path) {
   io::Image image;
   std::string error;
-  if (!io::loadImage(pathFor(id), image, error)) {
+  if (!io::loadImage(path, image, error)) {
     wallpapers_[id] = nullptr;
     return nullptr;
   }
@@ -299,7 +338,7 @@ void CoverCache::poll(SDL_Renderer *renderer) {
   if (!ok)
     return;
   if (covers_.find(id) == covers_.end())
-    (void)loadCover(renderer, id);
+    (void)loadCover(renderer, id, pathFor(id));
 }
 
 }  // namespace launcher::ui

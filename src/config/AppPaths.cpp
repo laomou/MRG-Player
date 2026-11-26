@@ -149,6 +149,25 @@ std::vector<std::string> romSearchDirectories() {
   return directories;
 }
 
+std::vector<std::string> coverSearchDirectories() {
+  std::vector<std::string> directories;
+  for (const std::string &roms : romSearchDirectories()) {
+    // Roms/ maps to the Imgs/ beside it, which is where the stock launcher
+    // keeps the box art of the games it shipped with.
+    const fs::path candidate = paths::fromUtf8(roms).parent_path() / "Imgs";
+    if (candidate.empty())
+      continue;
+    std::error_code ec;
+    if (!fs::is_directory(candidate, ec) || ec)
+      continue;
+    const std::string normalized = paths::toUtf8(candidate);
+    if (std::find(directories.begin(), directories.end(), normalized) ==
+        directories.end())
+      directories.push_back(normalized);
+  }
+  return directories;
+}
+
 std::string dataSubdirectory(std::string_view first, std::string_view second) {
   std::string migrationError;
   (void)migrateLegacyData(migrationError);

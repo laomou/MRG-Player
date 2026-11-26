@@ -194,7 +194,7 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
     return ImportStatus::Failed;
 
   const fs::path source = paths::fromUtf8(sourcePath);
-  const game::GamePlatform platform = game::platformFromExtension(sourcePath);
+  const game::GamePlatform platform = game::detectPlatform(sourcePath);
   if (platform == game::GamePlatform::Unknown) {
     error_ = "No installed runtime supports this game format";
     return ImportStatus::Failed;
@@ -505,8 +505,7 @@ bool GameLibrary::refresh() {
       continue;
     }
     const std::string entryPath = paths::toUtf8(item.path());
-    const game::GamePlatform platform =
-        game::platformFromExtension(entryPath);
+    const game::GamePlatform platform = game::detectPlatform(entryPath);
     std::string validationError;
     if (platform == game::GamePlatform::Unknown ||
         !game::validateGameFile(platform, entryPath, validationError))

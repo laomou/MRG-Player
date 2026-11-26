@@ -23,4 +23,10 @@ namespace launcher::config {
 // the managed library and next to the executable. Missing folders are dropped.
 [[nodiscard]] std::vector<std::string> romSearchDirectories();
 
+// Folders holding box art that shipped with the games, one per entry of
+// romSearchDirectories: a ROM tree on a card is paired with the Imgs/ folder
+// beside it, which is where the stock launcher keeps its artwork. Missing
+// folders are dropped.
+[[nodiscard]] std::vector<std::string> coverSearchDirectories();
+
 } // namespace launcher::config

@@ -323,6 +323,23 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME game-library COMMAND game-library-test)
 
+  add_executable(rom-layout-test
+    tests/RomLayoutTest.cpp
+    src/config/Settings.cpp
+    src/library/GameLibrary.cpp
+    src/library/RomScanner.cpp
+    src/runtime/RuntimeRegistry.cpp
+  )
+  target_include_directories(rom-layout-test PRIVATE src)
+  target_compile_features(rom-layout-test PRIVATE cxx_std_17)
+  target_compile_options(rom-layout-test PRIVATE ${MRG_WARNING_FLAGS})
+  if(TARGET SDL2::SDL2-static)
+    target_link_libraries(rom-layout-test PRIVATE runtime-libretro SDL2::SDL2-static)
+  else()
+    target_link_libraries(rom-layout-test PRIVATE runtime-libretro SDL2::SDL2)
+  endif()
+  add_test(NAME rom-layout COMMAND rom-layout-test)
+
   add_executable(sha256-test tests/Sha256Test.cpp src/util/Sha256.cpp
     src/util/Utf8Path.cpp)
   target_include_directories(sha256-test PRIVATE src)

@@ -447,7 +447,8 @@ int Application::run(int argc, char **argv) {
   }
   // Box art lives next to the saves, beside a names.json the player can edit.
   ui::CoverCache coverCache;
-  coverCache.initialize(config::dataSubdirectory("covers", ""));
+  coverCache.initialize(config::dataSubdirectory("covers", ""),
+                        config::coverSearchDirectories());
   bool running = true;
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;
@@ -1486,7 +1487,7 @@ int Application::run(int argc, char **argv) {
   } else if (!options.romPath.empty()) {
     const library::GameEntry smokeGame{
         paths::toUtf8(paths::fromUtf8(options.romPath).stem()), "Smoke Test",
-        options.romPath, game::platformFromExtension(options.romPath)};
+        options.romPath, game::detectPlatform(options.romPath)};
     startupRomFailed = !startGame(smokeGame);
     if (!startupRomFailed && options.smokePause && activeRuntime) {
       for (int frame = 0; frame < 4; ++frame) {
