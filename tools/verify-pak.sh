@@ -72,6 +72,24 @@ for core in "$pakdir"/cores/*.so; do
 done
 echo "cores checked: $corecount"
 
+# The pak ships exactly these cores. A build that silently lost one would pass
+# every check above and then fail to start that platform on the device.
+for core in fceumm_libretro.so mgba_libretro.so snes9x_libretro.so genesis_plus_gx_libretro.so; do
+  if [ ! -f "$pakdir/cores/$core" ]; then
+    echo "verify-pak: missing core cores/$core" >&2
+    fail=1
+  fi
+done
+
+# The engine exits when the font is missing, so a pak that lost res/fonts/
+# would show nothing at all instead of a partial UI.
+for font in DroidSansFallbackFull.ttf DejaVuSans.ttf; do
+  if [ ! -f "$pakdir/res/fonts/$font" ]; then
+    echo "verify-pak: missing font res/fonts/$font" >&2
+    fail=1
+  fi
+done
+
 if [ "$fail" -ne 0 ]; then
   echo "verify-pak: FAILED" >&2
   exit 1

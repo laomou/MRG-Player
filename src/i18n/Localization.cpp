@@ -205,7 +205,10 @@ constexpr Entry kText[]{
     {"PLATFORM", "游戏平台"},
     {"CORE", "模拟核心"},
     {"STATUS", "状态"},
-    {"VIEW DETAILS", "查看详情"}};
+    {"VIEW DETAILS", "查看详情"},
+    {"IMPORTED THE GAMES IN THE ROM FOLDERS", "已导入 ROM 文件夹里的游戏"},
+    {"NO NEW GAMES IN THE ROM FOLDERS", "ROM 文件夹里没有新游戏"},
+    {"NO GAMES FOUND IN THE ROM FOLDERS", "ROM 文件夹里没有找到游戏"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

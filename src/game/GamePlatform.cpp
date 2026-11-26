@@ -30,11 +30,13 @@ struct ExtensionMap {
   GamePlatform platform;
 };
 
-constexpr std::array<ExtensionMap, 8> kExtensions{{
+constexpr std::array<ExtensionMap, 9> kExtensions{{
     {".nes", GamePlatform::Nes},
     {".gba", GamePlatform::Gba},
     {".sfc", GamePlatform::Snes},
     {".smc", GamePlatform::Snes},
+    // A card is filled from many sources, and .snes is as common as .sfc.
+    {".snes", GamePlatform::Snes},
     {".gb", GamePlatform::GameBoy},
     {".gbc", GamePlatform::GameBoy},
     {".md", GamePlatform::Genesis},

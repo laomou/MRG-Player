@@ -30,7 +30,8 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - libretro back end for NES, GBA, SNES, Game Boy, and Genesis: core discovery, `MRG_CORES_DIR` override, `.so.zip` unpacking, isolated `SDL_LoadObject` loading, and software framebuffer handling for 0RGB1555, RGB565, and XRGB8888 cores
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
-- Import of `.nes`, `.gba`, `.sfc`/`.smc`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
+- Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
+- ROM folder scanning: on a build without a file dialog, the folders named by `MRG_ROM_DIRS` are imported on first start, and the Home import action rescans them
 - Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, rewind, runahead, frame stepping, screenshots, turbo, display overrides, and mute
 
 Every platform needs a libretro core installed on the machine — see [libretro cores](#libretro-cores). The project bundles no cores, ROMs, or BIOS files, and reports a clear error instead of guessing when no suitable core is found. Use only game images that you are legally entitled to use.
@@ -156,7 +157,7 @@ console's palette.
 | Move between the pills, the shelf, and the footer | Up / Down | D-pad up / down |
 | Browse carousel | Left / Right | D-pad / left stick |
 | Page the shelf by a screenful | Page Up / Page Down | L / R |
-| Import game | Click **+ Game Library** or drag a file | Focus the library pill, A |
+| Import game | Click **+ Game Library** or drag a file; without a file dialog the ROM folders are rescanned | Focus the library pill, A |
 | Start selected game | Enter / Space or click | A |
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |

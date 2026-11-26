@@ -198,6 +198,9 @@ enum class TextId {
   ColumnCore,
   ColumnStatus,
   CoreDetails,
+  RomFolderImported,
+  RomFolderAlreadyImported,
+  RomFolderEmpty,
   Count
 };
 

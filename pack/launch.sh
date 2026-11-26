@@ -20,6 +20,13 @@ export MRG_CORES_DIR=$progdir/cores
 export MRG_DATA_DIR=$SDCARD/.userdata/mrg
 mkdir -p "$MRG_DATA_DIR"
 
+# Where imported games are looked for. The ROMs shipped with the pak sit next
+# to the binary; the card's own tree is the usual place for everything else.
+# The launcher imports whatever it finds here on first start, and the Home
+# screen's import action rescans these folders because the device has no file
+# dialog.
+export MRG_ROM_DIRS=$progdir/roms:$SDCARD/Roms
+
 cd $progdir || exit 1
 # exec keeps the exit status flowing back to MainUI; do not touch governor,
 # tinymix, rfkill or the LED here, the system owns those.

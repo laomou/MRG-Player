@@ -181,8 +181,9 @@ MinUI 的 tg5040 平台层是设备输入的唯一权威参考（`workspace/tg50
 
 ## 5. 数据、ROM 与核心目录
 
-- 数据目录：`src/config/AppPaths.cpp:14` 用 `SDL_GetPrefPath("MRG","MRGPlayer")`，桌面沿用不动。设备上改为 `launch.sh` 设 `MRG_DATA_DIR=/mnt/SDCARD/.userdata/mrg`，`AppPaths` 优先读它（一并设 `SDL_HINT_PREF_PATH`/`HOME` 无意义，直接走自有变量最稳）。放 SD 卡而不是 pak 内：覆盖 pak 升级不丢存档；卸载时用户可留档。
-- ROM 导入：现在是 `zenity`（`src/platform/RomFilePicker.cpp:107`）+ 窗口拖拽。设备上都没有 → **需要新增一个目录浏览页面**（列目录、过滤扩展名、确认导入），这是本次移植里唯一的新 UI 功能。
+- 数据目录：桌面用 `SDL_GetPrefPath`（`src/config/AppPaths.cpp` 的 `preferenceRoot`），设备上 `launch.sh` 设 `MRG_DATA_DIR=/mnt/SDCARD/.userdata/mrg`，`dataRoot()` 优先读它（已实现）。放 SD 卡而不是 pak 内：覆盖 pak 升级不丢存档；卸载时用户可留档。
+- 字体：`assemble-pak.cmake` 把 `assets/` 拷成 `res/`，所以字体在 `res/fonts/`；启动器依次尝试 `assets/fonts/`、`res/fonts/`、`../share/mrg-player/fonts/`（已实现），`DejaVuSans.ttf` 必须与中文全量字体同目录。
+- ROM 导入：桌面是 `zenity`（`src/platform/RomFilePicker.cpp`）+ 窗口拖拽，设备两者皆无。**已实现**的做法：`MRG_ROM_DIRS`（`launch.sh` 设成 `$progdir/roms:$SDCARD/Roms`）指定扫描目录；首次启动库为空时自动扫描导入（`src/library/RomScanner.cpp`），此后 Home 的"导入游戏"在文件对话框不可用时改为重扫这些目录并 toast 结果。目录浏览器页面仍是可选增强，不是前提。
 - 核心目录：`src/runtime/libretro/CoreDiscovery.cpp:70` 已支持 `MRG_CORES_DIR` 覆盖 → pak 内 `cores/` 直接生效，无需改核心发现逻辑。
 - 在线下载核心（`CoreInstaller.cpp:27-35`，默认 base URL 按平台切换）：设备上**必须关掉**——设备 rootfs 没有 libcurl（sysroot 里 libcurl/openssl 都没有），而且 buildbot 的 aarch64 包 ABI 也不兼容（见 §6.1）。
 
@@ -286,6 +287,9 @@ export MRG_CORES_DIR=$progdir/cores
 export MRG_DATA_DIR=$SDCARD/.userdata/mrg
 mkdir -p "$MRG_DATA_DIR"
 
+# 游戏来源：pak 自带的 roms/ 加上卡上的 Roms/，首次启动自动导入
+export MRG_ROM_DIRS=$progdir/roms:$SDCARD/Roms
+
 cd $progdir
 exec ./mrg-player "$@"
 ```
@@ -301,7 +305,7 @@ exec ./mrg-player "$@"
 | mali SDL2 硬编码 1280×720 | UI 缩放算错、画面裁切 | P0 探针确认；画布固定 1280×720（§3.3），不信 window/drawable 反推缩放，最终 `RenderCopy(NULL)` 贴满，内容限制在中央 1120×630 安全区 |
 | `SDL_GameControllerOpen` 无 mapping | 设备上完全无输入 | 注入 mapping 字符串 / 加 Joystick 回退 |
 | 真机 libstdc++ 版本未知 | C++ 核心加载失败 | 核心静态链 libstdc++ 或 pak 自带 |
-| 无 zenity / 无拖拽 / 无 libcurl | 无法导入 ROM、无法装核心 | 新写目录浏览器；核心随包分发 |
+| 无 zenity / 无拖拽 / 无 libcurl | 无法导入 ROM、无法装核心 | 扫描 `MRG_ROM_DIRS`（已实现）；核心随包分发 |
 | 无 offscreen 驱动 | 现有 smoke test 在设备上跑不了 | 设备构建关掉 smoke test，改为真机截图 |
 | ALSA 音频延迟 | 音画不同步/爆音 | SDL_QueueAudio 缓冲调参；MinUI 有 tinymix 预设可参考 |
 | vsync 行为不明 | 撕裂或锁不到 60 | 帧时间 HUD + 可选 software frame limiter |
@@ -317,7 +321,7 @@ exec ./mrg-player "$@"
 | P2 | 平台层：数据目录兜底、全屏、`MRG_CORES_DIR`、退出/信号、核心随包 | 能启动核心、出画面出声 | 1 d |
 | P3 | 输入：mapping 注入 / joystick 回退、去掉鼠标与拖拽、Menu/Home 键、按键提示 | 手柄全流程可操作 | 1.5–2 d |
 | P4 | 1280×720 重排（全平台共用）：四个屏 + 各面板 + 设置页 + 暂停菜单 + 对话框，绝对坐标改走 `src/ui/Layout.hpp` | 界面可用、字号可读 | 3–4 d |
-| P5 | ROM 导入：目录浏览器页面 + 扫描/过滤/导入（**首发可砍**——ROM 随包内置，见 §11.5） | 不依赖 PC 也能加游戏 | 2–3 d |
+| P5 | ROM 导入：`MRG_ROM_DIRS` 扫描 + 首次启动自动导入（已完成）；目录浏览器页面为可选增强 | 把 ROM 拷进卡上 `Roms/` 即可加游戏 | 0.5 d（已完成） |
 | P6 | 性能/音频调优 + 真机验收 + 打包发布（含 §12 四平台产物） | 可分发 .pak / 四平台包 | 1–2 d |
 | | | **合计（含 P5）** | **11–15 d** |
 | | | **合计（首发砍 P5）** | **9–12 d** |
@@ -489,7 +493,8 @@ rsync -av --delete build-brick/pak/ root@192.168.1.50:/mnt/SDCARD/Apps/MRG.pak/
 #### brick job 的六个决定
 
 1. **工具链不用 TrimUI 官方那套**：官方 release 里的 Linaro 7.5 是 GCC 7，没有 `<filesystem>`（§2.2），直接用 Arm GNU 8.3-2019.02 + 把 `SDK_usr_tg5040_a133p` 合并进它的 sysroot。这两个 tarball 都是公开直链（Arm developer.com 302 到 armkeil blob，`curl -fL` 能拿）。
-2. **缓存只放 tarball，不放解压结果**：两个包合计 376 MB；解压 + `rsync` 合并不到一分钟，而缓存 1.3 GB 的合并树会把仓库 10 GB 额度吃掉一大块。缓存 key 写死成 `trimui-brick-arm-gnu-8.3-2019.02-sdk-20231018-v1`，换工具链版本必须一起改 key。
+2. **缓存只放 tarball，不放解压结果**：两个包合计 376 MB；解压 + `rsync` 合并不到一分钟，而缓存 1.3 GB 的合并树会把仓库 10 GB 额度吃掉一大块。缓存 key 写死成 `trimui-brick-arm-gnu-8.3-2019.02-sdk-20231018-v2`，换工具链版本必须一起改 key。
+3. **下载先校验再解压**：两个 tarball 的 SHA-256 钉在 `_brick.yml` 里（`toolchain.tar.xz` = `07d8ae8f…42fde`，`sdk-usr.tgz` = `b6b615d0…f3c79`），缓存命中也校验一遍——缓存可能来自旧 key 或被截断，坏包绝不能进 sysroot。
 3. **合并方向不能反**：仍用 `rsync -a --ignore-existing SDK_usr/ <tc>/aarch64-linux-gnu/libc/usr/`。反过来会让 SDK 的 glibc 2.23 stub 覆盖工具链库，链接直接 `undefined reference to __libc_dl_error_tsd@GLIBC_PRIVATE`（§13.9 记过）。
 4. **`pak-verify` 是 CI 里唯一的硬门禁**：x86 runner 跑不了 aarch64 二进制（装 `qemu-user` 也跑不过 SDL 初始化），所以只能静态断言——`readelf -d` 的 NEEDED 必须落在固件库集合内，`objdump -T` 的最高符号版本必须 ≤ `GLIBC_2.17`。§2.2 的 `powf@GLIBC_2.27` 那一类回归只有这条能挡住。
 5. **版本号来自 tag，手动运行降级**：`github.ref_name` 去掉 `v`；`workflow_dispatch` 时用 `0.0.0-dev`，和桌面三个 job 完全一致，避免出现"版本号对不上产物名"。
@@ -843,7 +848,7 @@ brick 交叉（Arm GNU 8.3 + 合并 sysroot，`-DMRG_PLATFORM=brick -DCMAKE_BUIL
 | 项目 | 值 |
 |---|---|
 | 工具链 | Arm GNU 8.3-2019.02（`developer.arm.com` 直链）+ `SDK_usr_tg5040_a133p`（TrimUI GitHub release 20231018） |
-| 缓存 | 只缓存两个 tarball（376 MB），key `trimui-brick-arm-gnu-8.3-2019.02-sdk-20231018-v1` |
+| 缓存 | 只缓存两个 tarball（376 MB），key `trimui-brick-arm-gnu-8.3-2019.02-sdk-20231018-v2`；每次运行都用钉死的 SHA-256 校验 |
 | 配置 | `-DMRG_PLATFORM=brick -DCMAKE_BUILD_TYPE=MinSizeRel -DMRG_VERSION_STRING=<tag>` |
 | 核心 | `tools/build-cores.sh` 现场交叉编译 fceumm / mgba / snes9x / genesis_plus_gx，源码目录另外缓存（§6.2.1） |
 | 构建 | `cmake --build build-brick --parallel --target pak pak-verify` |

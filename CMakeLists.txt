@@ -218,6 +218,7 @@ add_executable(mrg-player
   src/i18n/Localization.cpp
   src/library/CoverNames.cpp
   src/library/GameLibrary.cpp
+  src/library/RomScanner.cpp
   src/runtime/RuntimeRegistry.cpp
   src/model/Game.cpp
   src/ui/Controls.cpp
@@ -269,6 +270,7 @@ if(BUILD_TESTING)
     tests/GameLibraryTest.cpp
     src/config/Settings.cpp
     src/library/GameLibrary.cpp
+    src/library/RomScanner.cpp
     src/runtime/RuntimeRegistry.cpp
   )
   target_include_directories(game-library-test PRIVATE src)
