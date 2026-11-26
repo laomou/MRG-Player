@@ -22,11 +22,11 @@ constexpr SDL_Color kCardBottom{9, 17, 36, 255};
 const char *platformBadge(game::GamePlatform platform) {
   switch (platform) {
   case game::GamePlatform::Nes:
-    return "NES";
+    return "FC";
   case game::GamePlatform::Gba:
     return "GBA";
   case game::GamePlatform::Snes:
-    return "SNES";
+    return "SFC";
   case game::GamePlatform::GameBoy:
     return "GB";
   case game::GamePlatform::Genesis:
