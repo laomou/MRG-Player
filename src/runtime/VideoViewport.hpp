@@ -9,8 +9,8 @@ namespace launcher::runtime {
 
 // The launcher draws its own interface on a fixed canvas and letterboxes it
 // into the window, so widgets and the console picture share one transform.
-inline constexpr int kCanvasWidth = 1600;
-inline constexpr int kCanvasHeight = 900;
+inline constexpr int kCanvasWidth = 1280;
+inline constexpr int kCanvasHeight = 720;
 
 // Scale and offset that fit the canvas into a window, letterboxing the leftover
 // edges. Free of SDL types, like the viewport maths below.

@@ -983,7 +983,7 @@ void LibretroRuntime::render(SDL_Renderer *renderer) const {
   SDL_RenderClear(renderer);
   if (!active_ || texture_ == nullptr || width_ == 0 || height_ == 0)
     return;
-  // The game is fitted inside the 1600x900 canvas, and the canvas is then
+  // The game is fitted inside the native logical canvas, and the canvas is then
   // letterboxed into the real framebuffer; drawing straight to the window would
   // leave the interface and the picture on two different scales.
   int outputWidth = 0;

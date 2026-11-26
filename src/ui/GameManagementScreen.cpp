@@ -21,17 +21,17 @@ using i18n::TextId;
 using i18n::tr;
 
 const PanelLayout kPanel = panelLayout(
-    {982, 48, 546, 804}, Rect{982, 48, 546, 804}.inset(32, 36, 32, 20),
-    129, 26, 16);
-const LinearLayout kActions{{kPanel.content.x, 248, kPanel.content.w, 68},
-                            kManagementActionCount, 18, Axis::Vertical, 4, 18};
-const Rect kConfirmBounds{305, 150, 990, 600};
+    {786, 38, 437, 643}, Rect{786, 38, 437, 643}.inset(26, 29, 26, 16),
+    103, 21, 13);
+const LinearLayout kActions{{kPanel.content.x, 198, kPanel.content.w, 54},
+                            kManagementActionCount, 14, Axis::Vertical, 4, 14};
+const Rect kConfirmBounds{244, 120, 792, 480};
 const LinearLayout kConfirmButtons = equalColumns(
-    {kConfirmBounds.x + 64, kConfirmBounds.y + 445,
-     kConfirmBounds.w - 128, 66}, 2, 38);
-const Rect kInfoBounds{355, 145, 890, 610};
-const Rect kInfoBack{kInfoBounds.x + 60, kInfoBounds.bottom() - 135,
-                    kInfoBounds.w - 120, 68};
+    {kConfirmBounds.x + 51, kConfirmBounds.y + 356,
+     kConfirmBounds.w - 102, 53}, 2, 30);
+const Rect kInfoBounds{284, 116, 712, 488};
+const Rect kInfoBack{kInfoBounds.x + 48, kInfoBounds.bottom() - 108,
+                     kInfoBounds.w - 96, 54};
 
 void drawButtonGlyph(SDL_Renderer *renderer, int x, int y,
                      const std::string &glyph, SDL_Color color,
@@ -48,11 +48,11 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
               const config::InputPrompts &prompts, SDL_Color themeAccent) {
   drawPanel(renderer, kPanel.bounds, 28, {12, 21, 37, 232},
             kPanel.bounds.expanded(8, 0).translated(0, 8), {0, 0, 0, 42});
-  text(renderer, 1014, 84, tr(TextId::ManageGame, language), 3,
+  text(renderer, 811, 67, tr(TextId::ManageGame, language), 3,
        {246, 248, 252, 255});
-  text(renderer, 1014, 132, fitText(entry.title, 482, 2), 2, themeAccent);
+  text(renderer, 811, 106, fitText(entry.title, 386, 2), 2, themeAccent);
   const auto &platform = game::platformDescriptor(entry.platform);
-  text(renderer, 1014, 171,
+  text(renderer, 811, 137,
        std::string(platform.displayName) + "  /  " +
            tr(saveDataPresent ? TextId::SaveDataPresent
                               : TextId::SaveDataMissing,
@@ -93,19 +93,19 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
                        : destructive ? SDL_Color{255, 108, 104, 12}
                                      : SDL_Color{255, 255, 255, 12},
                        selected);
-    drawButtonGlyph(renderer, 1052, static_cast<int>(y + 34), glyphs[index],
+    drawButtonGlyph(renderer, 842, static_cast<int>(y + 27), glyphs[index],
                     selected ? SDL_Color{23, 23, 39, 255}
                              : SDL_Color{255, 255, 255, 18},
                     selected ? rowAccent : SDL_Color{205, 213, 230, 255});
-    text(renderer, 1090,
-         static_cast<int>(y + (descriptions[index].empty() ? 24 : 8)),
+    text(renderer, 872,
+         static_cast<int>(y + (descriptions[index].empty() ? 17 : 3)),
          tr(labels[index], language), 2,
          selected      ? SDL_Color{20, 24, 35, 255}
          : destructive ? rowAccent
                        : SDL_Color{241, 245, 251, 255});
     if (!descriptions[index].empty()) {
-      text(renderer, 1090, static_cast<int>(y + 39),
-           fitText(descriptions[index], 390, 1), 1,
+      text(renderer, 872, static_cast<int>(y + 31),
+           fitText(descriptions[index], 312, 1), 1,
            selected ? SDL_Color{38, 48, 54, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
@@ -129,37 +129,37 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
   rounded(renderer, kConfirmBounds.x, kConfirmBounds.y, kConfirmBounds.w,
           kConfirmBounds.h, 34, {8, 16, 31, 255});
   fill(renderer, kConfirmBounds.x, kConfirmBounds.y, kConfirmBounds.w, 9, accent);
-  circle(renderer, 409, 254, 40, {255, 98, 94, 36});
-  centeredText(renderer, 409, 243, "!", 4, {255, 133, 128, 255});
+  circle(renderer, 327, 203, 32, {255, 98, 94, 36});
+  centeredText(renderer, 327, 192, "!", 4, {255, 133, 128, 255});
   const bool removeRom = dialog == ManagementDialog::ConfirmRemoveRom;
-  text(renderer, 477, 215,
+  text(renderer, 382, 172,
        tr(removeRom ? TextId::RemoveGame : TextId::DeleteSaveData, language), 2,
        {255, 143, 136, 255});
-  text(renderer, 477, 258,
+  text(renderer, 382, 206,
        tr(removeRom ? TextId::RemoveConfirmTitle
                     : TextId::DeleteSaveConfirmTitle,
           language),
        4, {255, 255, 255, 255});
-  text(renderer, 369, 335,
+  text(renderer, 295, 268,
        tr(removeRom ? TextId::RemoveConfirmDescription
                     : TextId::DeleteSaveConfirmDescription,
           language),
        2, {224, 229, 239, 255});
-  rounded(renderer, 369, 362, 862, 86, 18, {255, 255, 255, 14});
-  text(renderer, 394, 382, tr(TextId::File, language), 1, {132, 145, 169, 255});
-  text(renderer, 394, 411,
-       fitText(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 650,
+  rounded(renderer, 295, 290, 690, 69, 14, {255, 255, 255, 14});
+  text(renderer, 315, 306, tr(TextId::File, language), 1, {132, 145, 169, 255});
+  text(renderer, 315, 329,
+       fitText(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 520,
                2),
        2, {255, 255, 255, 255});
-  rounded(renderer, 369, 470, 862, 82, 18,
+  rounded(renderer, 295, 376, 690, 66, 14,
           removeRom ? SDL_Color{120, 214, 148, 20}
                     : SDL_Color{255, 98, 94, 20});
-  text(renderer, 430, 491,
+  text(renderer, 344, 393,
        tr(removeRom ? TextId::SaveWillRemain : TextId::RomWillRemain, language),
        2,
        removeRom ? SDL_Color{188, 234, 200, 255}
                  : SDL_Color{255, 185, 180, 255});
-  text(renderer, 430, 520,
+  text(renderer, 344, 416,
        tr(removeRom ? TextId::SaveRemainDescription
                     : TextId::RomRemainDescription,
           language),
@@ -170,7 +170,7 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
                      tr(removeRom ? TextId::RemoveRom : TextId::DeleteSaveData,
                         language)}, confirmationChoice, accent,
                     {255, 98, 94, 34}, {255, 170, 166, 255});
-  centeredText(renderer, 800, 696, tr(TextId::SafeDefaultHint, language), 1,
+  centeredText(renderer, 640, 557, tr(TextId::SafeDefaultHint, language), 1,
                {122, 135, 159, 255});
 }
 
@@ -199,34 +199,34 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, 205});
   rounded(renderer, kInfoBounds.x, kInfoBounds.y, kInfoBounds.w,
           kInfoBounds.h, 32, {8, 16, 31, 255});
-  text(renderer, 415, 195, tr(TextId::GameInfo, language), 4,
+  text(renderer, 332, 156, tr(TextId::GameInfo, language), 4,
        {255, 255, 255, 255});
-  text(renderer, 415, 251, tr(TextId::Title, language), 1,
+  text(renderer, 332, 201, tr(TextId::Title, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 415, 279, fitText(entry.title, 760, 3), 3, accent);
-  text(renderer, 415, 337, tr(TextId::File, language), 1, {132, 145, 169, 255});
-  text(renderer, 415, 365,
-       fitText(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 760,
+  text(renderer, 332, 223, fitText(entry.title, 608, 3), 3, accent);
+  text(renderer, 332, 270, tr(TextId::File, language), 1, {132, 145, 169, 255});
+  text(renderer, 332, 292,
+       fitText(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()), 608,
                2),
        2, {235, 239, 247, 255});
 
-  text(renderer, 415, 423, tr(TextId::PlayTime, language), 1,
+  text(renderer, 332, 338, tr(TextId::PlayTime, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 415, 451, playTimeText(entry.playSeconds), 2,
+  text(renderer, 332, 361, playTimeText(entry.playSeconds), 2,
        {235, 239, 247, 255});
-  text(renderer, 790, 423, tr(TextId::LastPlayed, language), 1,
+  text(renderer, 632, 338, tr(TextId::LastPlayed, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 790, 451, lastPlayedText(entry.lastPlayed, language), 2,
+  text(renderer, 632, 361, lastPlayedText(entry.lastPlayed, language), 2,
        {235, 239, 247, 255});
 
-  text(renderer, 415, 509, tr(TextId::FavoriteStatus, language), 1,
+  text(renderer, 332, 407, tr(TextId::FavoriteStatus, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 415, 537,
+  text(renderer, 332, 430,
        tr(entry.favorite ? TextId::On : TextId::Off, language), 2,
        entry.favorite ? accent : SDL_Color{180, 190, 210, 255});
-  text(renderer, 790, 509, tr(TextId::SaveData, language), 1,
+  text(renderer, 632, 407, tr(TextId::SaveData, language), 1,
        {132, 145, 169, 255});
-  text(renderer, 790, 537,
+  text(renderer, 632, 430,
        tr(saveDataPresent ? TextId::SaveDataPresent : TextId::SaveDataMissing,
           language),
        2,
