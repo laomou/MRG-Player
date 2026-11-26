@@ -340,6 +340,15 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME rom-layout COMMAND rom-layout-test)
 
+  add_executable(launch-options-test
+    tests/LaunchOptionsTest.cpp
+    src/app/LaunchOptions.cpp
+  )
+  target_include_directories(launch-options-test PRIVATE src)
+  target_compile_features(launch-options-test PRIVATE cxx_std_17)
+  target_compile_options(launch-options-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME launch-options COMMAND launch-options-test)
+
   add_executable(sha256-test tests/Sha256Test.cpp src/util/Sha256.cpp
     src/util/Utf8Path.cpp)
   target_include_directories(sha256-test PRIVATE src)

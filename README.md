@@ -163,6 +163,24 @@ success is cached as `covers/<game id>.png`, so later launches never touch the n
 game's art is also blurred into the launcher background; without it the background uses the selected
 console's palette.
 
+### Starting a ROM from the command line
+
+A stock desktop starts an emulator by handing it the ROM the player picked, so `mrg-player`
+accepts that same shape:
+
+```bash
+./mrg-player /mnt/SDCARD/Roms/FC/game.nes        # what an Emus launch.sh passes
+./mrg-player --rom=/mnt/SDCARD/Roms/FC/game.nes
+./mrg-player --rom /mnt/SDCARD/Roms/FC/game.nes
+```
+
+A ROM given this way is the whole session: the library never opens, the game starts immediately,
+and leaving it (pause menu → **Return Home**) ends the process, which is how the desktop gets its
+screen back. The platform comes from the path exactly as it does for an import, so `Roms/FC/` still
+means NES, and the game keeps the content-hash identity an import would assign — a ROM that is also
+in the library shares one save file, one cover and one play-time record either way. A missing file
+or a platform without an installed core prints the reason on stderr and exits with status 1.
+
 ## Controls
 
 ### Launcher

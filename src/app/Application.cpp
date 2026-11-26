@@ -948,6 +948,12 @@ int Application::run(int argc, char **argv) {
     }
     activeRuntime.reset();
     clearStateSlots();
+    if (options.directGame) {
+      // Started from the desktop's game list: leaving the game goes back to the
+      // desktop instead of dropping the player into a library they never saw.
+      running = false;
+      return;
+    }
     screen = Screen::Home;
     SDL_SetWindowTitle(window, "MRG Player");
   };
@@ -1484,7 +1490,7 @@ int Application::run(int argc, char **argv) {
       startupRomFailed = true;
       running = false;
     }
-  } else if (!options.romPath.empty()) {
+  } else if (!options.romPath.empty() && !options.directGame) {
     const library::GameEntry smokeGame{
         paths::toUtf8(paths::fromUtf8(options.romPath).stem()), "Smoke Test",
         options.romPath, game::detectPlatform(options.romPath)};
@@ -1563,6 +1569,36 @@ int Application::run(int argc, char **argv) {
     running = false;
   }
 #endif
+
+  // A ROM on the command line is the whole session: the stock desktop starts an
+  // emulator with the ROM the player picked, so the entry comes from that path
+  // instead of the scanned library, and the library screen never opens. The
+  // platform is read from the path, so a card folder such as Roms/FC decides it
+  // exactly as it does for an import.
+  if (options.directGame && !options.romPath.empty()) {
+    const game::GamePlatform startupPlatform =
+        game::detectPlatform(options.romPath);
+    std::error_code romError;
+    if (!std::filesystem::is_regular_file(paths::fromUtf8(options.romPath),
+                                          romError)) {
+      std::fprintf(stderr, "Cannot open ROM: %s\n", options.romPath.c_str());
+      startupRomFailed = true;
+      running = false;
+    } else {
+      // The content id matches what an import would hand out, so the same card
+      // ROM keeps its saves and play time whichever way it is started.
+      std::string startupId =
+          library::contentIdForPath(options.romPath, startupPlatform);
+      if (startupId.empty())
+        startupId = paths::toUtf8(paths::fromUtf8(options.romPath).stem());
+      const library::GameEntry startupGame{
+          std::move(startupId), library::titleForPath(options.romPath),
+          options.romPath, startupPlatform};
+      startupRomFailed = !startGame(startupGame);
+      if (startupRomFailed)
+        running = false;
+    }
+  }
 
   // The launcher can start on either screen, so the installer page is filled
   // once here as well.
