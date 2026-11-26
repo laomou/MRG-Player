@@ -251,6 +251,8 @@ add_executable(mrg-player
   src/main.cpp
   src/app/Application.cpp
   src/app/LaunchOptions.cpp
+  src/app/RenderProbe.cpp
+  src/app/RenderSurface.cpp
   src/config/Settings.cpp
   src/i18n/CoreOptionText.cpp
   src/i18n/Localization.cpp
@@ -492,6 +494,13 @@ if(BUILD_TESTING)
   target_compile_features(video-viewport-test PRIVATE cxx_std_17)
   target_compile_options(video-viewport-test PRIVATE ${MRG_WARNING_FLAGS})
   add_test(NAME video-viewport COMMAND video-viewport-test)
+
+  add_executable(render-surface-test tests/RenderSurfaceTest.cpp
+    src/app/RenderSurface.cpp)
+  target_include_directories(render-surface-test PRIVATE src)
+  target_compile_features(render-surface-test PRIVATE cxx_std_17)
+  target_compile_options(render-surface-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME render-surface COMMAND render-surface-test)
 endif()
 
 file(COPY assets/fonts DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/assets")

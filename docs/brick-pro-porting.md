@@ -94,22 +94,37 @@ rsync -a --ignore-existing SDK_usr/ $TC/aarch64-linux-gnu/libc/usr/
 - `MALI_VideoInit` 直接 `open("/dev/fb0")` + `FBIOGET_VSCREENINFO`，把 xres/yres 当唯一显示模式，像素格式写死 RGBX8888，刷新率写死 60；
 - 定义了 `SDL2_POWERVR_GE8300` 宏；
 - **`SDL_malivideo.c:201-202` 里 `window->w = 1280; window->h = 720;` 是无视调用者的硬编码**（这段代码原本是为 1280×720 的 Smart Pro 写的）；
-- 没有 offscreen/dummy 驱动 → 设备上**跑不了现有的 `--smoke-test-*` 无头截图测试**。
+- 配置脚本里关掉了 kmsdrm/x11/offscreen/dummy，**但随包发布的 `libSDL2-2.0.so.0.2600.1` 里仍能搜到 offscreen 驱动的字符串**（`SDL offscreen video driver`、`SDL_VIDEO_OFFSCREEN_SAVE_FRAMES`）。所以"设备上完全没法无头截图"这个结论不成立，真机先用 `SDL_VIDEODRIVER=offscreen` 试一次再下判断（见 §12.2）。
 
 ### 3.2 由此产生的风险（必须真机确认）
 
-应用现在是这样算 UI 缩放的（`src/app/Application.cpp:2350-2356`）：
+应用现在按下面的顺序决定 UI 缩放（`src/app/RenderSurface.cpp` 的 `resolveOutputSize`）：
 
 ```cpp
-SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight);
-ui::setOutputSize(outputWidth, outputHeight);
-SDL_GetWindowSize(window, &windowWidth, &windowHeight);
-ui::setWindowSize(windowWidth, windowHeight);
+SDL_GetRendererOutputSize(renderer, &reportedW, &reportedH);  // 可能被 mali 谎报
+SDL_GetWindowSize(window, &windowW, &windowH);
+OutputSize s = resolveOutputSize(reportedW, reportedH, windowW, windowH,
+                                 std::getenv("MRG_OUTPUT_SIZE"));
+ui::setOutputSize(s.width, s.height);
+ui::setWindowSize(windowW, windowH);
 ```
 
-而 GLES2 后端的 `GetOutputSize` 走的是 `SDL_GL_GetDrawableSize`（`src/render/opengles2/SDL_render_gles2.c:322`），在 mali 驱动里很可能返回被硬编码的 **1280×720**，与真实面板 1024×768 不符。若如此，UI 会按 1.25 倍缩放渲染 → 右侧/底部被裁掉。
+优先级是 **`MRG_OUTPUT_SIZE` → renderer 输出尺寸 → 窗口尺寸 → 不动**，所以驱动谎报时只要在设备上 `export MRG_OUTPUT_SIZE=1024x768` 就能纠正，不必等新固件；格式只接受 `宽x高`（也认 `X`/`*`，上限 8192），拼错的值会被忽略而不是把界面搞成空白。
 
-**P0 探针必须打印**：`SDL_GetWindowSize` / `SDL_GL_GetDrawableSize` / `SDL_GetRendererOutputSize` / `SDL_GetDesktopDisplayMode` / `/dev/fb0` 的 `FBIOGET_VSCREENINFO`。
+GLES2 后端的 `GetOutputSize` 走 `SDL_GL_GetDrawableSize`（`src/render/opengles2/SDL_render_gles2.c:322`），在 mali 驱动里很可能返回被硬编码的 **1280×720**，与真实面板 1024×768 不符。若如此，UI 会按 1.25 倍缩放渲染 → 右侧/底部被裁掉。
+
+**探针已经内置**：`mrg-player --renderer-probe` 打印 video driver、全部 render driver、当前后端名/flags/纹理格式、renderer 输出尺寸、GL drawable/swap interval/glGetString、窗口与窗口像素尺寸、桌面模式、相关 hint、`MRG_OUTPUT_SIZE`，以及 Linux 下 `/dev/fb0` 的 `FBIOGET_VSCREENINFO`（xres/yres/bpp/色深）。这条路径不受 `MRG_ENABLE_SMOKE_TESTS` 限制，release 包里也能用。
+
+**帧时间**：`MRG_FRAME_STATS=1` 时每 300 帧向 stderr 打印一次 `frame stats: … ms/frame (… fps), present … ms`，用来判断上机后是 vsync 在锁帧还是一次 present 就吃掉 16ms。
+
+**设备无头截图（待真机确认）**：如果 offscreen 驱动确实可用，命令是
+
+```bash
+SDL_VIDEODRIVER=offscreen SDL_VIDEO_OFFSCREEN_SAVE_FRAMES=1 \
+  ./mrg-player --smoke-test-screenshot=/mnt/SDCARD/Roms/xxx.nes
+```
+
+帧图由 SDL 写到当前工作目录（文件名形如 `SDL_offscreen_frame_000000.bmp`）；再配 `--renderer-probe` 就能把"渲染成什么样"和"尺寸报的是什么"一次拿全。
 
 **兜底方案（推荐直接采用，不依赖探针结果）**：设备构建的画布固定成 **1280×720**（与桌面同一套布局，见 §3.3），**不信**任何 window/drawable 尺寸去反推缩放比例，最后统一 `SDL_RenderCopy(renderer, canvasTexture, NULL, NULL)` 贴满整屏（这是 MinUI 和 32blit 移植包验证过的做法）。
 
@@ -306,7 +321,7 @@ exec ./mrg-player "$@"
 | `SDL_GameControllerOpen` 无 mapping | 设备上完全无输入 | 注入 mapping 字符串 / 加 Joystick 回退 |
 | 真机 libstdc++ 版本未知 | C++ 核心加载失败 | 核心静态链 libstdc++ 或 pak 自带 |
 | 无 zenity / 无拖拽 / 无 libcurl | 无法导入 ROM、无法装核心 | 扫描 `MRG_ROM_DIRS`（已实现）；核心随包分发 |
-| 无 offscreen 驱动 | 现有 smoke test 在设备上跑不了 | 设备构建关掉 smoke test，改为真机截图 |
+| offscreen 驱动是否真的可用 | 设备上能否跑 smoke test 截图 | 固件 SDL2 里能搜到 offscreen 字符串（§3.1），真机先 `SDL_VIDEODRIVER=offscreen` 试；不可用才退回真机拍照 |
 | ALSA 音频延迟 | 音画不同步/爆音 | SDL_QueueAudio 缓冲调参；MinUI 有 tinymix 预设可参考 |
 | vsync 行为不明 | 撕裂或锁不到 60 | 帧时间 HUD + 可选 software frame limiter |
 
@@ -331,6 +346,8 @@ P0/P1 可以并行（P1 不依赖真机，交叉编译已经跑通）。
 ---
 
 ## 10. 附录：P0 真机探针（建议第一个跑）
+
+显示部分现在由应用自带的 `mrg-player --renderer-probe` 覆盖（§3.2），所以剩下的自定义探针只需要管**输入与音频**（摇杆 GUID、mapping、音频设备）。
 
 交叉编译一个小程序，输出到屏幕 + stdout，验证四件事：
 
@@ -462,7 +479,7 @@ rsync -av --delete build-brick/pak/ root@192.168.1.50:/mnt/SDCARD/Apps/MRG.pak/
 | 输入 | 键盘 + 鼠标 + 手柄 | 仅摇杆按键 | brick 关掉 `SDLK_*`/`SDL_MOUSEMOTION`/`SDL_DROPFILE` 分支 |
 | ROM 导入 | zenity 文件对话框 + 拖拽 | 内置 ROM + 目录浏览器（P5） | brick 无 zenity、无拖拽 |
 | 在线下载核心 | 开（`MRG_ENABLE_CORE_DOWNLOAD=ON`） | 关（同名 option 被强制为 OFF，代码编译期切除） | brick 无 curl，buildbot 的 aarch64 包 glibc 又太新（§6.1）；四个核心已随 pak 内置 |
-| smoke test 截图 | 开（`MRG_ENABLE_SMOKE_TESTS`） | 关 | brick 的 SDL2 无 offscreen/dummy 驱动 |
+| smoke test 截图 | 开（`MRG_ENABLE_SMOKE_TESTS`） | 关 | 设备 SDL2 没编 dummy，offscreen 待真机确认（§3.1） |
 | 窗口/全屏切换 | 开 | 恒全屏 | |
 | 退出方式 | 关窗口 / 菜单 | Menu 键暂停 + 退出确认 | brick 没有窗口关闭按钮 |
 
@@ -645,7 +662,7 @@ set_property(CACHE MRG_PLATFORM PROPERTY STRINGS desktop brick)
 if(MRG_PLATFORM STREQUAL "brick")
   set(MRG_USE_SYSTEM_SDL2 ON CACHE BOOL "" FORCE)
   set(MRG_ENABLE_SMOKE_TESTS OFF CACHE BOOL "" FORCE)
-  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)   # 设备 SDL2 无 dummy/offscreen 驱动
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)   # 设备侧不跑单测（需 dummy 视频驱动）
 endif()
 ```
 

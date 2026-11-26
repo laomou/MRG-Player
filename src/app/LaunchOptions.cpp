@@ -35,6 +35,11 @@ LaunchOptions parseLaunchOptions(int argc, char **argv) {
     const std::string argument = argv[i];
     bool known = argument == "--language=en" || argument == "--language=zh";
 
+    // The probe has to run in the release package on the handheld, so it is not
+    // behind the CI-only smoke-test switch.
+    options.rendererProbe =
+        options.rendererProbe || argument == "--renderer-probe";
+
     // The scripted runs exist for CI only; a release build rejects their flags
     // like any other unknown option.
 #if defined(MRG_ENABLE_SMOKE_TESTS)
@@ -84,6 +89,7 @@ LaunchOptions parseLaunchOptions(int argc, char **argv) {
             managementSmokeArgument || pauseSmokeArgument ||
             screenshotSmokeArgument || romSmokeArgument;
 #endif
+    known = known || options.rendererProbe;
 
     if (argument == "--language=en") {
       options.languageOverride = static_cast<int>(i18n::Language::English);

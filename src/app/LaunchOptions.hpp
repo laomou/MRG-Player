@@ -11,6 +11,7 @@ struct LaunchOptions {
   bool smokePause = false;
   bool smokeRom = false;
   bool smokeScreenshot = false;
+  bool rendererProbe = false;
   int languageOverride = -1;
   std::string romPath;
   std::string error;

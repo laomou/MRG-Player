@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <cmath>
@@ -18,6 +19,8 @@
 #include <vector>
 
 #include "app/LaunchOptions.hpp"
+#include "app/RenderProbe.hpp"
+#include "app/RenderSurface.hpp"
 #include "config/AppPaths.hpp"
 #include "config/InputBindings.hpp"
 #include "config/Settings.hpp"
@@ -331,6 +334,20 @@ int Application::run(int argc, char **argv) {
     return 1;
   }
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+  // The handheld cannot be inspected from a desk, so the probe reports what
+  // the video layer really does there and then exits.
+  if (options.rendererProbe) {
+    printRendererReport(window, renderer, stdout);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    ui::shutdownTextRenderer();
+    SDL_Quit();
+    return 0;
+  }
+
+  const char *outputSizeOverride = std::getenv("MRG_OUTPUT_SIZE");
+  FrameStats frameStats;
 
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
@@ -2404,17 +2421,28 @@ int Application::run(int argc, char **argv) {
     // Downloads and decodes finish here, never inside a draw call.
     coverCache.poll(renderer);
     // The interface draws itself in output pixels, so every frame starts by
-    // telling the UI how big the window's framebuffer is.
-    int outputWidth = 0;
-    int outputHeight = 0;
-    if (SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) == 0)
-      ui::setOutputSize(outputWidth, outputHeight);
+    // telling the UI how big the framebuffer is. The handheld's mali driver
+    // reports the size it hard-codes rather than the panel's, so the override
+    // and the window size stand behind it (see resolveOutputSize).
+    int reportedWidth = 0;
+    int reportedHeight = 0;
+    if (SDL_GetRendererOutputSize(renderer, &reportedWidth, &reportedHeight) !=
+        0) {
+      reportedWidth = 0;
+      reportedHeight = 0;
+    }
     // Mouse positions arrive in window points, which are not the pixels above
     // when the display scales the window, so the pointer mapping gets both.
     int windowWidth = 0;
     int windowHeight = 0;
     SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+    const OutputSize output =
+        resolveOutputSize(reportedWidth, reportedHeight, windowWidth,
+                          windowHeight, outputSizeOverride);
+    if (output.valid())
+      ui::setOutputSize(output.width, output.height);
     ui::setWindowSize(windowWidth, windowHeight);
+    const Uint64 frameStartTicks = SDL_GetPerformanceCounter();
     // Nothing paints the bars around the canvas, so clear the whole
     // framebuffer; otherwise a window that is not exactly 16:9 shows whatever
     // the framebuffer held.
@@ -2601,7 +2629,10 @@ int Application::run(int argc, char **argv) {
       screenshotRequested = false;
       (void)saveScreenshot();
     }
+    const Uint64 presentStartTicks = SDL_GetPerformanceCounter();
     SDL_RenderPresent(renderer);
+    frameStats.frame(presentStartTicks - frameStartTicks,
+                     SDL_GetPerformanceCounter() - presentStartTicks);
 #if defined(MRG_ENABLE_SMOKE_TESTS)
     if (options.smokeTest() &&
         (!options.smokeSettings || smokeSettingsAbout) &&
