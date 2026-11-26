@@ -4,13 +4,25 @@
 #include <cctype>
 
 namespace launcher::config {
+namespace {
+
+constexpr std::array<SDL_Keycode, kInputActionCount> kLegacyKeyboardDefaults{
+    SDLK_z,     SDLK_x, SDLK_RSHIFT, SDLK_RETURN, SDLK_UP,
+    SDLK_DOWN,  SDLK_LEFT, SDLK_RIGHT, SDLK_c,     SDLK_v,
+    SDLK_f,     SDLK_j, SDLK_q,      SDLK_e};
+
+} // namespace
 
 InputBindings defaultInputBindings() {
   InputBindings bindings;
-  bindings.keyboard = {SDLK_z,    SDLK_x,    SDLK_RSHIFT, SDLK_RETURN,
+  // Match the conventional RetroArch keyboard layout printed on handheld and
+  // emulator key charts: the lower face pair is X/Z, the upper pair is S/A,
+  // and the shoulders are Q/W. Turbo remains on C/V because it is an MRG-only
+  // action rather than a console button.
+  bindings.keyboard = {SDLK_x,    SDLK_z,    SDLK_RSHIFT, SDLK_RETURN,
                        SDLK_UP,   SDLK_DOWN, SDLK_LEFT,   SDLK_RIGHT,
-                       SDLK_c,    SDLK_v,    SDLK_f,      SDLK_j,
-                       SDLK_q,    SDLK_e};
+                       SDLK_c,    SDLK_v,    SDLK_s,      SDLK_a,
+                       SDLK_q,    SDLK_w};
   // Six face buttons plus two shoulders is what a Super Nintendo or Genesis
   // pad asks for, so the turbo pulses moved off the face buttons — a pulse
   // there would press the real Y or B every other frame — and onto the two
@@ -32,6 +44,13 @@ InputBindings defaultInputBindings() {
   bindings.controllerPlayer2 = bindings.controller;
   bindings.analogDeadZone = 16000;
   return bindings;
+}
+
+bool migrateLegacyKeyboardDefaults(InputBindings &bindings) noexcept {
+  if (bindings.keyboard != kLegacyKeyboardDefaults)
+    return false;
+  bindings.keyboard = defaultInputBindings().keyboard;
+  return true;
 }
 
 std::array<SDL_Keycode, kInputActionCount> &
@@ -143,14 +162,13 @@ std::string controllerButtonPrompt(SDL_GameControllerButton button,
 
 InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
   if (device == InputDeviceKind::KeyboardMouse)
-    return {"ENTER", "M", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+    return {"ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
   std::string category = "LB/RB";
   if (style == ControllerStyle::Nintendo)
     category = "L/R";
   else if (style == ControllerStyle::PlayStation)
     category = "L1/R1";
   return {controllerButtonPrompt(SDL_CONTROLLER_BUTTON_A, style),
-          controllerButtonPrompt(SDL_CONTROLLER_BUTTON_X, style),
           controllerButtonPrompt(SDL_CONTROLLER_BUTTON_B, style),
           category,
           controllerButtonPrompt(SDL_CONTROLLER_BUTTON_A, style),

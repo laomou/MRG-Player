@@ -112,6 +112,7 @@ void loadSettings(AppSettings &settings) {
       }
     }
   }
+  (void)config::migrateLegacyKeyboardDefaults(settings.input);
 }
 
 void saveSettings(const AppSettings &settings) {

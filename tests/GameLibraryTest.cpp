@@ -418,8 +418,8 @@ int main() {
           launcher::config::ControllerStyle::Generic);
   ok &=
       check(keyboardPrompts.confirm == "ENTER" &&
-                keyboardPrompts.manage == "M" && keyboardPrompts.back == "ESC",
-            "keyboard prompt set matches launcher controls");
+                keyboardPrompts.back == "ESC",
+            "keyboard prompt set uses shared confirm and cancel controls");
 
   // A ROM whose name is not ASCII has to survive import, rescan and metadata
   // reload. Windows would otherwise read these bytes in the ANSI code page.

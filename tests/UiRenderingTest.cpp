@@ -473,7 +473,7 @@ int main(int argc, char **argv) {
   managementEntry.filePath = "f1.nes";
   managementEntry.platform = launcher::game::GamePlatform::Nes;
   const launcher::config::InputPrompts managementPrompts{
-      "ENTER", "M", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
   drawGameManagementOverlay(
       managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,
       launcher::i18n::Language::English, managementPrompts, teal);
