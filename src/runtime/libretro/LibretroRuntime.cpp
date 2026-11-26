@@ -1,5 +1,7 @@
 #include "runtime/libretro/LibretroRuntime.hpp"
 
+#include "input/BrickInput.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdarg>
@@ -420,6 +422,22 @@ void LibretroRuntime::handleEvent(const SDL_Event &event) {
   } else if (event.type == SDL_CONTROLLERAXISMOTION) {
     setControllerAxis(playerForController(event.caxis.which), static_cast<SDL_GameControllerAxis>(event.caxis.axis),
                      event.caxis.value);
+  }
+}
+
+void LibretroRuntime::handleRawJoystickEvent(const SDL_Event &event) {
+  if (!active_ || paused_)
+    return;
+  if (event.type == SDL_JOYBUTTONDOWN || event.type == SDL_JOYBUTTONUP) {
+    const auto action = input::brickButtonAction(event.jbutton.button);
+    if (action)
+      setAction(playerForController(event.jbutton.which), *action,
+                event.type == SDL_JOYBUTTONDOWN);
+  } else if (event.type == SDL_JOYAXISMOTION) {
+    const auto axis = input::brickAxis(event.jaxis.axis);
+    if (axis)
+      setControllerAxis(playerForController(event.jaxis.which), *axis,
+                        event.jaxis.value);
   }
 }
 

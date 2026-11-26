@@ -35,6 +35,9 @@ public:
                     int volume) = 0;
   virtual void stop() = 0;
   virtual void handleEvent(const SDL_Event &event) = 0;
+  // Raw joystick events are opt-in: the launcher calls this only for a device
+  // it opened through the Brick fallback, never for an SDL GameController.
+  virtual void handleRawJoystickEvent(const SDL_Event &event) { (void)event; }
   virtual void releaseInput() noexcept = 0;
   virtual void update() = 0;
   virtual void render(SDL_Renderer *renderer) const = 0;

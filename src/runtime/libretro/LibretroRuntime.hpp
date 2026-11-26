@@ -34,6 +34,7 @@ public:
   bool load(const library::GameEntry &game, SDL_Renderer *renderer, int volume) override;
   void stop() override;
   void handleEvent(const SDL_Event &event) override;
+  void handleRawJoystickEvent(const SDL_Event &event) override;
   void releaseInput() noexcept override;
   void update() override;
   void render(SDL_Renderer *renderer) const override;
