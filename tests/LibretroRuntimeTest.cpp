@@ -383,6 +383,29 @@ int main(int, char **) {
   expect(backToPlain >= 0 && backToPlain == (plainFrame + 2) % 256,
          "turning runahead off did not resume the normal frame sequence");
 
+  // Pacing: one update() owes every frame the clock has passed, not just the
+  // first. A single frame per update pins fast forward to real time on a
+  // display locked to the refresh rate, and leaves normal speed no slack to
+  // absorb a hitch before the audio queue runs dry.
+  runtime->stepFrame();
+  runtime->render(renderer);
+  const int pacingStart = visibleFrame();
+  runtime->setFastForward(true);
+  SDL_Delay(80);
+  runtime->update();
+  runtime->render(renderer);
+  const int fastForwarded = (visibleFrame() - pacingStart + 256) % 256;
+  expect(fastForwarded >= 4 && fastForwarded <= 8,
+         "fast forward did not run the frames the clock owed");
+  runtime->setFastForward(false);
+  SDL_Delay(80);
+  runtime->update();
+  runtime->render(renderer);
+  const int normalPaced =
+      (visibleFrame() - pacingStart + 256) % 256 - fastForwarded;
+  expect(normalPaced >= 2 && normalPaced <= 8,
+         "normal speed did not keep up with the clock");
+
   runtime->powerCycle();
   expect(runtime->loadState(0, error) == launcher::runtime::StateStatus::Loaded,
          "load state after a power cycle failed: " + error);

@@ -40,6 +40,12 @@ constexpr std::size_t kMaximumStateSize = 64U * 1024U * 1024U;
 constexpr std::size_t kMaximumFramePixels = 4096U * 4096U;
 constexpr std::uint32_t kFastForwardDivisor = 4;
 constexpr std::uint32_t kSlowMotionFactor = 2;
+// One update() may owe several frames: the main loop presents at most once per
+// iteration, so fast forward needs a whole batch to reach its multiple of real
+// time on a display locked to the refresh rate. Twice the fast-forward divisor
+// covers a 30 Hz display at 4x and still leaves normal speed over a frame of
+// slack to absorb a hitch before the audio queue runs dry.
+constexpr unsigned kMaximumCatchUpFrames = kFastForwardDivisor * 2U;
 constexpr int kAudioBufferSamples = 1024;
 // Rewind trades memory for depth: a snapshot every other frame, capped at
 // roughly ten seconds of play or 32 MiB of serialized machine state.
@@ -265,6 +271,8 @@ void LibretroRuntime::stop() {
   romBytes_.clear();
   frame_.clear();
   stateBuffer_.clear();
+  audioScaled_.clear();
+  audioConverted_.clear();
   clearRewind();
   options_.clear();
   optionsPath_.clear();
@@ -739,37 +747,49 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
   height_ = height;
   if (data == nullptr || renderer_ == nullptr)
     return;
-  const bool wide = pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888;
   const auto *source = static_cast<const std::uint8_t *>(data);
-  for (unsigned y = 0; y < height; ++y) {
-    const std::uint8_t *row = source + static_cast<std::size_t>(y) * pitch;
-    std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
-    if (wide) {
-      const auto *pixels = reinterpret_cast<const std::uint32_t *>(row);
+  // One loop per pixel format: the format is a loop invariant, so testing it
+  // inside the inner loop only costs a branch per pixel of a frame that is
+  // converted sixty times a second.
+  if (pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888) {
+    for (unsigned y = 0; y < height; ++y) {
+      const auto *pixels = reinterpret_cast<const std::uint32_t *>(
+          source + static_cast<std::size_t>(y) * pitch);
+      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
       for (unsigned x = 0; x < width; ++x)
         target[x] = pixels[x] | 0xFF000000U;
-      continue;
     }
-    const auto *pixels = reinterpret_cast<const std::uint16_t *>(row);
-    for (unsigned x = 0; x < width; ++x) {
-      const std::uint32_t pixel = pixels[x];
-      std::uint32_t red = 0;
-      std::uint32_t green = 0;
-      std::uint32_t blue = 0;
-      if (pixelFormat_ == RETRO_PIXEL_FORMAT_RGB565) {
-        red = (pixel >> 11) & 0x1FU;
-        green = (pixel >> 5) & 0x3FU;
-        blue = pixel & 0x1FU;
+  } else if (pixelFormat_ == RETRO_PIXEL_FORMAT_RGB565) {
+    for (unsigned y = 0; y < height; ++y) {
+      const auto *pixels = reinterpret_cast<const std::uint16_t *>(
+          source + static_cast<std::size_t>(y) * pitch);
+      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
+      for (unsigned x = 0; x < width; ++x) {
+        const std::uint32_t pixel = pixels[x];
+        std::uint32_t red = (pixel >> 11) & 0x1FU;
+        std::uint32_t green = (pixel >> 5) & 0x3FU;
+        std::uint32_t blue = pixel & 0x1FU;
         green = (green << 2) | (green >> 4);
-      } else {
-        red = (pixel >> 10) & 0x1FU;
-        green = (pixel >> 5) & 0x1FU;
-        blue = pixel & 0x1FU;
-        green = (green << 3) | (green >> 2);
+        red = (red << 3) | (red >> 2);
+        blue = (blue << 3) | (blue >> 2);
+        target[x] = 0xFF000000U | (red << 16) | (green << 8) | blue;
       }
-      red = (red << 3) | (red >> 2);
-      blue = (blue << 3) | (blue >> 2);
-      target[x] = 0xFF000000U | (red << 16) | (green << 8) | blue;
+    }
+  } else {
+    for (unsigned y = 0; y < height; ++y) {
+      const auto *pixels = reinterpret_cast<const std::uint16_t *>(
+          source + static_cast<std::size_t>(y) * pitch);
+      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
+      for (unsigned x = 0; x < width; ++x) {
+        const std::uint32_t pixel = pixels[x];
+        std::uint32_t red = (pixel >> 10) & 0x1FU;
+        std::uint32_t green = (pixel >> 5) & 0x1FU;
+        std::uint32_t blue = pixel & 0x1FU;
+        green = (green << 3) | (green >> 2);
+        red = (red << 3) | (red >> 2);
+        blue = (blue << 3) | (blue >> 2);
+        target[x] = 0xFF000000U | (red << 16) | (green << 8) | blue;
+      }
     }
   }
   if (texture_ == nullptr) {
@@ -804,31 +824,33 @@ void LibretroRuntime::queueAudio(const std::int16_t *data, std::size_t frames) {
   if (audioDevice_ == 0)
     return;
   const std::size_t samples = frames * 2U;
-  std::vector<std::int16_t> scaled(samples);
-  if (volume_ == 100) {
-    std::copy(data, data + samples, scaled.begin());
-  } else {
-    for (std::size_t index = 0; index < samples; ++index)
-      scaled[index] = static_cast<std::int16_t>((static_cast<int>(data[index]) * volume_) / 100);
-  }
   const Uint32 queuedLimit = static_cast<Uint32>(sampleRate_) * 2U * static_cast<Uint32>(sizeof(std::int16_t)) / 4U;
   if (SDL_GetQueuedAudioSize(audioDevice_) >= queuedLimit)
     return;
+  const std::int16_t *scaled = data;
+  // Full volume hands the core's buffer straight to SDL; anything else needs a
+  // pass of its own. The scratch buffers are members because this runs on every
+  // single frame of audio, and allocating there is pure waste.
+  if (volume_ != 100) {
+    audioScaled_.resize(samples);
+    for (std::size_t index = 0; index < samples; ++index)
+      audioScaled_[index] = static_cast<std::int16_t>((static_cast<int>(data[index]) * volume_) / 100);
+    scaled = audioScaled_.data();
+  }
   if (resampler_ == nullptr) {
-    (void)SDL_QueueAudio(audioDevice_, scaled.data(), static_cast<Uint32>(samples * sizeof(std::int16_t)));
+    (void)SDL_QueueAudio(audioDevice_, scaled, static_cast<Uint32>(samples * sizeof(std::int16_t)));
     return;
   }
-  if (SDL_AudioStreamPut(resampler_, scaled.data(), static_cast<int>(samples * sizeof(std::int16_t))) < 0)
+  if (SDL_AudioStreamPut(resampler_, scaled, static_cast<int>(samples * sizeof(std::int16_t))) < 0)
     return;
-  std::vector<std::uint8_t> converted(4096);
   int available = 0;
   while ((available = SDL_AudioStreamAvailable(resampler_)) > 0) {
-    if (static_cast<std::size_t>(available) > converted.size())
-      converted.resize(static_cast<std::size_t>(available));
-    const int got = SDL_AudioStreamGet(resampler_, converted.data(), available);
+    if (audioConverted_.size() < static_cast<std::size_t>(available))
+      audioConverted_.resize(static_cast<std::size_t>(available));
+    const int got = SDL_AudioStreamGet(resampler_, audioConverted_.data(), available);
     if (got <= 0)
       break;
-    (void)SDL_QueueAudio(audioDevice_, converted.data(), static_cast<Uint32>(got));
+    (void)SDL_QueueAudio(audioDevice_, audioConverted_.data(), static_cast<Uint32>(got));
   }
 }
 
@@ -903,14 +925,29 @@ void LibretroRuntime::update() {
   const Uint64 now = SDL_GetPerformanceCounter();
   if (now < nextFrame_)
     return;
-  runFrame();
   Uint64 period = framePeriod_;
+  // A core reporting an absurd frame rate must not turn the catch-up loop
+  // below into a spin: one tick of the counter is the shortest period there is.
+  if (period == 0)
+    period = 1;
   if (fastForward_)
     period /= kFastForwardDivisor;
   else if (slowMotion_)
     period *= kSlowMotionFactor;
-  nextFrame_ += period;
-  if (now > nextFrame_ + period * 2U)
+  // Run every frame the clock owes, not just the first: the main loop presents
+  // at most once per iteration, so a single frame per update caps fast forward
+  // at 1x on a display locked to the refresh rate and leaves normal speed no
+  // slack at all - one dropped frame and the audio queue runs dry.
+  unsigned frames = 0;
+  while (now >= nextFrame_) {
+    runFrame();
+    nextFrame_ += period;
+    if (++frames >= kMaximumCatchUpFrames)
+      break;
+  }
+  // Still behind after spending the whole budget? Drop the backlog instead of
+  // chasing it, or every tick would burn the full batch and fall further back.
+  if (now > nextFrame_ + period)
     nextFrame_ = now + period;
 }
 
