@@ -992,7 +992,7 @@ void LibretroRuntime::render(SDL_Renderer *renderer) const {
   const CanvasTransform frame = fitCanvas(outputWidth, outputHeight);
   const Viewport view =
       computeViewport(static_cast<int>(width_), static_cast<int>(height_),
-                      kCanvasWidth, kCanvasHeight, video_);
+                      ui::kCanvasWidth, ui::kCanvasHeight, video_);
   if (view.sourceWidth <= 0 || view.sourceHeight <= 0)
     return;
   const SDL_Rect source{view.sourceX, view.sourceY, view.sourceWidth,

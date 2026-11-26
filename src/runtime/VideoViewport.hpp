@@ -4,13 +4,13 @@
 #include <cmath>
 
 #include "runtime/VideoOptions.hpp"
+#include "ui/Canvas.hpp"
 
 namespace launcher::runtime {
 
-// The launcher draws its own interface on a fixed canvas and letterboxes it
-// into the window, so widgets and the console picture share one transform.
-inline constexpr int kCanvasWidth = 1280;
-inline constexpr int kCanvasHeight = 720;
+// The launcher draws its own interface on the canvas from ui/Canvas.hpp and
+// letterboxes it into the window, so widgets and the console picture share one
+// transform and one canvas size.
 
 // Scale and offset that fit the canvas into a window, letterboxing the leftover
 // edges. Free of SDL types, like the viewport maths below.
@@ -25,12 +25,15 @@ struct CanvasTransform {
   CanvasTransform canvas;
   if (windowWidth <= 0 || windowHeight <= 0)
     return canvas;
-  canvas.scale = std::min(static_cast<float>(windowWidth) / kCanvasWidth,
-                          static_cast<float>(windowHeight) / kCanvasHeight);
+  const float width = static_cast<float>(ui::kCanvasWidth);
+  const float height = static_cast<float>(ui::kCanvasHeight);
+  canvas.scale =
+      std::min(static_cast<float>(windowWidth) / width,
+               static_cast<float>(windowHeight) / height);
   canvas.offsetX =
-      (static_cast<float>(windowWidth) - kCanvasWidth * canvas.scale) * 0.5f;
+      (static_cast<float>(windowWidth) - width * canvas.scale) * 0.5f;
   canvas.offsetY =
-      (static_cast<float>(windowHeight) - kCanvasHeight * canvas.scale) * 0.5f;
+      (static_cast<float>(windowHeight) - height * canvas.scale) * 0.5f;
   return canvas;
 }
 

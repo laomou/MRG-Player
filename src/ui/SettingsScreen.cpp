@@ -43,8 +43,12 @@ constexpr int kContentDescriptionY = kContentTop + 34;
 constexpr int kCompactStartY = kContentTop + 61;
 constexpr int kCompactStep = 27;
 constexpr int kRowHeight = 23;
+// The page keeps its left column and its right margin; only the width between
+// them changes, so the 1280x720 desktop keeps the exact pixels it had and a
+// narrower canvas narrows the rows instead of pushing them off screen.
 constexpr int kTrackX = 373;
-constexpr int kTrackWidth = 808;
+constexpr int kTrackRightInset = 99;
+const int kTrackWidth = kCanvasWidth - kTrackX - kTrackRightInset;
 constexpr int kFixedRowCount = 4;
 constexpr int kColumnGutter = 13;
 // Seven rows per column: the pad actions (A/B/X/Y/L/R with select and start)
@@ -73,12 +77,16 @@ constexpr int kInstallerRowCount = 5;
 constexpr int kCoreRowY = kContentTop + 80;
 constexpr int kCoreRowStep = 45;
 constexpr int kCoreRowHeight = 38;
-constexpr int kCoreRefreshX = 1064;
 constexpr int kCoreRefreshY = kContentTop - 2;
 constexpr int kCoreRefreshWidth = 117;
 constexpr int kCoreRefreshHeight = 27;
-constexpr int kCoreColumnCoreX = 720;
-constexpr int kCorePillRight = 1160;
+constexpr int kCoreColumnOffset = 347;
+constexpr int kCorePillInset = 21;
+const int kCoreColumnCoreX = kTrackX + kCoreColumnOffset;
+const int kCorePillRight = kTrackX + kTrackWidth - kCorePillInset;
+const int kCoreRefreshX = kTrackX + kTrackWidth - kCoreRefreshWidth;
+const int kFooterX = kCanvasWidth - 58;
+const int kFooterY = kCanvasHeight - 51;
 
 const LinearLayout kGeneralRows{
     {kTrackX, kGeneralRowY, kTrackWidth, kGeneralRowHeight},
@@ -415,7 +423,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   const bool refreshRing = !railFocused && refreshFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game, time);
-  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 8, 20, 128});
+  fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 8, 20, 128});
 
   rounded(renderer, 58, 46, 4, 26, 2, game.accent);
   text(renderer, 74, 43, "MRG PLAYER", 3, {255, 255, 255, 255});
@@ -449,9 +457,9 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                        : SDL_Color{165, 183, 199, 255});
   }
 
-  text(renderer, 373, kContentTitleY, tr(categoryText(category), language),
+  text(renderer, kTrackX, kContentTitleY, tr(categoryText(category), language),
        3, {255, 255, 255, 255});
-  text(renderer, 373, kContentDescriptionY,
+  text(renderer, kTrackX, kContentDescriptionY,
        tr(categoryDescription(category), language), 1, {144, 165, 184, 255});
 
   if (category == 0) {
@@ -639,8 +647,15 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    tr(TextId::AccentColour, language),
                    tr(TextId::AccentDescription, language), accentName,
                    game.accent, focusOpacity);
-    // A swatch so the choice reads as a colour and not only a name.
-    circle(renderer, 1136 - textWidth(accentName, 2) - 24, 365, 10,
+    // A swatch so the choice reads as a colour and not only a name. It sits
+    // just left of the value, on the row's centre line.
+    const Rect themeRow = kSettingRows.item(0);
+    const auto themeColumns = labelValueLayout(themeRow.inset(26, 0, 45, 0),
+                                              textWidth(accentName, 2));
+    circle(renderer,
+           static_cast<int>(themeColumns.value.right() -
+                            textWidth(accentName, 2) - 24),
+           static_cast<int>(themeRow.centerY()), 10,
            accentColor(settings.accent));
   } else if (category == 4) {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused,
@@ -674,7 +689,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     footer.push_back(
         {tr(TextId::ChangeControl, language), prompts.change, true});
   }
-  drawHintRow(renderer, 1222.0f, 669.0f, footer, game.accent);
+  drawHintRow(renderer, static_cast<float>(kFooterX),
+              static_cast<float>(kFooterY), footer, game.accent);
 }
 
 } // namespace launcher::ui

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "model/Game.hpp"
+#include "ui/Canvas.hpp"
 #include "ui/Layout.hpp"
 
 #include <SDL.h>
@@ -10,14 +11,11 @@
 
 namespace launcher::ui {
 
-inline constexpr int kLogicalWidth = 1280;
-inline constexpr int kLogicalHeight = 720;
-
 bool initializeTextRenderer(const std::string &fontPath);
 void shutdownTextRenderer();
 
-// The interface is laid out on the fixed 1280x720 canvas above but drawn
-// straight into the window at the size the window really has: text is
+// The interface is laid out on the canvas in Canvas.hpp but drawn straight into
+// the window at the size the window really has: text is
 // rasterised at device pixels instead of being upscaled from the canvas, which
 // is where the jagged widget text came from. A window that is not 16:9 gets the
 // canvas letterboxed, and every draw call still speaks canvas units.
