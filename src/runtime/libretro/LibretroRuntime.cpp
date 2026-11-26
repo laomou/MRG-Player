@@ -470,6 +470,7 @@ void LibretroRuntime::setControllerAxis(int player, SDL_GameControllerAxis axis,
   AxisState &state = axes_[static_cast<std::size_t>(player)];
   const Sint16 deadZone = static_cast<Sint16>(bindings_.analogDeadZone);
   if (axis == SDL_CONTROLLER_AXIS_LEFTX) {
+    state.leftX = value;
     const bool left = value < -deadZone;
     const bool right = value > deadZone;
     if (left != state.left)
@@ -479,6 +480,7 @@ void LibretroRuntime::setControllerAxis(int player, SDL_GameControllerAxis axis,
     state.left = left;
     state.right = right;
   } else if (axis == SDL_CONTROLLER_AXIS_LEFTY) {
+    state.leftY = value;
     const bool up = value < -deadZone;
     const bool down = value > deadZone;
     if (up != state.up)
@@ -487,6 +489,14 @@ void LibretroRuntime::setControllerAxis(int player, SDL_GameControllerAxis axis,
       setAction(player, config::InputAction::Down, down);
     state.up = up;
     state.down = down;
+  } else if (axis == SDL_CONTROLLER_AXIS_RIGHTX) {
+    state.rightX = value;
+  } else if (axis == SDL_CONTROLLER_AXIS_RIGHTY) {
+    state.rightY = value;
+  } else if (axis == SDL_CONTROLLER_AXIS_TRIGGERLEFT) {
+    state.l2 = value > deadZone;
+  } else if (axis == SDL_CONTROLLER_AXIS_TRIGGERRIGHT) {
+    state.r2 = value > deadZone;
   }
 }
 
@@ -507,13 +517,29 @@ std::uint16_t LibretroRuntime::joypadMask(int player) const noexcept {
     mask = static_cast<std::uint16_t>(mask | (1U << RETRO_DEVICE_ID_JOYPAD_A));
   if (turboPulse_ && holds(config::InputAction::TurboB))
     mask = static_cast<std::uint16_t>(mask | (1U << RETRO_DEVICE_ID_JOYPAD_B));
+  if (axes_[port].l2)
+    mask = static_cast<std::uint16_t>(mask | (1U << RETRO_DEVICE_ID_JOYPAD_L2));
+  if (axes_[port].r2)
+    mask = static_cast<std::uint16_t>(mask | (1U << RETRO_DEVICE_ID_JOYPAD_R2));
   return mask;
 }
 
 std::int16_t LibretroRuntime::onInput(unsigned port, unsigned device, unsigned index, unsigned id) {
-  if (port >= config::kPlayerCount || device != RETRO_DEVICE_JOYPAD)
+  if (port >= config::kPlayerCount)
     return 0;
-  (void)index;
+  const unsigned baseDevice = device & RETRO_DEVICE_MASK;
+  if (baseDevice == RETRO_DEVICE_ANALOG) {
+    if (id > RETRO_DEVICE_ID_ANALOG_Y)
+      return 0;
+    const AxisState &state = axes_[port];
+    if (index == RETRO_DEVICE_INDEX_ANALOG_LEFT)
+      return id == RETRO_DEVICE_ID_ANALOG_X ? state.leftX : state.leftY;
+    if (index == RETRO_DEVICE_INDEX_ANALOG_RIGHT)
+      return id == RETRO_DEVICE_ID_ANALOG_X ? state.rightX : state.rightY;
+    return 0;
+  }
+  if (baseDevice != RETRO_DEVICE_JOYPAD)
+    return 0;
   const std::uint16_t mask = joypadMask(static_cast<int>(port));
   if (id == RETRO_DEVICE_ID_JOYPAD_MASK)
     return static_cast<std::int16_t>(mask);

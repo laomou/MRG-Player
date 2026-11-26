@@ -3,6 +3,7 @@
 // error path when no core is installed.
 
 #include <SDL.h>
+#include <libretro.h>
 
 #include <chrono>
 #include <cstdint>
@@ -385,13 +386,56 @@ int main(int, char **) {
   runtime->powerCycle();
   expect(runtime->loadState(0, error) == launcher::runtime::StateStatus::Loaded,
          "load state after a power cycle failed: " + error);
+
+  // Both SDL GameController and Brick raw joystick axes must reach the same
+  // libretro inputs. Mix the two event paths so this one frame covers both.
+  SDL_Event controllerAxis{};
+  controllerAxis.type = SDL_CONTROLLERAXISMOTION;
+  controllerAxis.caxis.which = 17;
+  controllerAxis.caxis.axis = SDL_CONTROLLER_AXIS_TRIGGERLEFT;
+  controllerAxis.caxis.value = 24000;
+  runtime->handleEvent(controllerAxis);
+  controllerAxis.caxis.axis = SDL_CONTROLLER_AXIS_RIGHTX;
+  controllerAxis.caxis.value = -12345;
+  runtime->handleEvent(controllerAxis);
+
+  SDL_Event rawAxis{};
+  rawAxis.type = SDL_JOYAXISMOTION;
+  rawAxis.jaxis.which = 23;
+  rawAxis.jaxis.axis = 5; // Brick R2
+  rawAxis.jaxis.value = 25000;
+  runtime->handleRawJoystickEvent(rawAxis);
+  rawAxis.jaxis.axis = 4; // Brick right stick Y
+  rawAxis.jaxis.value = 23456;
+  runtime->handleRawJoystickEvent(rawAxis);
+  runtime->stepFrame();
   runtime->stop();
 
   const fs::path battery = fs::path(launcher::config::dataSubdirectory("saves", "gba")) / "stubgame.srm";
   std::error_code batteryError;
   expect(fs::is_regular_file(battery, batteryError) && !batteryError,
          "stopping the game did not write its battery save");
-  expect(fs::file_size(battery, batteryError) == 128, "the battery save has the size the core reported");
+  expect(fs::file_size(battery, batteryError) == 128,
+         "the battery save has the size the core reported");
+  std::vector<std::uint8_t> inputBattery;
+  expect(readAll(battery.string(), inputBattery),
+         "cannot read the battery save after input");
+  const auto inputWord = [&inputBattery](std::size_t index) {
+    std::uint16_t value = 0;
+    if ((index + 1) * sizeof(value) <= inputBattery.size())
+      std::memcpy(&value, inputBattery.data() + index * sizeof(value),
+                  sizeof(value));
+    return value;
+  };
+  const std::uint16_t triggerMask =
+      static_cast<std::uint16_t>((1U << RETRO_DEVICE_ID_JOYPAD_L2) |
+                                 (1U << RETRO_DEVICE_ID_JOYPAD_R2));
+  expect((inputWord(8) & triggerMask) == triggerMask,
+         "L2/R2 did not reach the core joypad mask");
+  expect(static_cast<std::int16_t>(inputWord(9)) == -12345,
+         "the standard controller right X axis did not reach the core");
+  expect(static_cast<std::int16_t>(inputWord(10)) == 23456,
+         "the Brick right Y axis did not reach the core");
 
   // The stored choice survives a reload and reaches the core through
   // GET_VARIABLE; resetting drops it and returns to the declared default.

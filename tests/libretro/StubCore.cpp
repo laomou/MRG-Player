@@ -163,8 +163,16 @@ void retro_run(void) {
     inputPoll();
   lastInput = 0;
   if (inputState != nullptr) {
-    const std::int16_t mask = inputState(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_MASK);
-    lastInput = static_cast<unsigned>(mask);
+    const std::int16_t mask = inputState(0, RETRO_DEVICE_JOYPAD, 0,
+                                         RETRO_DEVICE_ID_JOYPAD_MASK);
+    lastInput = static_cast<unsigned>(static_cast<std::uint16_t>(mask));
+    saveRam[8] = static_cast<std::uint16_t>(mask);
+    saveRam[9] = static_cast<std::uint16_t>(inputState(
+        0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT,
+        RETRO_DEVICE_ID_ANALOG_X));
+    saveRam[10] = static_cast<std::uint16_t>(inputState(
+        0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_RIGHT,
+        RETRO_DEVICE_ID_ANALOG_Y));
   }
   // Bright enough to see in a screenshot: green, with the frame counter and the
   // input bitmask in the low channels.
