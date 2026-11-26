@@ -31,6 +31,17 @@ constexpr char kPathListSeparator = ';';
 constexpr char kPathListSeparator = ':';
 #endif
 
+// SDL_setenv changes the Win32 environment block, which the CRT's getenv does
+// not follow; the launcher reads its overrides with getenv, so set them the way
+// a starting process would see them.
+void setEnvironment(const char *name, const std::string &value) {
+#if defined(_WIN32)
+  _putenv_s(name, value.c_str());
+#else
+  setenv(name, value.c_str(), 1);
+#endif
+}
+
 bool check(bool condition, const std::string &message) {
   if (!condition)
     std::cerr << "FAIL: " << message << '\n';
@@ -456,10 +467,10 @@ int main() {
   // SDL's desktop preference path, and it has no file dialog; the scan below is
   // the only way a game can reach the library there.
   const fs::path deviceData = root / "device-data";
-  SDL_setenv("MRG_DATA_DIR", (deviceData.string() + "//").c_str(), 1);
+  setEnvironment("MRG_DATA_DIR", deviceData.string() + "//");
   ok &= check(launcher::config::dataRoot() == deviceData.string() + "/",
               "MRG_DATA_DIR replaces the data root and drops extra separators");
-  SDL_setenv("MRG_DATA_DIR", "", 1);
+  setEnvironment("MRG_DATA_DIR", std::string());
   ok &= check(launcher::config::dataRoot() == currentRoot,
               "an empty MRG_DATA_DIR keeps the default data root");
 
@@ -478,11 +489,8 @@ int main() {
   ok &= check(writeBytes(cardRoms / "notes.txt", {0x41}),
               "write a file that is not a game");
 
-  SDL_setenv("MRG_ROM_DIRS",
-             (cardRoms.string() + kPathListSeparator +
-              (root / "missing").string())
-                 .c_str(),
-             1);
+  setEnvironment("MRG_ROM_DIRS", cardRoms.string() + kPathListSeparator +
+                                     (root / "missing").string());
   const std::vector<std::string> cardDirectories =
       launcher::config::romSearchDirectories();
   ok &= check(cardDirectories.size() == 1 &&
@@ -511,7 +519,7 @@ int main() {
                     secondScan.alreadyPresent == 2,
                 "a repeated scan reports the games as already present");
   }
-  SDL_setenv("MRG_ROM_DIRS", "", 1);
+  setEnvironment("MRG_ROM_DIRS", std::string());
 
   fs::remove_all(root, ec);
   ok &= check(!ec, "remove temporary test directory");
