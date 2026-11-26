@@ -12,7 +12,9 @@
 
 namespace launcher::ui {
 
-inline constexpr int kPauseActionCount = 8;
+inline constexpr int kPauseActionCount = 9;
+inline constexpr int kPauseControlHelpAction = 7;
+inline constexpr int kPauseReturnHomeAction = 8;
 inline constexpr int kStateSlotCount = 3;
 
 // What the pause menu shows for one save-state slot. The thumbnail texture is

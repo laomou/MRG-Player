@@ -37,6 +37,7 @@
 #include "ui/GameManagementScreen.hpp"
 #include "ui/HomeScreen.hpp"
 #include "ui/PauseMenuScreen.hpp"
+#include "ui/GameControls.hpp"
 #include "ui/Primitives.hpp"
 #include "ui/SettingsScreen.hpp"
 #include "ui/Theme.hpp"
@@ -510,6 +511,7 @@ int Application::run(int argc, char **argv) {
   bool smokeRomCaptured = false;
   bool smokePauseVideo = false;
   bool smokePauseCoreOptions = false;
+  bool smokePauseControls = false;
 #endif
   int stateSlot = 0;
   bool pauseConfirmingPower = false;
@@ -522,6 +524,10 @@ int Application::run(int argc, char **argv) {
   // The core-options panel lists whatever the running core declared; values
   // are stored per core so every game on that core keeps them.
   bool pauseCoreOptionsPanel = false;
+  bool pauseControlHelp = false;
+  int controlHelpPage = 0;
+  Uint64 gameEntryHintSince = 0;
+  bool gameEntryHintVisible = false;
   int pauseCoreOptionCursor = 0;
   int pauseCoreOptionScroll = 0;
   std::string pauseFeedback;
@@ -638,14 +644,16 @@ int Application::run(int argc, char **argv) {
                               : SDL_CONTROLLER_TYPE_UNKNOWN;
     return config::resolveControllerStyle(settings.controllerStyle, detected);
   };
-  auto currentPrompts = [&] {
+  auto currentPromptDevice = [&] {
     bool controllerConnected = controller != nullptr;
 #if defined(MRG_PLATFORM_BRICK)
     controllerConnected = controllerConnected || brickJoystick != nullptr;
 #endif
-    const config::InputDeviceKind device = config::resolvePromptDevice(
+    return config::resolvePromptDevice(
         settings.promptDevice, lastInputDevice, controllerConnected);
-    return config::inputPrompts(device, resolvedControllerStyle());
+  };
+  auto currentPrompts = [&] {
+    return config::inputPrompts(currentPromptDevice(), resolvedControllerStyle());
   };
   // Cycling assigns the pad for the port currently being edited, skipping the
   // pad that already belongs to the other player.
@@ -704,6 +712,17 @@ int Application::run(int argc, char **argv) {
   };
   auto currentLanguage = [&] {
     return i18n::languageFromSetting(settings.language);
+  };
+  auto currentControlHelp = [&] {
+    auto device = currentPromptDevice() == config::InputDeviceKind::KeyboardMouse
+                      ? ui::ControlHelpDevice::Keyboard
+                      : ui::ControlHelpDevice::Controller;
+#if defined(MRG_PLATFORM_BRICK)
+    if (brickJoystick != nullptr && device == ui::ControlHelpDevice::Controller)
+      device = ui::ControlHelpDevice::Brick;
+#endif
+    return ui::gameControlHelp(activeGamePlatform, settings.input, device,
+                               resolvedControllerStyle(), currentLanguage());
   };
   auto showToast = [&](i18n::TextId id, Uint64 duration = 2800) {
     toastMessage = i18n::tr(id, currentLanguage());
@@ -850,6 +869,8 @@ int Application::run(int argc, char **argv) {
     syncPlayerControllers();
     sessionAccumulatedMs = 0;
     sessionActiveSince = SDL_GetTicks64();
+    gameEntryHintSince = sessionActiveSince;
+    gameEntryHintVisible = true;
     screen = Screen::Game;
     SDL_SetWindowTitle(
         window, (std::string("MRG Player - ") + gameEntry.title).c_str());
@@ -948,6 +969,9 @@ int Application::run(int argc, char **argv) {
     brickInput.reset();
 #endif
     pauseSessionClock();
+    gameEntryHintVisible = false;
+    pauseControlHelp = false;
+    controlHelpPage = 0;
     pauseAction = 0;
     pauseConfirmingPower = false;
     pausePowerChoice = 0;
@@ -1277,7 +1301,12 @@ int Application::run(int argc, char **argv) {
       openPauseCoreOptionsPanel();
       return;
     }
-    if (pauseAction == 7) {
+    if (pauseAction == ui::kPauseControlHelpAction) {
+      pauseControlHelp = true;
+      controlHelpPage = 0;
+      return;
+    }
+    if (pauseAction == ui::kPauseReturnHomeAction) {
       leaveGame();
       return;
     }
@@ -1885,6 +1914,17 @@ int Application::run(int argc, char **argv) {
             pausePowerChoice = choice;
             confirmPausePower();
           }
+        }
+        continue;
+      }
+
+      if (screen == Screen::Pause && pauseControlHelp) {
+        if (ui::controlHelpBackEvent(event)) {
+          pauseControlHelp = false;
+        } else {
+          const int pages = ui::controlHelpPageCount(currentControlHelp());
+          controlHelpPage = (std::clamp(controlHelpPage, 0, pages - 1) +
+                             ui::controlHelpPageStep(event) + pages) % pages;
         }
         continue;
       }
@@ -2526,12 +2566,23 @@ int Application::run(int argc, char **argv) {
         else
           activeRuntime->update();
         activeRuntime->render(renderer);
+        if (gameEntryHintVisible) {
+          const Uint64 elapsed = SDL_GetTicks64() - gameEntryHintSince;
+          if (ui::gameEntryHintOpacity(elapsed) <= 0)
+            gameEntryHintVisible = false;
+          else
+            ui::drawGameEntryHint(renderer, currentControlHelp().pauseKey, elapsed,
+                                  currentLanguage(), ui::accentColor(settings.accent));
+        }
       }
     } else if (screen == Screen::Pause) {
       if (activeRuntime) {
         activeRuntime->render(renderer);
         const SDL_Color accent = ui::accentColor(settings.accent);
-        if (pauseCoreOptionsPanel) {
+        if (pauseControlHelp) {
+          ui::drawControlHelp(renderer, currentControlHelp(), controlHelpPage,
+                              currentLanguage(), prompts, accent);
+        } else if (pauseCoreOptionsPanel) {
           ui::drawPauseCoreOptionsPanel(renderer, pauseCoreOptionCursor,
                                         pauseCoreOptionScroll,
                                         activeRuntime->coreOptions(),
@@ -2691,6 +2742,12 @@ int Application::run(int argc, char **argv) {
       } else if (smokePauseVideo && pauseCoreOptionsPanel) {
         captureFrame(renderer, "pause-options-screenshot.bmp");
         smokePauseCoreOptions = true;
+        pauseCoreOptionsPanel = false;
+        pauseAction = ui::kPauseControlHelpAction;
+        executePauseAction();
+      } else if (smokePauseCoreOptions && pauseControlHelp) {
+        captureFrame(renderer, "pause-controls-screenshot.bmp");
+        smokePauseControls = true;
       }
     }
 #endif
@@ -2704,7 +2761,7 @@ int Application::run(int argc, char **argv) {
         (!options.smokeSettings || smokeSettingsAbout) &&
         (!options.smokeHome || smokeHomeDone) &&
         (!options.smokePause ||
-         smokePauseCoreOptions || screen != Screen::Pause) &&
+         smokePauseControls || screen != Screen::Pause) &&
         (!options.smokeRom || smokeRomCaptured))
       running = false;
     else

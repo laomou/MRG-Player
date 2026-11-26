@@ -11,6 +11,8 @@
 #include <iostream>
 #include <vector>
 
+void testGameControls(const char *fontPath);
+
 namespace {
 void check(bool result, const char *message) {
   if (!result) {
@@ -132,6 +134,7 @@ int main(int argc, char **argv) {
             [](float x, float y) { return settingsRowAt(3, x, y); },
             settingRowCount(3)) == 0,
         "Every controller row answers a click on any canvas");
+  testGameControls(argv[1]);
   if (kCanvasWidth != 1280 || kCanvasHeight != 720) {
     std::cout << "Canvas " << kCanvasWidth << "x" << kCanvasHeight
               << ": controls verified reachable; the reference 1280x720 pixel "
@@ -147,10 +150,11 @@ int main(int argc, char **argv) {
   }
   check(pauseSlotAt(900, 210) == -1, "Outside slots");
   for (int action = 0; action < kPauseActionCount; ++action)
-    check(pauseActionAt(1000, 317 + action * 39 + 18) == action,
+    check(pauseActionAt(1000, 317 + action * 34 + 16) == action,
           "Pause action hit target");
-  check(kPauseActionCount == 8,
-        "The pause card lists resume, states, reset, display, options, home");
+  check(kPauseActionCount == 9 && kPauseControlHelpAction == 7 &&
+            kPauseReturnHomeAction == 8,
+        "The pause card includes controls before returning home");
   for (int row = 0; row < kPauseCoreOptionRows; ++row)
     check(pauseCoreOptionAt(1000, 240 + row * 45 + 20, 0) == row,
           "Core option row hit target");
@@ -232,7 +236,7 @@ int main(int argc, char **argv) {
             powerCycleChoiceAt(640, 360) == -1,
         "Power-cycle footer and button gap must not confirm");
   check(managementActionAt(1000, 260) == -1 &&
-            pauseActionAt(1000, 355) == -1 &&
+            pauseActionAt(1000, 350) == -1 &&
             confirmationChoiceAt(640, 500) == -1,
         "Overlay list and confirmation gaps do not activate controls");
   const SDL_Color teal = accentColor(0);

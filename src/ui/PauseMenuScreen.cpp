@@ -43,8 +43,9 @@ const PauseLayout &pauseLayout() {
     out.panel = panel;
     out.slots = equalColumns({content.x, content.y + 34, content.w, 46},
                              kStateSlotCount, 10);
-    out.actions = {{content.x, content.y + 130, content.w, 36},
-                   kPauseActionCount, 3};
+    // Nine rows fit without touching the footer, even on the shorter desktop.
+    out.actions = {{content.x, content.y + 130, content.w, 32},
+                   kPauseActionCount, 2};
     out.videoRows = {{content.x, content.y + 53, content.w, 56},
                      kPauseVideoRowCount, 8};
     out.optionRows = {{content.x, content.y + 53, content.w, 40},
@@ -161,26 +162,26 @@ void drawPauseMenu(
   const std::array<TextId, kPauseActionCount> labels{
       TextId::ResumeGame,   TextId::SaveState,    TextId::LoadState,
       TextId::ConsoleReset, TextId::PowerCycle,   TextId::Display,
-      TextId::CoreOptions,  TextId::ReturnHome};
+      TextId::CoreOptions,  TextId::ControlHelp,  TextId::ReturnHome};
   const std::array<const char *, kPauseActionCount> glyphs{
-      ">", "S", "L", "R", "P", "D", "O", "<"};
+      ">", "S", "L", "R", "P", "D", "O", "?", "<"};
   for (int action = 0; action < kPauseActionCount; ++action) {
     const Rect bounds = layout.actions.item(action);
-    const float y = bounds.y;
     const bool selected = action == selectedAction;
     const int glyphX = static_cast<int>(panel.content.x + 29);
     drawFocusablePlate(renderer, bounds.x, bounds.y, bounds.w, bounds.h, 16,
                        selected ? accent : SDL_Color{255, 255, 255, 16},
                        selected);
-    circle(renderer, glyphX, static_cast<int>(y + 18), 11,
+    circle(renderer, glyphX, static_cast<int>(bounds.centerY()), 11,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
-    centeredGlyph(renderer, glyphX, static_cast<int>(y + 18), glyphs[action], 2,
+    centeredGlyph(renderer, glyphX, static_cast<int>(bounds.centerY()), glyphs[action], 2,
                   selected ? accent
                            : SDL_Color{210, 218, 232, 255});
     text(renderer, static_cast<int>(panel.content.x + 57),
-         static_cast<int>(y + 9), tr(labels[action], language),
-         2,
+         textCenteredY(tr(labels[action], language),
+                       static_cast<int>(bounds.centerY()), 2),
+         tr(labels[action], language), 2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
   }
 
