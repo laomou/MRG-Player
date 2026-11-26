@@ -9,8 +9,10 @@
 
 #include "runtime/libretro/CoreArchive.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
+#if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
 #include "util/Download.hpp"
 #include "util/Sha256.hpp"
+#endif
 #include "util/Utf8Path.hpp"
 
 namespace launcher::runtime::libretro {
@@ -19,7 +21,9 @@ namespace fs = std::filesystem;
 
 // A core archive is a few hundred kilobytes; anything far larger is not what
 // the buildbot serves and is refused before it lands on disk.
+#if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
 constexpr std::uint64_t kMaximumDownloadBytes = 64U * 1024U * 1024U;
+#endif
 
 // The buildbot encodes the target platform in the directory name, next to the
 // library suffix the core is built as.
@@ -53,6 +57,8 @@ const std::vector<CorePackage> kPackages = {
     {game::GamePlatform::GameBoy, "gambatte_libretro"},
     {game::GamePlatform::GameBoy, "sameboy_libretro"},
     {game::GamePlatform::GameBoy, "gearboy_libretro"},
+    // mGBA also runs GB/GBC, so a build that ships only mGBA still works.
+    {game::GamePlatform::GameBoy, "mgba_libretro"},
     {game::GamePlatform::Genesis, "genesis_plus_gx_libretro"},
     {game::GamePlatform::Genesis, "picodrive_libretro"},
 };
@@ -80,6 +86,17 @@ std::string coreLibraryName(const CorePackage &package) {
   return std::string(package.core) + coreLibrarySuffix();
 }
 
+#if !defined(MRG_ENABLE_CORE_DOWNLOAD) || !MRG_ENABLE_CORE_DOWNLOAD
+// The device build ships every core it needs inside the pak, so the network
+// path is compiled out instead of failing at the end of a download.
+InstallOutcome installCore(const CorePackage &package, const std::string &coresDirectory) {
+  (void)package;
+  (void)coresDirectory;
+  InstallOutcome outcome;
+  outcome.message = "This build ships its cores; runtime downloads are disabled";
+  return outcome;
+}
+#else
 InstallOutcome installCore(const CorePackage &package, const std::string &coresDirectory) {
   InstallOutcome outcome;
   if (coreArchiveBaseUrl().empty()) {
@@ -123,5 +140,6 @@ InstallOutcome installCore(const CorePackage &package, const std::string &coresD
   outcome.message = extracted;
   return outcome;
 }
+#endif
 
 } // namespace launcher::runtime::libretro

@@ -1,0 +1,7 @@
+{
+  "package": "com.mrg.player",
+  "label": "MRG Player",
+  "icon": "icon.png",
+  "launch": "launch.sh",
+  "description": "Retro games, timeless play."
+}

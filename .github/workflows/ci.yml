@@ -121,3 +121,9 @@ jobs:
           MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-pause "$RUNNER_TEMP/stub.nes"
           MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-rom "$RUNNER_TEMP/stub.nes"
           MRG_CORES_DIR="$GITHUB_WORKSPACE/build/cores" "${{ matrix.binary }}" --smoke-test-screenshot "$RUNNER_TEMP/stub.nes"
+
+  # The device build has no functional tests on an x86 runner, but pak-verify
+  # still guards the link: NEEDED libraries and GLIBC_2.17 as the ceiling.
+  brick:
+    name: TrimUI Brick (cross)
+    uses: ./.github/workflows/_brick.yml

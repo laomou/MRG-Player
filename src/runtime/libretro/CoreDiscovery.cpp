@@ -27,7 +27,10 @@ constexpr const char *kLibrarySuffix = ".so";
 constexpr const char *kNesCores[] = {"mesen_libretro", "nestopia_libretro", "fceumm_libretro", "quicknes_libretro"};
 constexpr const char *kGbaCores[] = {"mgba_libretro", "gpsp_libretro", "vbam_libretro", "vba_next_libretro"};
 constexpr const char *kSnesCores[] = {"snes9x_libretro", "bsnes_libretro", "mesen-s_libretro"};
-constexpr const char *kGameBoyCores[] = {"gambatte_libretro", "sameboy_libretro", "gearboy_libretro"};
+// mGBA is the last entry on purpose: it runs GB and GBC as well, so a build
+// can ship one well-licensed core instead of a second GPL-only binary.
+constexpr const char *kGameBoyCores[] = {"gambatte_libretro", "sameboy_libretro", "gearboy_libretro",
+                                         "mgba_libretro"};
 constexpr const char *kGenesisCores[] = {"genesis_plus_gx_libretro", "picodrive_libretro"};
 
 struct CoreFamily {

@@ -45,6 +45,13 @@ namespace {
 
 enum class Screen { Home, Settings, Management, Game, Pause };
 
+// The device profile compiles the downloader out (CMake: MRG_ENABLE_CORE_DOWNLOAD).
+#if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
+constexpr bool kCoreDownloadEnabled = true;
+#else
+constexpr bool kCoreDownloadEnabled = false;
+#endif
+
 // One install at a time, run on an SDL thread so a slow network never freezes
 // the launcher; the frame loop polls the flag and joins the thread.
 struct CoreInstallJob {
@@ -658,6 +665,12 @@ int Application::run(int argc, char **argv) {
   auto startCoreInstall = [&](int row) {
     if (coreInstallBusy || row < 0 ||
         row >= static_cast<int>(std::size(kInstallerPlatforms))) {
+      return;
+    }
+    if (!kCoreDownloadEnabled) {
+      // The pak already carries every core; say so instead of opening a job
+      // that could only fail at the end of a download.
+      showToast(i18n::TextId::CoreInstallFailedBanner);
       return;
     }
     const runtime::libretro::CorePackage *chosen = nullptr;
