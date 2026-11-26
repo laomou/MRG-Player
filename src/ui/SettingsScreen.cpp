@@ -81,8 +81,13 @@ constexpr int kCoreRefreshY = kContentTop - 2;
 constexpr int kCoreRefreshWidth = 117;
 constexpr int kCoreRefreshHeight = 27;
 constexpr int kCoreColumnOffset = 347;
+constexpr int kCoreReferenceTrackWidth = 808;
+constexpr int kCoreColumnGap = 12;
 constexpr int kCorePillInset = 21;
-const int kCoreColumnCoreX = kTrackX + kCoreColumnOffset;
+// Preserve the desktop column exactly, but let it move left with the narrower
+// track instead of leaving almost no room for filenames on the Brick canvas.
+const int kCoreColumnCoreX =
+    kTrackX + kTrackWidth * kCoreColumnOffset / kCoreReferenceTrackWidth;
 const int kCorePillRight = kTrackX + kTrackWidth - kCorePillInset;
 const int kCoreRefreshX = kTrackX + kTrackWidth - kCoreRefreshWidth;
 const int kFooterX = kCanvasWidth - 58;
@@ -234,6 +239,17 @@ TextId controllerStyleText(config::ControllerStyle style) {
 }
 
 } // namespace
+
+CoreRowColumns coreRowColumns(const std::string &status) {
+  const int statusWidth = textWidth(status, 1) + 26;
+  const int statusX = kCorePillRight - statusWidth;
+  const int filenameWidth =
+      std::max(0, statusX - kCoreColumnGap - kCoreColumnCoreX);
+  return {{static_cast<float>(kCoreColumnCoreX), 0.0f,
+           static_cast<float>(filenameWidth), 0.0f},
+          {static_cast<float>(statusX), 0.0f,
+           static_cast<float>(statusWidth), 0.0f}};
+}
 
 int settingCategoryCount() { return kCategoryCount; }
 
@@ -627,16 +643,18 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
            entry.platform, 2,
            selected ? SDL_Color{255, 255, 255, 255}
                     : SDL_Color{232, 238, 246, 255});
-      text(renderer, kCoreColumnCoreX, textCenteredY(entry.core, centerY, 1),
-           entry.core, 1, {176, 193, 211, 255});
-      const int pillWidth = textWidth(entry.status, 1) + 26;
-      rounded(renderer, static_cast<float>(kCorePillRight - pillWidth),
-              static_cast<float>(y + 4), static_cast<float>(pillWidth), 30.0f,
-              15.0f,
+      const CoreRowColumns columns = coreRowColumns(entry.status);
+      const std::string fittedCore =
+          fitText(entry.core, static_cast<int>(columns.filename.w), 1);
+      text(renderer, static_cast<int>(columns.filename.x),
+           textCenteredY(fittedCore, centerY, 1), fittedCore, 1,
+           {176, 193, 211, 255});
+      rounded(renderer, columns.status.x, static_cast<float>(y + 4),
+              columns.status.w, 30.0f, 15.0f,
               entry.installed
                   ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
                   : SDL_Color{26, 40, 60, 180});
-      text(renderer, kCorePillRight - pillWidth + 13,
+      text(renderer, static_cast<int>(columns.status.x) + 13,
            textCenteredY(entry.status, y + 24, 1), entry.status, 1,
            entry.installed ? game.accent
                            : SDL_Color{150, 168, 188, 255});

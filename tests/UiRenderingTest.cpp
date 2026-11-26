@@ -72,6 +72,18 @@ int main(int argc, char **argv) {
   const int fittedWidth = textWidth("中文...", 2);
   check(fitText("中文混合ABCD", fittedWidth, 2) == "中文...",
         "UTF-8 truncation removes whole codepoints and keeps ellipsis in bounds");
+  for (const std::string status : {"INSTALLED", "NOT INSTALLED",
+                                   "DOWNLOADING", "已安装", "未安装",
+                                   "下载中"}) {
+    const CoreRowColumns coreColumns = coreRowColumns(status);
+    const std::string filename =
+        fitText("genesis_plus_gx_libretro.so",
+                static_cast<int>(coreColumns.filename.w), 1);
+    check(coreColumns.filename.w >= 100 && !filename.empty() &&
+              coreColumns.filename.right() + 12 <= coreColumns.status.x &&
+              textWidth(filename, 1) <= coreColumns.filename.w,
+          "Core filenames must stay readable and clear of status badges");
+  }
   // The screens below are painted from the canvas size, so their pixel
   // expectations describe the reference 1280x720 canvas only. Whatever the
   // canvas, though, every control has to stay reachable: sweep a grid of
