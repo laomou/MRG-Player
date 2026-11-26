@@ -15,20 +15,20 @@ using i18n::TextId;
 using i18n::tr;
 
 const PanelLayout kPanel = panelLayout(
-    {976, 64, 552, 772}, Rect{976, 64, 552, 772}.inset(36, 40, 36, 4),
-    114, 26, 16);
-const LinearLayout kActions{{kPanel.content.x, 396, kPanel.content.w, 44},
-                            kPauseActionCount, 4};
-const LinearLayout kVideoRows{{kPanel.content.x, 300, kPanel.content.w, 70},
-                              kPauseVideoRowCount, 10};
-const LinearLayout kOptionRows{{kPanel.content.x, 300, kPanel.content.w, 50},
-                               kPauseCoreOptionRows, 6};
+    {781, 51, 442, 618}, Rect{781, 51, 442, 618}.inset(29, 32, 29, 3),
+    91, 21, 13);
+const LinearLayout kActions{{kPanel.content.x, 317, kPanel.content.w, 36},
+                            kPauseActionCount, 3};
+const LinearLayout kVideoRows{{kPanel.content.x, 240, kPanel.content.w, 56},
+                              kPauseVideoRowCount, 8};
+const LinearLayout kOptionRows{{kPanel.content.x, 240, kPanel.content.w, 40},
+                               kPauseCoreOptionRows, 5};
 const LinearLayout kSlots = equalColumns(
-    {kPanel.content.x, 276, kPanel.content.w, 58}, kStateSlotCount, 12);
+    {kPanel.content.x, 221, kPanel.content.w, 46}, kStateSlotCount, 10);
 // Reserve separate vertical space for the buttons and footer (previously they
 // overlapped). The row remains two equal-width choices.
 const ConfirmLayout kPowerLayout =
-    confirmLayout({460, 300, 680, 320}, 170, 48, 24, 20);
+    confirmLayout({368, 240, 544, 256}, 136, 38, 19, 16);
 
 void drawSidebar(SDL_Renderer *renderer, const std::string &subtitle,
                  i18n::Language language, SDL_Color accent) {
@@ -64,7 +64,7 @@ void drawPauseMenu(
   const StateSlotView &current = slots[static_cast<std::size_t>(
       std::clamp(stateSlot, 0, kStateSlotCount - 1))];
   drawSidebar(renderer, std::string(gameTitle), language, accent);
-  text(renderer, 1012, 240, tr(TextId::StateSlot, language), 1,
+  text(renderer, 810, 192, tr(TextId::StateSlot, language), 1,
        {174, 188, 208, 255});
   for (int slot = 0; slot < kStateSlotCount; ++slot) {
     const Rect bounds = kSlots.item(slot);
@@ -74,39 +74,39 @@ void drawPauseMenu(
             selected ? accent
                      : SDL_Color{255, 255, 255, 18});
     centeredText(
-        renderer, static_cast<int>(x + bounds.w / 2), 291, std::to_string(slot + 1), 2,
+        renderer, static_cast<int>(x + bounds.w / 2), 233, std::to_string(slot + 1), 2,
         selected ? SDL_Color{23, 23, 38, 255} : SDL_Color{230, 235, 245, 255});
   }
-  circle(renderer, 1017, 366, 4,
+  circle(renderer, 814, 293, 4,
          current.present ? SDL_Color{132, 220, 157, 255}
                          : SDL_Color{142, 155, 179, 255});
-  text(renderer, 1032, 355,
+  text(renderer, 826, 284,
        tr(current.present ? TextId::StateAvailable : TextId::StateEmpty,
           language),
        1, {184, 204, 212, 255});
   // The frame-step legend names the action first, then the binding; it sits on
   // the slot heading row so it never crowds the action list.
-  drawHintRow(renderer, 1492.0f, 234.0f,
+  drawHintRow(renderer, 1194.0f, 187.0f,
               {{tr(TextId::FrameStep, language), prompts.frameStep, false}},
               accent);
 
   // Thumbnail card for the focused slot, parked over the dimmed game picture.
   if (current.present) {
-    constexpr float kCardX = 676.0f;
-    constexpr float kCardY = 276.0f;
-    constexpr float kCardWidth = 268.0f;
-    constexpr float kCardHeight = 310.0f;
+    constexpr float kCardX = 541.0f;
+    constexpr float kCardY = 221.0f;
+    constexpr float kCardWidth = 214.0f;
+    constexpr float kCardHeight = 248.0f;
     rounded(renderer, kCardX, kCardY, kCardWidth, kCardHeight, 20,
             {8, 16, 31, 245});
-    rounded(renderer, kCardX + 6, kCardY + 6, kCardWidth - 12, 240, 14,
+    rounded(renderer, kCardX + 6, kCardY + 6, kCardWidth - 12, 192, 14,
             {3, 7, 18, 255});
     if (current.thumbnail != nullptr) {
       drawTexture(renderer, current.thumbnail, kCardX + 6.0f, kCardY + 6.0f,
-                  256.0f, 240.0f);
+                  205.0f, 192.0f);
     }
     if (!current.savedAt.empty()) {
       text(renderer, static_cast<int>(kCardX + 10.0f),
-           static_cast<int>(kCardY + 256.0f),
+           static_cast<int>(kCardY + 205.0f),
            std::string(tr(TextId::StateSavedAt, language)) + " " +
                current.savedAt,
            1,
@@ -114,7 +114,7 @@ void drawPauseMenu(
     }
     if (!current.playTime.empty()) {
       text(renderer, static_cast<int>(kCardX + 10.0f),
-           static_cast<int>(kCardY + 280.0f), current.playTime, 1,
+           static_cast<int>(kCardY + 224.0f), current.playTime, 1,
            accent);
     }
   }
@@ -131,13 +131,13 @@ void drawPauseMenu(
     drawFocusablePlate(renderer, bounds.x, bounds.y, bounds.w, bounds.h, 16,
                        selected ? accent : SDL_Color{255, 255, 255, 16},
                        selected);
-    circle(renderer, 1048, static_cast<int>(y + 22), 14,
+    circle(renderer, 839, static_cast<int>(y + 18), 11,
            selected ? SDL_Color{25, 25, 41, 255}
                     : SDL_Color{255, 255, 255, 26});
-    centeredGlyph(renderer, 1048, static_cast<int>(y + 22), glyphs[action], 2,
+    centeredGlyph(renderer, 839, static_cast<int>(y + 18), glyphs[action], 2,
                   selected ? accent
                            : SDL_Color{210, 218, 232, 255});
-    text(renderer, 1084, static_cast<int>(y + 13), tr(labels[action], language),
+    text(renderer, 867, static_cast<int>(y + 9), tr(labels[action], language),
          2,
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
   }
@@ -150,8 +150,8 @@ void drawPauseMenu(
   drawSidebarFooter(renderer, footer, accent);
 
   if (SDL_GetTicks64() < feedbackUntil && !feedback.empty()) {
-    rounded(renderer, 180, 760, 620, 58, 18, {3, 8, 20, 245});
-    centeredText(renderer, 490, 776, std::string(feedback), 2,
+    rounded(renderer, 144, 608, 496, 46, 14, {3, 8, 20, 245});
+    centeredText(renderer, 392, 621, std::string(feedback), 2,
                  accent);
   }
 }
@@ -214,23 +214,23 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                        14,
                        selected ? accent : SDL_Color{255, 255, 255, 16},
                        selected);
-    text(renderer, 1032, static_cast<int>(y + 12), titles[index], 2,
+    text(renderer, 826, static_cast<int>(y + 9), titles[index], 2,
          selected ? SDL_Color{24, 24, 39, 255}
                   : SDL_Color{241, 245, 251, 255});
-    text(renderer, 1472 - textWidth(values[index], 2),
+    text(renderer, 1178 - textWidth(values[index], 2),
          static_cast<int>(y + 12), values[index], 2,
          selected ? SDL_Color{24, 24, 39, 255}
                   : accent);
     if (index + 1 == kPauseVideoRowCount) {
-      text(renderer, 1032, static_cast<int>(y + 42),
+      text(renderer, 826, static_cast<int>(y + 34),
            tr(TextId::UseGlobalDefaultsDescription, language), 1,
            selected ? SDL_Color{70, 57, 39, 255}
                     : SDL_Color{165, 181, 204, 255});
     }
   }
 
-  text(renderer, 1012, 642,
-       fitText(tr(TextId::UseGlobalDefaultsHint, language), 480, 1), 1,
+  text(renderer, 810, 514,
+        fitText(tr(TextId::UseGlobalDefaultsHint, language), 384, 1), 1,
        {165, 181, 204, 255});
 
   const std::vector<Hint> footer{
@@ -257,8 +257,8 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
 
   const int total = static_cast<int>(options.size());
   if (total == 0) {
-    text(renderer, 1012, 320,
-         fitText(tr(TextId::CoreOptionsEmpty, language), 480, 2), 2,
+    text(renderer, 810, 256,
+          fitText(tr(TextId::CoreOptionsEmpty, language), 384, 2), 2,
          {165, 181, 204, 255});
   } else {
     const int offset =
@@ -277,8 +277,8 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
                          selected);
       const std::string label =
           i18n::coreOptionLabel(option.key, option.label, language);
-      text(renderer, 1032, static_cast<int>(y + 15),
-           fitText(label, 240, 2), 2,
+      text(renderer, 826, static_cast<int>(y + 10),
+            fitText(label, 192, 2), 2,
            selected ? SDL_Color{24, 24, 39, 255}
                     : SDL_Color{241, 245, 251, 255});
       std::string value;
@@ -286,18 +286,18 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
         const runtime::CoreOptionValue &entry = option.values[option.selected];
         value = i18n::coreOptionValue(entry.value, entry.label, language);
       }
-      value = fitText(value, 190, 2);
-      text(renderer, 1472 - textWidth(value, 2), static_cast<int>(y + 15),
+      value = fitText(value, 152, 2);
+      text(renderer, 1178 - textWidth(value, 2), static_cast<int>(y + 10),
            value, 2,
            selected ? SDL_Color{24, 24, 39, 255}
                     : accent);
     }
-    text(renderer, 1012, 660,
+    text(renderer, 810, 528,
          std::to_string(cursor + 1) + " / " + std::to_string(total), 1,
          {165, 181, 204, 255});
   }
 
-  drawHintRow(renderer, 1492.0f, 700.0f,
+  drawHintRow(renderer, 1194.0f, 560.0f,
               {{tr(TextId::ResetCoreOptions, language), "R", false}},
               accent);
   const std::vector<Hint> footer{

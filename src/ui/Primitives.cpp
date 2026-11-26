@@ -23,9 +23,9 @@ std::string gFontPath;
 std::array<TTF_Font *, 6> gLatinFonts{};
 std::string gLatinFontPath;
 
-// Canvas units to output pixels. The interface keeps its 1600x900 layout, but
-// every primitive converts on the way out, so a 1920x1080 window rasterises
-// text at 24 pixels instead of stretching a 20 pixel texture.
+// Native 1280x720 canvas units to output pixels. Every primitive converts on
+// the way out, so larger windows rasterise text at the target resolution
+// instead of stretching a lower-resolution texture.
 float gScale = 1.0f;
 float gOffsetX = 0.0f;
 float gOffsetY = 0.0f;
@@ -897,44 +897,44 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
     SDL_RenderDrawLineF(renderer, left, top + row + 0.5f, left + width,
                         top + row + 0.5f);
   }
-  const int sunX = 1260 + static_cast<int>(std::sin(time * 0.08f) * 22.0f);
-  circle(renderer, sunX, 172, 90,
+  const int sunX = 1008 + static_cast<int>(std::sin(time * 0.08f) * 18.0f);
+  circle(renderer, sunX, 138, 72,
          {game.accent.r, game.accent.g, game.accent.b, 150});
   setColor(renderer, {15, 27, 57, 175});
-  std::array<SDL_FPoint, 13> far{{{deviceX(0.0f), deviceY(520.0f)},
-                                 {deviceX(150.0f), deviceY(350.0f)},
-                                 {deviceX(270.0f), deviceY(455.0f)},
-                                 {deviceX(420.0f), deviceY(275.0f)},
-                                 {deviceX(565.0f), deviceY(475.0f)},
-                                 {deviceX(725.0f), deviceY(325.0f)},
-                                 {deviceX(900.0f), deviceY(485.0f)},
-                                 {deviceX(1060.0f), deviceY(300.0f)},
-                                 {deviceX(1220.0f), deviceY(465.0f)},
-                                 {deviceX(1405.0f), deviceY(335.0f)},
-                                 {deviceX(1600.0f), deviceY(475.0f)},
-                                 {deviceX(1600.0f), deviceY(900.0f)},
-                                 {deviceX(0.0f), deviceY(900.0f)}}};
+  std::array<SDL_FPoint, 13> far{{{deviceX(0.0f), deviceY(416.0f)},
+                                 {deviceX(120.0f), deviceY(280.0f)},
+                                 {deviceX(216.0f), deviceY(364.0f)},
+                                 {deviceX(336.0f), deviceY(220.0f)},
+                                 {deviceX(452.0f), deviceY(380.0f)},
+                                 {deviceX(580.0f), deviceY(260.0f)},
+                                 {deviceX(720.0f), deviceY(388.0f)},
+                                 {deviceX(848.0f), deviceY(240.0f)},
+                                 {deviceX(976.0f), deviceY(372.0f)},
+                                 {deviceX(1124.0f), deviceY(268.0f)},
+                                 {deviceX(1280.0f), deviceY(380.0f)},
+                                 {deviceX(1280.0f), deviceY(720.0f)},
+                                 {deviceX(0.0f), deviceY(720.0f)}}};
   SDL_RenderDrawLinesF(renderer, far.data(), 11);
-  const float waveTop = deviceY(520.0f);
+  const float waveTop = deviceY(416.0f);
   for (int row = 0; row < rows; ++row) {
     const float y = top + row;
     if (y < waveTop)
       continue;
     const float logical = (y - top) / gScale;
-    const float wave = 70.0f * std::sin((logical - 500.0f) * 0.013f);
+    const float wave = 56.0f * std::sin((logical - 400.0f) * 0.01625f);
     const int shade =
-        std::clamp(135 + (static_cast<int>(logical) - 520) / 2, 135, 180);
+        std::clamp(135 + (static_cast<int>(logical) - 416) / 2, 135, 180);
     fillDevice(renderer, left, y, width, 1.0f,
                {12, 22, 48, static_cast<Uint8>(shade)});
-    if ((static_cast<int>(logical) % 34) == 0) {
-      fillDevice(renderer, left, y, deviceLength(770.0f + wave), 1.0f,
+    if ((static_cast<int>(logical) % 27) == 0) {
+      fillDevice(renderer, left, y, deviceLength(616.0f + wave), 1.0f,
                  {game.accent.r, game.accent.g, game.accent.b, 22});
     }
   }
-  fill(renderer, 82, 548, 315, 40, {150, 67, 61, 120});
-  fill(renderer, 82, 588, 315, 17, {85, 47, 54, 150});
+  fill(renderer, 66, 438, 252, 32, {150, 67, 61, 120});
+  fill(renderer, 66, 470, 252, 14, {85, 47, 54, 150});
   for (int i = 0; i < 3; ++i)
-    fill(renderer, 198.0f + i * 52.0f, 454, 48, 48,
+    fill(renderer, 158.0f + i * 42.0f, 363, 38, 38,
          {game.accent.r, game.accent.g, game.accent.b, 135});
   for (int row = 0; row < rows; ++row) {
     const float t = static_cast<float>(row) / rows;

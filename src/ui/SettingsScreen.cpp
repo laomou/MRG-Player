@@ -31,22 +31,22 @@ constexpr int kCategoryCount = 8;
 // The content column starts on the same line as the home shelf: stepping into
 // the settings screen then keeps the page rhythm instead of dropping the list
 // lower and leaving the last row sitting on top of the footer.
-constexpr int kContentTop = 296;
+constexpr int kContentTop = 237;
 constexpr int kRailTop = kContentTop;
-constexpr int kRailHeight = 470;
-constexpr int kRailLabelY = kContentTop + 23;
-constexpr int kRailItemY = kContentTop + 55;
-constexpr int kContentTitleY = kContentTop + 3;
-constexpr int kContentDescriptionY = kContentTop + 42;
+constexpr int kRailHeight = 376;
+constexpr int kRailLabelY = kContentTop + 18;
+constexpr int kRailItemY = kContentTop + 44;
+constexpr int kContentTitleY = kContentTop + 2;
+constexpr int kContentDescriptionY = kContentTop + 34;
 
 // Geometry of the dense controller page, shared by drawing and hit testing.
-constexpr int kCompactStartY = kContentTop + 76;
-constexpr int kCompactStep = 34;
-constexpr int kRowHeight = 29;
-constexpr int kTrackX = 466;
-constexpr int kTrackWidth = 1010;
+constexpr int kCompactStartY = kContentTop + 61;
+constexpr int kCompactStep = 27;
+constexpr int kRowHeight = 23;
+constexpr int kTrackX = 373;
+constexpr int kTrackWidth = 808;
 constexpr int kFixedRowCount = 4;
-constexpr int kColumnGutter = 16;
+constexpr int kColumnGutter = 13;
 // Seven rows per column: the pad actions (A/B/X/Y/L/R with select and start)
 // plus the two turbo rows, with the dead-zone slider under both columns.
 constexpr std::size_t kBindingsPerColumn = 7;
@@ -55,30 +55,30 @@ static_assert(config::kInputActionCount == 2 * kBindingsPerColumn);
 // The general page carries five rows now, so its rows are slightly shorter
 // than the ones on the other pages.
 constexpr int kGeneralRowCount = 5;
-constexpr int kGeneralRowY = kContentTop + 80;
-constexpr int kGeneralRowStep = 84;
-constexpr int kGeneralRowHeight = 76;
+constexpr int kGeneralRowY = kContentTop + 64;
+constexpr int kGeneralRowStep = 67;
+constexpr int kGeneralRowHeight = 61;
 
 // The single-column pages use 92 pixel rows on a 106 pixel pitch, and the
 // installer page lists one platform per 56 pixel line.
-constexpr int kSettingRowY = 410;
-constexpr int kSettingRowStep = 106;
-constexpr int kSettingRowHeight = 92;
+constexpr int kSettingRowY = 328;
+constexpr int kSettingRowStep = 85;
+constexpr int kSettingRowHeight = 74;
 constexpr int kInstallerRowCount = 5;
 
 // The core page gives every platform one 48 pixel line on a 56 pixel pitch,
 // with the installed counter and the refresh button on the heading line. The
 // columns are fixed so the platform name, the core file, and the status never
 // wander between rows.
-constexpr int kCoreRowY = kContentTop + 100;
-constexpr int kCoreRowStep = 56;
-constexpr int kCoreRowHeight = 48;
-constexpr int kCoreRefreshX = 1330;
-constexpr int kCoreRefreshY = kContentTop - 3;
-constexpr int kCoreRefreshWidth = 146;
-constexpr int kCoreRefreshHeight = 34;
-constexpr int kCoreColumnCoreX = 900;
-constexpr int kCorePillRight = 1450;
+constexpr int kCoreRowY = kContentTop + 80;
+constexpr int kCoreRowStep = 45;
+constexpr int kCoreRowHeight = 38;
+constexpr int kCoreRefreshX = 1064;
+constexpr int kCoreRefreshY = kContentTop - 2;
+constexpr int kCoreRefreshWidth = 117;
+constexpr int kCoreRefreshHeight = 27;
+constexpr int kCoreColumnCoreX = 720;
+constexpr int kCorePillRight = 1160;
 
 const LinearLayout kGeneralRows{
     {kTrackX, kGeneralRowY, kTrackWidth, kGeneralRowHeight},
@@ -91,7 +91,7 @@ const LinearLayout kCoreRows{{kTrackX, kCoreRowY, kTrackWidth, kCoreRowHeight},
 const LinearLayout kCompactRows{{kTrackX, kCompactStartY, kTrackWidth, kRowHeight},
                                  kFixedRowCount + kBindingsPerColumn + 1,
                                  kCompactStep - kRowHeight};
-const LinearLayout kRailRows{{91, kRailItemY, 292, 48}, kCategoryCount, 4};
+const LinearLayout kRailRows{{73, kRailItemY, 234, 38}, kCategoryCount, 3};
 const Rect kCoreRefresh{kCoreRefreshX, kCoreRefreshY,
                         kCoreRefreshWidth, kCoreRefreshHeight};
 
@@ -145,7 +145,7 @@ void drawSettingRow(SDL_Renderer *renderer, Rect bounds, bool selected,
   // page keeps one rhythm instead of a ragged column of top-aligned labels.
   const bool hasDescription = !description.empty();
   const int titleY = hasDescription ? y + (height - 58) / 2 : y + (height - 34) / 2;
-  const auto columns = labelValueLayout(bounds.inset(32, 0, 56, 0),
+  const auto columns = labelValueLayout(bounds.inset(26, 0, 45, 0),
                                         textWidth(value, 2));
   const std::string fittedValue = fitText(value, columns.value.w, 2);
   text(renderer, columns.label.x, titleY,
@@ -172,7 +172,7 @@ void drawCompactRow(SDL_Renderer *renderer, Rect bounds,
                      {accent.r, accent.g, accent.b, accentWashAlpha(accent)},
                      selected, focused, focusOpacity);
   const int centerY = static_cast<int>(bounds.centerY());
-  const auto columns = labelValueLayout(bounds.inset(26, 0, 20, 0),
+  const auto columns = labelValueLayout(bounds.inset(21, 0, 16, 0),
                                         textWidth(value, 1));
   const std::string fittedTitle = fitText(title, columns.label.w, 1);
   const std::string fittedValue = fitText(value, columns.value.w, 1);
@@ -311,7 +311,7 @@ int generalPageRowAt(int x, int y) {
 
 int settingsCategoryAt(float x, float y) {
   for (int category = 0; category < kCategoryCount; ++category)
-    if (kRailRows.item(category).expanded(19, 0).contains(x, y))
+    if (kRailRows.item(category).expanded(15, 0).contains(x, y))
       return category;
   return -1;
 }
@@ -417,23 +417,23 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   drawBackground(renderer, game, time);
   fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 8, 20, 128});
 
-  rounded(renderer, 72, 57, 4, 32, 2, game.accent);
-  text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
-  text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
+  rounded(renderer, 58, 46, 4, 26, 2, game.accent);
+  text(renderer, 74, 43, "MRG PLAYER", 3, {255, 255, 255, 255});
+  text(renderer, 74, 79, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
   // Same header rhythm as the library: the section label, the page title and
   // the subtitle sit on the lines the home screen uses, so the content below
   // starts on the same shelf line on both pages. The block is pulled up so the
   // air above it (under the wordmark) matches the air below it.
-  text(renderer, 72, 160, tr(TextId::System, language), 2, game.accent);
-  text(renderer, 72, 193, tr(TextId::SettingsTitle, language), 3,
+  text(renderer, 58, 128, tr(TextId::System, language), 2, game.accent);
+  text(renderer, 58, 154, tr(TextId::SettingsTitle, language), 3,
        {255, 255, 255, 255});
-  text(renderer, 72, 237, tr(TextId::SettingsSubtitle, language), 1,
+  text(renderer, 58, 190, tr(TextId::SettingsSubtitle, language), 1,
        {173, 190, 207, 255});
 
-  rounded(renderer, 72, static_cast<float>(kRailTop), 330,
+  rounded(renderer, 58, static_cast<float>(kRailTop), 264,
           static_cast<float>(kRailHeight), 22, {5, 14, 31, 218});
-  text(renderer, 103, kRailLabelY, tr(TextId::Preferences, language), 1,
+  text(renderer, 82, kRailLabelY, tr(TextId::Preferences, language), 1,
        {139, 160, 178, 255});
   for (int i = 0; i < kCategoryCount; ++i) {
     const Rect bounds = kRailRows.item(i);
@@ -444,14 +444,14 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                         accentWashAlpha(game.accent)},
                        i == category, i == category && railFocused, focusOpacity);
     const std::string label = tr(categoryText(i), language);
-    text(renderer, 116, textCenteredY(label, y + 24, 2), label, 2,
+    text(renderer, 93, textCenteredY(label, y + 19, 2), label, 2,
          i == category ? SDL_Color{255, 255, 255, 255}
                        : SDL_Color{165, 183, 199, 255});
   }
 
-  text(renderer, 466, kContentTitleY, tr(categoryText(category), language),
+  text(renderer, 373, kContentTitleY, tr(categoryText(category), language),
        3, {255, 255, 255, 255});
-  text(renderer, 466, kContentDescriptionY,
+  text(renderer, 373, kContentDescriptionY,
        tr(categoryDescription(category), language), 1, {144, 165, 184, 255});
 
   if (category == 0) {
@@ -595,12 +595,12 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
 
     // Column captions: the status column is right aligned to the same edge the
     // pills below it use.
-    text(renderer, kTrackX + 28, kCoreRowY - 22,
+    text(renderer, kTrackX + 22, kCoreRowY - 18,
          tr(TextId::ColumnPlatform, language), 1, {120, 140, 162, 255});
-    text(renderer, kCoreColumnCoreX, kCoreRowY - 22,
+    text(renderer, kCoreColumnCoreX, kCoreRowY - 18,
          tr(TextId::ColumnCore, language), 1, {120, 140, 162, 255});
     const std::string statusCaption = tr(TextId::ColumnStatus, language);
-    text(renderer, kCorePillRight - textWidth(statusCaption, 1), kCoreRowY - 22,
+    text(renderer, kCorePillRight - textWidth(statusCaption, 1), kCoreRowY - 18,
          statusCaption, 1, {120, 140, 162, 255});
 
     for (int index = 0; index < kInstallerRowCount; ++index) {
@@ -615,7 +615,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         continue;
       const CoreRow &entry = cores[static_cast<std::size_t>(index)];
       const int centerY = y + kCoreRowHeight / 2;
-      text(renderer, kTrackX + 28, textCenteredY(entry.platform, centerY, 2),
+      text(renderer, kTrackX + 22, textCenteredY(entry.platform, centerY, 2),
            entry.platform, 2,
            selected ? SDL_Color{255, 255, 255, 255}
                     : SDL_Color{232, 238, 246, 255});
@@ -623,7 +623,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
            entry.core, 1, {176, 193, 211, 255});
       const int pillWidth = textWidth(entry.status, 1) + 26;
       rounded(renderer, static_cast<float>(kCorePillRight - pillWidth),
-              static_cast<float>(y + 9), static_cast<float>(pillWidth), 30.0f,
+              static_cast<float>(y + 4), static_cast<float>(pillWidth), 30.0f,
               15.0f,
               entry.installed
                   ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
@@ -640,7 +640,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    tr(TextId::AccentDescription, language), accentName,
                    game.accent, focusOpacity);
     // A swatch so the choice reads as a colour and not only a name.
-    circle(renderer, 1420 - textWidth(accentName, 2) - 30, 456, 10,
+    circle(renderer, 1136 - textWidth(accentName, 2) - 24, 365, 10,
            accentColor(settings.accent));
   } else if (category == 4) {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused,
@@ -674,7 +674,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     footer.push_back(
         {tr(TextId::ChangeControl, language), prompts.change, true});
   }
-  drawHintRow(renderer, 1528.0f, 836.0f, footer, game.accent);
+  drawHintRow(renderer, 1222.0f, 669.0f, footer, game.accent);
 }
 
 } // namespace launcher::ui

@@ -39,12 +39,12 @@ const char *platformBadge(game::GamePlatform platform) {
 
 // The row never moves: every slot keeps its place and only the highlight
 // travels, so the first game always sits against the left edge.
-constexpr float kRowLeft = 72.0f;
-constexpr float kRowRight = 1528.0f;
-constexpr float kRowBottom = 678.0f;
+constexpr float kRowLeft = 58.0f;
+constexpr float kRowRight = 1222.0f;
+constexpr float kRowBottom = 542.0f;
 constexpr float kCardAspect = 314.0f / 226.0f;
-constexpr float kCardGap = 20.0f;
-constexpr float kMaximumCardWidth = 226.0f;
+constexpr float kCardGap = 16.0f;
+constexpr float kMaximumCardWidth = 181.0f;
 
 struct CardBox {
   float x = 0.0f;
@@ -63,15 +63,15 @@ SDL_FRect pillRect(bool settings, i18n::Language language, std::size_t count) {
   const int settingsLabel = textWidth(tr(TextId::Settings, language), 2);
   const int countLabel = textWidth(std::to_string(count), 1);
   const float settingsWidth =
-      std::max(156.0f, 44.0f + static_cast<float>(settingsLabel) + 20.0f);
+      std::max(148.0f, 36.0f + static_cast<float>(settingsLabel) + 16.0f);
   const float libraryWidth =
-      std::max(246.0f, 44.0f + static_cast<float>(libraryLabel) + 16.0f +
-                           static_cast<float>(countLabel) + 20.0f);
+      std::max(220.0f, 36.0f + static_cast<float>(libraryLabel) + 13.0f +
+               static_cast<float>(countLabel) + 16.0f);
   const float settingsX = kRowRight - settingsWidth;
   if (settings)
-    return SDL_FRect{settingsX, 52.0f, settingsWidth, 58.0f};
-  return SDL_FRect{settingsX - 16.0f - libraryWidth, 52.0f, libraryWidth,
-                   58.0f};
+    return SDL_FRect{settingsX, 42.0f, settingsWidth, 46.0f};
+  return SDL_FRect{settingsX - 13.0f - libraryWidth, 42.0f, libraryWidth,
+                   46.0f};
 }
 
 // The shelf shows seven whole cards plus half of the next one, so the cut-off
@@ -188,13 +188,13 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
 
 // Footer geometry lives here because the drawing and the hit test have to agree
 // on it; the metrics themselves come from the hint helpers.
-constexpr float kFooterRight = 1528.0f;
-constexpr float kFooterY = 822.0f;
+constexpr float kFooterRight = 1222.0f;
+constexpr float kFooterY = 658.0f;
 
 // The quit confirmation is centred on the logical canvas so it covers the
 // shelf no matter which part of it has focus.
 const ConfirmLayout kQuitLayout =
-    confirmLayout({420, 300, 760, 290}, 152, 100, 120, 20);
+    confirmLayout({336, 240, 608, 232}, 122, 80, 96, 16);
 
 // Only the two actions live in the footer; leaving the launcher is done by
 // closing the window, the way a console has no "quit" entry on its home row.
@@ -240,37 +240,37 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
           ? covers->wallpaper(renderer, *selectedEntry)
           : nullptr;
   drawBackground(renderer, style, time, wallpaper);
-  rounded(renderer, 72, 57, 4, 32, 2, style.accent);
-  text(renderer, 92, 54, "MRG PLAYER", 3, {255, 255, 255, 255});
-  text(renderer, 92, 99, "RETRO GAMES. TIMELESS PLAY.", 1,
+  rounded(renderer, 58, 46, 4, 26, 2, style.accent);
+  text(renderer, 74, 43, "MRG PLAYER", 3, {255, 255, 255, 255});
+  text(renderer, 74, 79, "RETRO GAMES. TIMELESS PLAY.", 1,
        {167, 184, 207, 255});
   const std::size_t libraryCount = gameLibrary.entries().size();
   const SDL_FRect libraryPill = pillRect(false, language, libraryCount);
   const SDL_FRect settingsPill = pillRect(true, language, libraryCount);
   rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
-          libraryPill.h, 29, {4, 10, 26, 145});
-  circle(renderer, libraryPill.x + 33, 81, 15, style.accent);
-  text(renderer, static_cast<int>(libraryPill.x) + 26, 66, "+", 2,
+          libraryPill.h, 23, {4, 10, 26, 145});
+  circle(renderer, libraryPill.x + 26, 65, 12, style.accent);
+  text(renderer, static_cast<int>(libraryPill.x) + 19, 50, "+", 2,
        {18, 18, 33, 255});
-  text(renderer, static_cast<int>(libraryPill.x) + 60, 66,
+  text(renderer, static_cast<int>(libraryPill.x) + 48, 50,
        tr(TextId::Library, language), 2, {255, 255, 255, 255});
   const std::string countLabel = std::to_string(libraryCount);
   text(renderer,
-       static_cast<int>(libraryPill.x + libraryPill.w - 36.0f -
+       static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
                         static_cast<float>(textWidth(countLabel, 1))),
-       71, countLabel, 1, {191, 201, 220, 255});
+        57, countLabel, 1, {191, 201, 220, 255});
   rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
-          settingsPill.h, 29, {4, 10, 26, 175});
-  circle(renderer, settingsPill.x + 33, 81, 15, {255, 255, 255, 45});
-  gearIcon(renderer, settingsPill.x + 33.0f, 81.0f, 13.0f, style.accent);
-  text(renderer, static_cast<int>(settingsPill.x) + 59, 66,
+          settingsPill.h, 23, {4, 10, 26, 175});
+  circle(renderer, settingsPill.x + 26, 65, 12, {255, 255, 255, 45});
+  gearIcon(renderer, settingsPill.x + 26.0f, 65.0f, 10.0f, style.accent);
+  text(renderer, static_cast<int>(settingsPill.x) + 47, 50,
        tr(TextId::Settings, language), 2, {255, 255, 255, 255});
   // The pills are buttons too, so they take the same ring when the direction
   // keys are on them. The ring is drawn over the pills rather than under them,
   // because they are translucent and would tint it.
   if (focus == HomeFocus::Pills) {
     const SDL_FRect pill = focusedPill == 0 ? libraryPill : settingsPill;
-    drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 29.0f,
+    drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 23.0f,
                   focusOpacity);
   }
 
@@ -282,17 +282,17 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       libraryEmpty ? TextId::ChooseRom
                    : (startupPage == 0 ? TextId::ContinueSubtitle
                                        : TextId::LibrarySubtitle);
-  text(renderer, 72, 160, tr(sectionTitle, language), 1, style.accent);
-  text(renderer, 72, 193, tr(TextId::ChooseYourGame, language), 3,
+  text(renderer, 58, 128, tr(sectionTitle, language), 1, style.accent);
+  text(renderer, 58, 154, tr(TextId::ChooseYourGame, language), 3,
        {255, 255, 255, 255});
-  text(renderer, 72, 237, tr(sectionSubtitle, language), 1,
+  text(renderer, 58, 190, tr(sectionSubtitle, language), 1,
        {191, 201, 220, 255});
 
   const bool cardsFocused = focus == HomeFocus::Cards;
   // The shelf is a window, not a canvas: a card that sticks out past the row is
   // cut there, which is what turns the eighth card into the half card that
   // shows there is more to the right.
-  setClipRect(renderer, kRowLeft, 380.0f, kRowRight - kRowLeft, 320.0f);
+  setClipRect(renderer, kRowLeft, 304.0f, kRowRight - kRowLeft, 256.0f);
   // Draw one column beyond each edge so a card sliding out and the next one
   // sliding in both stay whole while the row travels.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
@@ -315,7 +315,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   clearClipRect(renderer);
 
   if (selectedEntry != nullptr) {
-    centeredText(renderer, 800, 711, fitText(selectedEntry->title, 760, 3), 3,
+    centeredText(renderer, 640, 569, fitText(selectedEntry->title, 608, 3), 3,
                  style.accent);
     const std::uint64_t hours = selectedEntry->playSeconds / 3600;
     const std::uint64_t minutes = (selectedEntry->playSeconds % 3600) / 60;
@@ -324,14 +324,14 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
     if (hours > 0)
       playTime += std::to_string(hours) + "h ";
     playTime += std::to_string(minutes) + "m";
-    centeredText(renderer, 800, 758, playTime, 1, {232, 236, 244, 255});
+    centeredText(renderer, 640, 606, playTime, 1, {232, 236, 244, 255});
   }
 
   // The shelf is the only screen with a footer of its own; the management
   // drawer covers it, so the caller can turn it off and let the drawer draw
   // its own legend in the space it actually owns.
   if (showFooter) {
-    fill(renderer, 72, 798, 1456, 1, {255, 255, 255, 24});
+    fill(renderer, 58, 638, 1164, 1, {255, 255, 255, 24});
     const std::vector<Hint> footer =
         footerHints(selectedEntry != nullptr, language, prompts);
     const int focused =
@@ -343,8 +343,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
-    rounded(renderer, 484, 760, 632, 66, 18, {4, 8, 22, 235});
-    centeredText(renderer, 800, 779, std::string(toastMessage), 2,
+    rounded(renderer, 387, 608, 506, 53, 14, {4, 8, 22, 235});
+    centeredText(renderer, 640, 623, std::string(toastMessage), 2,
                  style.accent);
   }
 }
@@ -365,7 +365,7 @@ int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
 }
 
 int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
-  if (y < 49.0f || y > 113.0f)
+  if (y < 39.0f || y > 91.0f)
     return -1;
   const SDL_FRect libraryPill = pillRect(false, language, count);
   if (x >= libraryPill.x && x <= libraryPill.x + libraryPill.w)
