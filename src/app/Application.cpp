@@ -23,6 +23,7 @@
 #include "config/Settings.hpp"
 #include "i18n/Localization.hpp"
 #include "library/GameLibrary.hpp"
+#include "library/RomScanner.hpp"
 #include "model/Game.hpp"
 #include "platform/RomFilePicker.hpp"
 #include "runtime/IGameRuntime.hpp"
@@ -44,6 +45,13 @@ namespace launcher {
 namespace {
 
 enum class Screen { Home, Settings, Management, Game, Pause };
+
+// The device profile compiles the downloader out (CMake: MRG_ENABLE_CORE_DOWNLOAD).
+#if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
+constexpr bool kCoreDownloadEnabled = true;
+#else
+constexpr bool kCoreDownloadEnabled = false;
+#endif
 
 // One install at a time, run on an SDL thread so a slow network never freezes
 // the launcher; the frame loop polls the flag and joins the thread.
@@ -267,20 +275,33 @@ int Application::run(int argc, char **argv) {
   char *basePath = SDL_GetBasePath();
   const std::string executablePath = basePath != nullptr ? basePath : "";
   SDL_free(basePath);
-  std::string fontPath =
-      executablePath + "assets/fonts/DroidSansFallbackFull.ttf";
-  if (!ui::initializeTextRenderer(fontPath)) {
-    fontPath =
-        executablePath + "../share/mrg-player/fonts/DroidSansFallbackFull.ttf";
-    if (!ui::initializeTextRenderer(fontPath)) {
-      std::fprintf(
-          stderr,
-          "Failed to initialize multilingual text renderer from %s: %s\n",
-          fontPath.c_str(), SDL_GetError());
-      ui::shutdownTextRenderer();
-      SDL_Quit();
-      return 1;
+  // A source or installed build keeps the font under assets/; the handheld pak
+  // ships it as res/fonts/, and an install tree uses share/. The first folder
+  // that actually holds the font wins, so a missing candidate is silent.
+  const std::array<std::string, 3> fontCandidates{
+      executablePath + "assets/fonts/DroidSansFallbackFull.ttf",
+      executablePath + "res/fonts/DroidSansFallbackFull.ttf",
+      executablePath + "../share/mrg-player/fonts/DroidSansFallbackFull.ttf"};
+  std::string fontPath;
+  bool fontReady = false;
+  for (const std::string &candidate : fontCandidates) {
+    std::error_code fontError;
+    if (!std::filesystem::exists(paths::fromUtf8(candidate), fontError) || fontError)
+      continue;
+    if (ui::initializeTextRenderer(candidate)) {
+      fontPath = candidate;
+      fontReady = true;
+      break;
     }
+  }
+  if (!fontReady) {
+    std::fprintf(
+        stderr,
+        "Failed to initialize multilingual text renderer from %s: %s\n",
+        fontCandidates[0].c_str(), SDL_GetError());
+    ui::shutdownTextRenderer();
+    SDL_Quit();
+    return 1;
   }
 
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
@@ -378,6 +399,18 @@ int Application::run(int argc, char **argv) {
   if (!gameLibrary.initialize()) {
     std::fprintf(stderr, "Game library unavailable: %s\n",
                  std::string(gameLibrary.error()).c_str());
+  }
+  // The handheld build has no file dialog, so the games that ship beside the
+  // launcher and the ones already on the card are imported on first start. A
+  // library that already holds games is never rescanned on boot: a full card
+  // would otherwise delay every launch. slotCount() pads the Home grid with
+  // placeholders, so only entries() tells an empty library apart from a used one.
+  if (!options.smokeTest() && gameLibrary.entries().empty()) {
+    const library::RomScanSummary scanned =
+        library::importGames(config::romSearchDirectories(), gameLibrary);
+    if (scanned.imported > 0)
+      std::fprintf(stderr, "Imported %d game(s) from the ROM folders\n",
+                   scanned.imported);
   }
   // Box art lives next to the saves, beside a names.json the player can edit.
   ui::CoverCache coverCache;
@@ -660,6 +693,12 @@ int Application::run(int argc, char **argv) {
         row >= static_cast<int>(std::size(kInstallerPlatforms))) {
       return;
     }
+    if (!kCoreDownloadEnabled) {
+      // The pak already carries every core; say so instead of opening a job
+      // that could only fail at the end of a download.
+      showToast(i18n::TextId::CoreInstallFailedBanner);
+      return;
+    }
     const runtime::libretro::CorePackage *chosen = nullptr;
     for (const runtime::libretro::CorePackage &package :
          runtime::libretro::corePackages()) {
@@ -799,9 +838,30 @@ int Application::run(int argc, char **argv) {
     const std::optional<std::string> path = platform::pickGameFile(pickerError);
     if (path.has_value()) {
       (void)importGame(*path, false);
-    } else if (!pickerError.empty()) {
-      std::fprintf(stderr, "%s\n", pickerError.c_str());
+      return;
+    }
+    if (pickerError.empty())
+      return; // The player closed the dialog without choosing a file.
+    std::fprintf(stderr, "%s\n", pickerError.c_str());
+    // A device without a file dialog has no way to drag a file in, so the ROM
+    // folders take over the import action instead of pointing at a drag.
+    const std::vector<std::string> directories = config::romSearchDirectories();
+    if (directories.empty()) {
       showToast(i18n::TextId::PickerUnavailable, 4000);
+      return;
+    }
+    const library::RomScanSummary scanned =
+        library::importGames(directories, gameLibrary);
+    if (scanned.imported > 0) {
+      if (gameLibrary.lastImportedIndex() >= 0)
+        selectedGame = gameLibrary.lastImportedIndex();
+      showToast(i18n::TextId::RomFolderImported, 3000);
+    } else if (scanned.failed > 0 && scanned.failed == scanned.found) {
+      showToast(i18n::TextId::ImportFailed);
+    } else if (scanned.found > 0) {
+      showToast(i18n::TextId::RomFolderAlreadyImported, 3000);
+    } else {
+      showToast(i18n::TextId::RomFolderEmpty, 4000);
     }
   };
   auto leaveGame = [&] {

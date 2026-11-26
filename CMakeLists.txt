@@ -9,6 +9,36 @@ if(MRG_VERSION_STRING STREQUAL "")
   set(MRG_VERSION_STRING "${PROJECT_VERSION}")
 endif()
 
+# The device build is the same program with a different display/input profile:
+# one canvas size serves every platform, only the platform layer and the
+# automatic filters (dialogs, downloads, scripted screenshots) differ.
+set(MRG_PLATFORM "desktop" CACHE STRING "Target platform profile: desktop or brick")
+set_property(CACHE MRG_PLATFORM PROPERTY STRINGS desktop brick)
+
+option(MRG_USE_SYSTEM_SDL2 "Link the SDL2/SDL2_ttf installed on the target" OFF)
+set(MRG_SDL2_ROOT "" CACHE PATH "Root of an SDL2 install (include/ and lib/)")
+option(MRG_STRICT_WARNINGS "Add the extra warning set used while developing" OFF)
+option(MRG_ENABLE_LTO "Link time optimisation for release builds" OFF)
+option(MRG_ENABLE_ASAN "Build with AddressSanitizer and UBSan" OFF)
+option(MRG_ENABLE_PAK_TARGET "Assemble the TrimUI .pak layout as a build target" OFF)
+option(MRG_ENABLE_CORE_DOWNLOAD "Fetch libretro cores from the libretro buildbot at runtime" ON)
+
+# The Brick Pro has no zenity, no curl and no offscreen SDL video driver, so the
+# device profile turns those features off rather than discovering them at run
+# time. Tests stay on the desktop because they need the dummy video driver.
+if(MRG_PLATFORM STREQUAL "brick")
+  set(MRG_USE_SYSTEM_SDL2 ON CACHE BOOL "" FORCE)
+  set(MRG_ENABLE_SMOKE_TESTS OFF CACHE BOOL "" FORCE)
+  set(MRG_ENABLE_PAK_TARGET ON CACHE BOOL "" FORCE)
+  # The pak ships its cores and the firmware has no curl, so the device build
+  # never grows the downloader in the first place.
+  set(MRG_ENABLE_CORE_DOWNLOAD OFF CACHE BOOL "" FORCE)
+  set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+elseif(NOT MRG_PLATFORM STREQUAL "desktop")
+  message(FATAL_ERROR "MRG_PLATFORM must be desktop or brick, got ${MRG_PLATFORM}")
+endif()
+
+
 # An unset CMAKE_BUILD_TYPE leaves every target on the compiler's default,
 # which for GCC is -O0: the emulator then runs about five times slower than it
 # needs to and a whole frame costs milliseconds instead of a fraction of one.
@@ -32,43 +62,116 @@ option(MRG_WARNINGS_AS_ERRORS "Treat warnings in MRG targets as errors" OFF)
 if(MRG_WARNINGS_AS_ERRORS AND NOT MSVC)
   list(APPEND MRG_WARNING_FLAGS -Werror)
 endif()
+# Every target of this project gets its language level, warning set and
+# platform defines from one place, so adding a target cannot silently skip the
+# device profile. Bundled third-party trees keep their own flags.
+function(mrg_configure_target target)
+  target_compile_features(${target} PUBLIC cxx_std_17)
+  target_compile_options(${target} PRIVATE ${MRG_WARNING_FLAGS})
+  if(MRG_ENABLE_CORE_DOWNLOAD)
+    target_compile_definitions(${target} PRIVATE MRG_ENABLE_CORE_DOWNLOAD=1)
+  else()
+    target_compile_definitions(${target} PRIVATE MRG_ENABLE_CORE_DOWNLOAD=0)
+  endif()
+  get_target_property(_mrg_type ${target} TYPE)
+  if(MRG_PLATFORM STREQUAL "brick")
+    # The firmware ships no libstdc++ of a known version, so it is linked in
+    # statically; section GC keeps the stripped binary small.
+    target_compile_definitions(${target} PRIVATE MRG_PLATFORM_BRICK=1)
+    target_compile_options(${target} PRIVATE
+      -ffunction-sections -fdata-sections -fvisibility=hidden)
+    if(NOT _mrg_type STREQUAL "STATIC_LIBRARY")
+      target_link_options(${target} PRIVATE
+        -static-libstdc++ -static-libgcc
+        -Wl,--gc-sections -Wl,--as-needed)
+    endif()
+    # GCC 8 still ships <filesystem> as a separate library; 9 merged it into
+    # libstdc++, which is why the desktop build never needed this.
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
+      target_link_libraries(${target} PUBLIC stdc++fs)
+    endif()
+  endif()
+  if(MRG_ENABLE_LTO AND NOT MRG_PLATFORM STREQUAL "brick")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _mrg_ipo LANGUAGES CXX)
+    if(_mrg_ipo)
+      set_target_properties(${target} PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
+    endif()
+  endif()
+  if(MRG_ENABLE_ASAN AND NOT MSVC)
+    target_compile_options(${target} PRIVATE
+      -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+  endif()
+  if(MRG_STRICT_WARNINGS AND NOT MSVC)
+    target_compile_options(${target} PRIVATE -Wshadow -Wconversion -Wold-style-cast)
+  endif()
+endfunction()
 
-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
-set(SDL_STATIC ON CACHE BOOL "" FORCE)
-set(SDL_TEST OFF CACHE BOOL "" FORCE)
-set(SDL_TESTS OFF CACHE BOOL "" FORCE)
-set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(SDL2TTF_VENDORED ON CACHE BOOL "" FORCE)
-set(SDL2TTF_HARFBUZZ OFF CACHE BOOL "" FORCE)
-set(SDL2TTF_SAMPLES OFF CACHE BOOL "" FORCE)
-set(SDL2TTF_INSTALL OFF CACHE BOOL "" FORCE)
-
-if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2/CMakeLists.txt" OR
-   NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2_ttf/CMakeLists.txt")
-  message(FATAL_ERROR "SDL2 submodules are missing. Run: git submodule update --init --recursive")
-endif()
 # Screenshots are written as PNG when zlib is available; the capture code falls
-# back to BMP otherwise.
+# back to BMP otherwise. Both SDL2 flavours need it.
 find_package(ZLIB QUIET)
 
-# The scripted --smoke-test-* runs drive the UI for CI. They are a developer
-# tool, so release builds leave them out and reject the flags.
-option(MRG_ENABLE_SMOKE_TESTS "Build the scripted --smoke-test-* command line" OFF)
+# CoverCache runs a worker thread. Recent glibc merged pthread into libc, the
+# device runs one that did not, so the dependency is declared instead of being
+# inherited by accident.
+find_package(Threads REQUIRED)
 
-# The vendored FreeType still asks for CMake 3.0 and SDL2 for 3.0.0, which
-# CMake 4 refuses outright ("Compatibility with CMake < 3.5 has been
-# removed"). Raising the policy floor for the bundled trees keeps CMake 4
-# builders, such as the GitHub runners, configuring; older CMake ignores the
-# variable. Our own targets keep the 3.20 policies declared above.
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31)
-  set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+if(MRG_USE_SYSTEM_SDL2)
+  # The Brick Pro firmware ships SDL2 2.0.26 and SDL2_ttf 2.0.10 without CMake
+  # package configuration, so the libraries are located directly and wrapped in
+  # the same target names the vendored build produces.
+  set(_mrg_sdl2_roots ${MRG_SDL2_ROOT} ${CMAKE_SYSROOT}/usr)
+  find_path(MRG_SDL2_INCLUDE_DIR SDL.h
+    PATHS ${_mrg_sdl2_roots} PATH_SUFFIXES include/SDL2 include NO_DEFAULT_PATH)
+  find_library(MRG_SDL2_LIBRARY NAMES SDL2-2.0 SDL2
+    PATHS ${_mrg_sdl2_roots} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+  find_library(MRG_SDL2TTF_LIBRARY NAMES SDL2_ttf-2.0 SDL2_ttf
+    PATHS ${_mrg_sdl2_roots} PATH_SUFFIXES lib NO_DEFAULT_PATH)
+  if(NOT MRG_SDL2_INCLUDE_DIR OR NOT MRG_SDL2_LIBRARY OR NOT MRG_SDL2TTF_LIBRARY)
+    message(FATAL_ERROR "System SDL2/SDL2_ttf not found under: ${_mrg_sdl2_roots}."
+      " Pass -DMRG_SDL2_ROOT=<prefix> if they live elsewhere.")
+  endif()
+  message(STATUS "Using system SDL2: ${MRG_SDL2_LIBRARY}")
+  add_library(SDL2::SDL2 UNKNOWN IMPORTED)
+  set_target_properties(SDL2::SDL2 PROPERTIES
+    IMPORTED_LOCATION "${MRG_SDL2_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${MRG_SDL2_INCLUDE_DIR}")
+  add_library(SDL2_ttf::SDL2_ttf UNKNOWN IMPORTED)
+  set_target_properties(SDL2_ttf::SDL2_ttf PROPERTIES
+    IMPORTED_LOCATION "${MRG_SDL2TTF_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${MRG_SDL2_INCLUDE_DIR}")
+else()
+  set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+  set(SDL_STATIC ON CACHE BOOL "" FORCE)
+  set(SDL_TEST OFF CACHE BOOL "" FORCE)
+  set(SDL_TESTS OFF CACHE BOOL "" FORCE)
+  set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(SDL2TTF_VENDORED ON CACHE BOOL "" FORCE)
+  set(SDL2TTF_HARFBUZZ OFF CACHE BOOL "" FORCE)
+  set(SDL2TTF_SAMPLES OFF CACHE BOOL "" FORCE)
+  set(SDL2TTF_INSTALL OFF CACHE BOOL "" FORCE)
+
+  if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2/CMakeLists.txt" OR
+     NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/SDL2_ttf/CMakeLists.txt")
+    message(FATAL_ERROR "SDL2 submodules are missing. Run: git submodule update --init --recursive")
+  endif()
+
+  # The vendored FreeType still asks for CMake 3.0 and SDL2 for 3.0.0, which
+  # CMake 4 refuses outright ("Compatibility with CMake < 3.5 has been
+  # removed"). Raising the policy floor for the bundled trees keeps CMake 4
+  # builders, such as the GitHub runners, configuring; older CMake ignores the
+  # variable. Our own targets keep the 3.20 policies declared above.
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.31)
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+  endif()
+
+  add_subdirectory(third_party/SDL2 EXCLUDE_FROM_ALL)
+  add_subdirectory(third_party/SDL2_ttf EXCLUDE_FROM_ALL)
+
+  unset(CMAKE_POLICY_VERSION_MINIMUM)
 endif()
-
-add_subdirectory(third_party/SDL2 EXCLUDE_FROM_ALL)
-add_subdirectory(third_party/SDL2_ttf EXCLUDE_FROM_ALL)
-
-unset(CMAKE_POLICY_VERSION_MINIMUM)
 
 add_library(mrg-platform STATIC
   src/config/AppPaths.cpp
@@ -78,8 +181,8 @@ add_library(mrg-platform STATIC
   src/util/Utf8Path.cpp
 )
 target_include_directories(mrg-platform PUBLIC src)
-target_compile_features(mrg-platform PUBLIC cxx_std_17)
-target_compile_options(mrg-platform PRIVATE ${MRG_WARNING_FLAGS})
+mrg_configure_target(mrg-platform)
+target_link_libraries(mrg-platform PUBLIC Threads::Threads)
 if(TARGET SDL2::SDL2-static)
   target_link_libraries(mrg-platform PUBLIC SDL2::SDL2-static)
 else()
@@ -98,8 +201,7 @@ add_library(runtime-libretro STATIC
   src/util/Sha256.cpp
 )
 target_include_directories(runtime-libretro PUBLIC src third_party/libretro)
-target_compile_features(runtime-libretro PUBLIC cxx_std_17)
-target_compile_options(runtime-libretro PRIVATE ${MRG_WARNING_FLAGS})
+mrg_configure_target(runtime-libretro)
 target_link_libraries(runtime-libretro PUBLIC mrg-platform ${CMAKE_DL_LIBS})
 # Downloaded cores ship as .so.zip, so unpacking needs zlib as well.
 if(ZLIB_FOUND)
@@ -116,6 +218,7 @@ add_executable(mrg-player
   src/i18n/Localization.cpp
   src/library/CoverNames.cpp
   src/library/GameLibrary.cpp
+  src/library/RomScanner.cpp
   src/runtime/RuntimeRegistry.cpp
   src/model/Game.cpp
   src/ui/Controls.cpp
@@ -130,8 +233,7 @@ add_executable(mrg-player
   src/util/PngWriter.cpp
 )
 target_include_directories(mrg-player PRIVATE src third_party/stb)
-target_compile_features(mrg-player PRIVATE cxx_std_17)
-target_compile_options(mrg-player PRIVATE ${MRG_WARNING_FLAGS})
+mrg_configure_target(mrg-player)
 # The About page reports this string, so the release number lives in one place.
 target_compile_definitions(mrg-player PRIVATE MRG_VERSION="${MRG_VERSION_STRING}")
 target_link_libraries(mrg-player PRIVATE runtime-libretro)
@@ -168,6 +270,7 @@ if(BUILD_TESTING)
     tests/GameLibraryTest.cpp
     src/config/Settings.cpp
     src/library/GameLibrary.cpp
+    src/library/RomScanner.cpp
     src/runtime/RuntimeRegistry.cpp
   )
   target_include_directories(game-library-test PRIVATE src)
@@ -280,6 +383,18 @@ else()
   target_link_libraries(mrg-player PRIVATE SDL2_ttf::SDL2_ttf)
 endif()
 
+if(MRG_PLATFORM STREQUAL "brick")
+  # The cross toolchain carries glibc 2.28 while the device does not, and ld
+  # picks the 2.28 libm up through the SDL2 dependency before the sysroot copy,
+  # which would make powf a GLIBC_2.27 symbol. Naming the 2.23 libm from the
+  # sysroot pins it back. Only that one file: adding the whole usr/lib to the
+  # rpath-link path mixes in a libpthread that fails with
+  # "__libc_dl_error_tsd@GLIBC_PRIVATE".
+  if(EXISTS "${CMAKE_SYSROOT}/usr/lib/libm.so.6")
+    target_link_libraries(mrg-player PRIVATE "${CMAKE_SYSROOT}/usr/lib/libm.so.6")
+  endif()
+endif()
+
 # Multi-config generators place the executable in a per-config directory, so the
 # font has to sit beside it rather than only in the top of the build tree. A
 # macOS bundle is a directory, and SDL_GetBasePath reports its Resources folder
@@ -361,3 +476,36 @@ else()
   install(TARGETS mrg-player RUNTIME DESTINATION bin)
 endif()
 install(DIRECTORY assets/fonts DESTINATION share/mrg-player)
+# The pak target lays out exactly what goes on the SD card, so packaging is a
+# build step rather than a wiki page, and pak-verify checks that layout against
+# the firmware the device actually runs.
+if(MRG_ENABLE_PAK_TARGET)
+  set(MRG_PAK_DIR "${CMAKE_BINARY_DIR}/pak/MRG.pak" CACHE PATH "Assembled pak directory")
+
+  set(_mrg_readelf "${CMAKE_READELF}")
+  if(NOT _mrg_readelf)
+    set(_mrg_readelf readelf)
+  endif()
+  set(_mrg_objdump "${CMAKE_OBJDUMP}")
+  if(NOT _mrg_objdump)
+    set(_mrg_objdump objdump)
+  endif()
+
+  add_custom_target(pak
+    COMMAND ${CMAKE_COMMAND}
+      -DMRG_SOURCE_DIR=${CMAKE_SOURCE_DIR}
+      -DMRG_PAK_DIR=${MRG_PAK_DIR}
+      -DMRG_EXE=$<TARGET_FILE:mrg-player>
+      -DMRG_STRIP=${CMAKE_STRIP}
+      -P ${CMAKE_SOURCE_DIR}/cmake/assemble-pak.cmake
+    DEPENDS mrg-player
+    COMMENT "Assembling MRG.pak"
+    VERBATIM)
+
+  add_custom_target(pak-verify
+    COMMAND sh ${CMAKE_SOURCE_DIR}/tools/verify-pak.sh
+      ${MRG_PAK_DIR} ${_mrg_readelf} ${_mrg_objdump}
+    DEPENDS pak
+    COMMENT "Verifying MRG.pak against the device runtime"
+    VERBATIM)
+endif()

@@ -14,6 +14,7 @@
 #include "config/Settings.hpp"
 #include "game/GamePlatform.hpp"
 #include "library/GameLibrary.hpp"
+#include "library/RomScanner.hpp"
 #include "runtime/RuntimeRegistry.hpp"
 #include "util/Utf8Path.hpp"
 
@@ -23,6 +24,23 @@ using launcher::library::GameLibrary;
 using launcher::library::ImportStatus;
 using launcher::runtime::RuntimeRegistry;
 using launcher::runtime::SaveDataStatus;
+
+#if defined(_WIN32)
+constexpr char kPathListSeparator = ';';
+#else
+constexpr char kPathListSeparator = ':';
+#endif
+
+// SDL_setenv changes the Win32 environment block, which the CRT's getenv does
+// not follow; the launcher reads its overrides with getenv, so set them the way
+// a starting process would see them.
+void setEnvironment(const char *name, const std::string &value) {
+#if defined(_WIN32)
+  _putenv_s(name, value.c_str());
+#else
+  setenv(name, value.c_str(), 1);
+#endif
+}
 
 bool check(bool condition, const std::string &message) {
   if (!condition)
@@ -444,6 +462,64 @@ int main() {
     ok &= check(reloaded != unicodeReload.entries().end(),
                 "the non-ASCII entry survives a restart");
   }
+
+  // The device pak names its data root and ROM folders instead of relying on
+  // SDL's desktop preference path, and it has no file dialog; the scan below is
+  // the only way a game can reach the library there.
+  const fs::path deviceData = root / "device-data";
+  setEnvironment("MRG_DATA_DIR", deviceData.string() + "//");
+  ok &= check(launcher::config::dataRoot() == deviceData.string() + "/",
+              "MRG_DATA_DIR replaces the data root and drops extra separators");
+  setEnvironment("MRG_DATA_DIR", std::string());
+  ok &= check(launcher::config::dataRoot() == currentRoot,
+              "an empty MRG_DATA_DIR keeps the default data root");
+
+  const fs::path cardRoms = root / "sdcard" / "Roms";
+  const fs::path cardNes = cardRoms / "nes";
+  const fs::path cardDot = cardRoms / ".cache";
+  fs::create_directories(cardNes, ec);
+  fs::create_directories(cardDot, ec);
+  ok &= check(!ec, "create the card ROM folders");
+  ok &= check(writeBytes(cardNes / "card-game.nes", makeRom(0x44)),
+              "write a game in a per-system folder");
+  ok &= check(writeBytes(cardRoms / "zeta.snes", makeRom(0x45)),
+              "write a game at the top of the card");
+  ok &= check(writeBytes(cardDot / "hidden.nes", makeRom(0x46)),
+              "write a game inside a dot folder");
+  ok &= check(writeBytes(cardRoms / "notes.txt", {0x41}),
+              "write a file that is not a game");
+
+  setEnvironment("MRG_ROM_DIRS", cardRoms.string() + kPathListSeparator +
+                                     (root / "missing").string());
+  const std::vector<std::string> cardDirectories =
+      launcher::config::romSearchDirectories();
+  ok &= check(cardDirectories.size() == 1 &&
+                  cardDirectories.front() == cardRoms.string(),
+              "MRG_ROM_DIRS is split into folders and missing ones dropped");
+  const std::vector<std::string> cardGames =
+      launcher::library::findGames(cardDirectories);
+  ok &= check(cardGames.size() == 2,
+              "the scan finds nested games and skips dot folders");
+  ok &= check(std::is_sorted(cardGames.begin(), cardGames.end()),
+              "the scan returns a stable order");
+  {
+    GameLibrary cardLibrary((root / "card-managed").string());
+    ok &= check(cardLibrary.initialize(),
+                "initialize a library for the card scan");
+    const launcher::library::RomScanSummary firstScan =
+        launcher::library::importGames(cardDirectories, cardLibrary);
+    ok &= check(firstScan.found == 2 && firstScan.imported == 2 &&
+                    firstScan.alreadyPresent == 0 && firstScan.failed == 0,
+                "the card scan imports every game it finds");
+    ok &= check(cardLibrary.entries().size() == 2,
+                "the scanned games are in the library");
+    const launcher::library::RomScanSummary secondScan =
+        launcher::library::importGames(cardDirectories, cardLibrary);
+    ok &= check(secondScan.found == 2 && secondScan.imported == 0 &&
+                    secondScan.alreadyPresent == 2,
+                "a repeated scan reports the games as already present");
+  }
+  setEnvironment("MRG_ROM_DIRS", std::string());
 
   fs::remove_all(root, ec);
   ok &= check(!ec, "remove temporary test directory");

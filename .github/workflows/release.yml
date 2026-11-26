@@ -134,9 +134,16 @@ jobs:
           path: mrg-player-*-macos-arm64.zip
           if-no-files-found: error
 
+  # Device build; the shared workflow is the same one CI runs on every push.
+  brick:
+    name: TrimUI Brick package
+    uses: ./.github/workflows/_brick.yml
+    with:
+      upload: true
+
   release:
     name: Publish release
-    needs: [linux, windows, macos]
+    needs: [linux, windows, macos, brick]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4

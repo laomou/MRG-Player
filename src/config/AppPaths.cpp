@@ -2,13 +2,25 @@
 
 #include <SDL.h>
 
+#include <algorithm>
+#include <cstdlib>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #include "util/Utf8Path.hpp"
 
 namespace launcher::config {
 namespace {
 namespace fs = std::filesystem;
+
+// The pak ships a list of folders; Windows uses ';' because ':' belongs to the
+// drive letter.
+#if defined(_WIN32)
+constexpr char kPathListSeparator = ';';
+#else
+constexpr char kPathListSeparator = ':';
+#endif
 
 std::string preferenceRoot(const char *product) {
   char *path = SDL_GetPrefPath("MRG", product);
@@ -44,7 +56,19 @@ bool copyIfMissing(const fs::path &source, const fs::path &destination,
 
 } // namespace
 
-std::string dataRoot() { return preferenceRoot("MRGPlayer"); }
+std::string dataRoot() {
+  // The handheld pak keeps user data on the SD card so replacing the pak on an
+  // update never costs a save file. SDL_GetPrefPath knows nothing about that
+  // layout, so an explicit override wins over the desktop default.
+  if (const char *override = std::getenv("MRG_DATA_DIR");
+      override != nullptr && override[0] != '\0') {
+    std::string root(override);
+    while (root.size() > 1 && (root.back() == '/' || root.back() == '\\'))
+      root.pop_back();
+    return root + '/';
+  }
+  return preferenceRoot("MRGPlayer");
+}
 
 std::string legacyDataRoot() { return preferenceRoot("NESPlayerLauncher"); }
 
@@ -69,6 +93,60 @@ bool migrateLegacyData(std::string &error) {
                        error) &&
          copyIfMissing(legacy / "roms", current / "library" / "nes", error) &&
          copyIfMissing(legacy / "saves", current / "saves" / "nes", error);
+}
+
+std::string executableDirectory() {
+  char *base = SDL_GetBasePath();
+  const std::string result = base != nullptr ? std::string(base) : std::string();
+  SDL_free(base);
+  return result;
+}
+
+std::vector<std::string> romSearchDirectories() {
+  std::vector<std::string> directories;
+  const auto add = [&directories](const std::string &value) {
+    if (value.empty())
+      return;
+    std::error_code ec;
+    const fs::path candidate = paths::fromUtf8(value);
+    if (!fs::is_directory(candidate, ec) || ec)
+      return;
+    const std::string normalized = paths::toUtf8(candidate);
+    if (std::find(directories.begin(), directories.end(), normalized) ==
+        directories.end())
+      directories.push_back(normalized);
+  };
+
+  // A pak or a device launcher names the folders directly: the bundled roms/
+  // next to the executable, the card's own Roms tree, and whatever the user
+  // added. Separated the way the host names a list; paths are absolute there,
+  // and a relative entry is read as relative to the executable.
+  if (const char *override = std::getenv("MRG_ROM_DIRS");
+      override != nullptr && override[0] != '\0') {
+    const std::string executablePath = executableDirectory();
+    const std::string list(override);
+    std::size_t begin = 0;
+    while (begin <= list.size()) {
+      const std::size_t end = list.find(kPathListSeparator, begin);
+      std::string entry = list.substr(
+          begin, end == std::string::npos ? std::string::npos : end - begin);
+      if (!entry.empty() && !paths::fromUtf8(entry).is_absolute())
+        entry = executablePath + entry;
+      add(entry);
+      if (end == std::string::npos)
+        break;
+      begin = end + 1;
+    }
+    return directories;
+  }
+
+  // Desktop default: a roms/ folder beside the managed library is enough, and
+  // the same folder next to the executable covers a portable build.
+  const std::string root = dataRoot();
+  if (!root.empty())
+    add(paths::toUtf8(paths::fromUtf8(root) / "roms"));
+  add(executableDirectory() + "roms");
+  return directories;
 }
 
 std::string dataSubdirectory(std::string_view first, std::string_view second) {

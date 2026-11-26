@@ -1,0 +1,148 @@
+name: Brick package
+
+# Cross-compiled TrimUI Brick Pro package, shared by ci.yml (every push and
+# pull request) and release.yml (tags and manual runs). Keeping one copy means
+# the thing CI checks is byte-for-byte the recipe that ships.
+on:
+  workflow_call:
+    inputs:
+      upload:
+        description: Keep the zip as a workflow artifact
+        type: boolean
+        default: false
+      artifact-name:
+        description: Artifact name used when upload is true
+        type: string
+        default: brick-package
+
+permissions:
+  contents: read
+
+jobs:
+  brick:
+    name: TrimUI Brick package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build rsync zip
+
+      # Only the two upstream tarballs (376 MB) are cached; unpacking and
+      # merging the sysroot is idempotent and costs well under a minute.
+      - name: Cache toolchain downloads
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/trimui/dl
+          key: trimui-brick-arm-gnu-8.3-2019.02-sdk-20231018-v2
+
+      - name: Download Arm GNU 8.3 and the TrimUI SDK user tree
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          TC="$RUNNER_TEMP/trimui"
+          mkdir -p "$TC/dl"
+          curl -fL --retry 3 --retry-delay 5 --max-time 900 \
+            -o "$TC/dl/toolchain.tar.xz" \
+            "https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.02/gcc-arm-8.3-2019.02-x86_64-aarch64-linux-gnu.tar.xz"
+          curl -fL --retry 3 --retry-delay 5 --max-time 900 \
+            -o "$TC/dl/sdk-usr.tgz" \
+            "https://github.com/trimui/toolchain_sdk_smartpro/releases/download/20231018/SDK_usr_tg5040_a133p.tgz"
+
+      # The cache can be restored from an older key and a download can be
+      # truncated or swapped, so both tarballs are checked on every run before
+      # anything is unpacked into the sysroot.
+      - name: Verify the toolchain downloads
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/trimui/dl"
+          echo "07d8ae8fa505ccadfc8cbac8b77d6f47740ecec2079267ad1d0a20bdc5342fde  toolchain.tar.xz" | sha256sum -c -
+          echo "b6b615d03204e9d9bb1a91c31de0c3402434f6b8fc780743fa88a5f1da6f3c79  sdk-usr.tgz" | sha256sum -c -
+
+      - name: Unpack and merge the device sysroot
+        run: |
+          set -euo pipefail
+          TC="$RUNNER_TEMP/trimui"
+          if [ ! -d "$TC/tc" ]; then
+            mkdir -p "$TC/x"
+            tar -xf "$TC/dl/toolchain.tar.xz" -C "$TC/x"
+            mv "$TC/x/gcc-arm-8.3-2019.02-x86_64-aarch64-linux-gnu" "$TC/tc"
+            tar -xzf "$TC/dl/sdk-usr.tgz" -C "$TC/x"
+            # --ignore-existing is load-bearing: the other direction lets the
+            # SDK glibc 2.23 stubs replace the toolchain libraries and the link
+            # then fails on __libc_dl_error_tsd@GLIBC_PRIVATE. This only fills
+            # in what the toolchain lacks: SDL2, SDL2_ttf, freetype, zlib.
+            rsync -a --ignore-existing "$TC/x/usr/" "$TC/tc/aarch64-linux-gnu/libc/usr/"
+            rm -rf "$TC/x"
+          fi
+
+      # Core sources are shallow clones at pinned commits; the cache key
+      # includes the script so bumping a revision refetches instead of
+      # silently reusing the old tree.
+      - name: Cache core sources
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/trimui/core-src
+          key: trimui-brick-cores-${{ hashFiles('tools/build-cores.sh') }}
+
+      # The buildbot aarch64 cores need glibc 2.33+; building them here with
+      # the same toolchain as the launcher brings every core to GLIBC_2.17.
+      - name: Build the bundled cores
+        run: |
+          set -euo pipefail
+          TC="$RUNNER_TEMP/trimui"
+          bash tools/build-cores.sh \
+            --prefix "$TC/tc/bin/aarch64-linux-gnu-" \
+            --sysroot "$TC/tc/aarch64-linux-gnu/libc" \
+            --src "$TC/core-src" \
+            --out pack/cores
+
+      # A tag names the build; a push or a manual run keeps the same 0.0.0-dev
+      # stamp the desktop jobs use, so an unreleased build never claims a version.
+      - name: Resolve version
+        id: v
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
+          VERSION="${VERSION#v}"
+          if [ -z "$VERSION" ]; then VERSION=0.0.0-dev; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Configure (cross, system SDL2)
+        run: |
+          set -euo pipefail
+          TC="$RUNNER_TEMP/trimui"
+          cmake -S . -B build-brick -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64-brick.cmake \
+            -DMRG_CROSS_PREFIX="$TC/tc/bin/aarch64-linux-gnu-" \
+            -DMRG_SYSROOT="$TC/tc/aarch64-linux-gnu/libc" \
+            -DMRG_PLATFORM=brick \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DMRG_VERSION_STRING="${{ steps.v.outputs.version }}"
+
+      # pak-verify is the regression gate: NEEDED must stay inside the firmware
+      # library set and the highest symbol version must stay at GLIBC_2.17.
+      # An x86 runner cannot execute the binary, so this static check is the
+      # only thing standing between a bad link and a black screen on device.
+      - name: Build and verify the pak
+        run: cmake --build build-brick --parallel --target pak pak-verify
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.v.outputs.version }}"
+          (cd build-brick/pak && zip -qry "$GITHUB_WORKSPACE/mrg-player-$VERSION-trimui-brick.zip" MRG.pak)
+          ls -l "mrg-player-$VERSION-trimui-brick.zip"
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: mrg-player-*-trimui-brick.zip
+          if-no-files-found: error

@@ -7,3 +7,6 @@ build*/
 
 # Design sources are kept outside the repository.
 design/
+
+# Cores built by tools/build-cores.sh; the pak ships them, git does not.
+pack/cores/*.so
