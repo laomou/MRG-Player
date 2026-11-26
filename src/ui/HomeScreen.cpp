@@ -37,14 +37,86 @@ const char *platformBadge(game::GamePlatform platform) {
   return "?";
 }
 
-// The row never moves: every slot keeps its place and only the highlight
-// travels, so the first game always sits against the left edge.
-constexpr float kRowLeft = 58.0f;
-constexpr float kRowRight = 1222.0f;
-constexpr float kRowBottom = 542.0f;
 constexpr float kCardAspect = 314.0f / 226.0f;
 constexpr float kCardGap = 16.0f;
 constexpr float kMaximumCardWidth = 181.0f;
+// Seven whole cards plus half of the next at 1280 wide. A narrower canvas keeps
+// the cards at their pixel size and shows fewer of them instead: shrinking the
+// row to fit would shrink the type on the cards with it.
+constexpr float kVisibleSlotsAt1280 = 7.5f;
+
+// The shelf reads its margins from the canvas edges and its footer stack from
+// the bottom edge. The same numbers copied into a 4:3 canvas would only fit by
+// scaling the whole screen by 0.8, which is what turned the interface blurry on
+// the handheld; letting the shelf absorb the difference keeps every pixel and
+// every glyph at its natural size.
+struct HomeLayout {
+  float marginX = 0.0f;
+  float centerX = 0.0f;
+  float headerY = 0.0f;      // the two header pills
+  float headerHeight = 0.0f;
+  float brandX = 0.0f;
+  float brandY = 0.0f;
+  float brandTitleY = 0.0f;
+  float brandSubtitleY = 0.0f;
+  float sectionLabelY = 0.0f;
+  float sectionTitleY = 0.0f;
+  float sectionSubtitleY = 0.0f;
+  float shelfTop = 0.0f;     // where a travelling card is cut off
+  float shelfBottom = 0.0f;  // every card rests on this line
+  float rowLeft = 0.0f;
+  float rowRight = 0.0f;
+  float captionY = 0.0f;     // the selected game's title
+  float captionWidth = 0.0f;
+  float playTimeY = 0.0f;
+  float dividerY = 0.0f;
+  float footerY = 0.0f;
+  float footerRight = 0.0f;
+  float toastX = 0.0f;
+  float toastY = 0.0f;
+  float toastWidth = 0.0f;
+  float visibleSlots = kVisibleSlotsAt1280;
+};
+
+HomeLayout homeLayout() {
+  HomeLayout layout;
+  const float width = static_cast<float>(kCanvasWidth);
+  const float height = static_cast<float>(kCanvasHeight);
+  layout.centerX = width * 0.5f;
+  // 58 of 1280: the margin grows with the canvas instead of being copied.
+  layout.marginX = std::round(width * (58.0f / 1280.0f));
+  layout.brandX = layout.marginX;
+  layout.brandY = 46.0f;
+  layout.brandTitleY = 43.0f;
+  layout.brandSubtitleY = 79.0f;
+  layout.headerY = 42.0f;
+  layout.headerHeight = 46.0f;
+  layout.sectionLabelY = 128.0f;
+  layout.sectionTitleY = 154.0f;
+  layout.sectionSubtitleY = 190.0f;
+  layout.shelfTop = layout.sectionSubtitleY + 114.0f;
+  layout.rowLeft = layout.marginX;
+  layout.rowRight = width - layout.marginX;
+  layout.footerRight = layout.rowRight;
+  // The footer stack is measured up from the bottom edge, so a taller canvas
+  // hands its extra height to the shelf rather than to the gap under the hints.
+  layout.footerY = height - 62.0f;
+  layout.dividerY = height - 82.0f;
+  layout.playTimeY = height - 114.0f;
+  layout.captionY = height - 151.0f;
+  layout.shelfBottom = height - 178.0f;
+  layout.captionWidth =
+      std::min(608.0f, layout.rowRight - layout.rowLeft);
+  layout.toastWidth = std::min(506.0f, layout.rowRight - layout.rowLeft);
+  layout.toastX = layout.centerX - layout.toastWidth * 0.5f;
+  layout.toastY = layout.captionY + 39.0f;
+  // Keep the half card that says the row continues: the count scales with the
+  // width, but a whole number of slots would hide the next card completely on a
+  // narrower canvas, so it always ends in a half.
+  layout.visibleSlots =
+      std::max(2.5f, std::floor(kVisibleSlotsAt1280 * width / 1280.0f) + 0.5f);
+  return layout;
+}
 
 struct CardBox {
   float x = 0.0f;
@@ -56,7 +128,8 @@ struct CardBox {
 // The two header pills are sized from their labels and anchored against the
 // right margin, so a longer translation never runs past the edge of the
 // canvas; with the current Chinese labels the pair keeps its old geometry.
-SDL_FRect pillRect(bool settings, i18n::Language language, std::size_t count) {
+SDL_FRect pillRect(const HomeLayout &layout, bool settings,
+                    i18n::Language language, std::size_t count) {
   using i18n::TextId;
   using i18n::tr;
   const int libraryLabel = textWidth(tr(TextId::Library, language), 2);
@@ -67,28 +140,29 @@ SDL_FRect pillRect(bool settings, i18n::Language language, std::size_t count) {
   const float libraryWidth =
       std::max(220.0f, 36.0f + static_cast<float>(libraryLabel) + 13.0f +
                static_cast<float>(countLabel) + 16.0f);
-  const float settingsX = kRowRight - settingsWidth;
+  const float settingsX = layout.rowRight - settingsWidth;
   if (settings)
-    return SDL_FRect{settingsX, 42.0f, settingsWidth, 46.0f};
-  return SDL_FRect{settingsX - 13.0f - libraryWidth, 42.0f, libraryWidth,
-                   46.0f};
+    return SDL_FRect{settingsX, layout.headerY, settingsWidth,
+                     layout.headerHeight};
+  return SDL_FRect{settingsX - 13.0f - libraryWidth, layout.headerY,
+                   libraryWidth, layout.headerHeight};
 }
 
-// The shelf shows seven whole cards plus half of the next one, so the cut-off
-// card at the right edge is always the cue that the row can travel. A library
-// that fits leaves an empty slot there instead of pretending there is more.
-constexpr float kVisibleSlots = 7.5f;
+// The shelf shows whole cards plus half of the next one, so the cut-off card at
+// the right edge is always the cue that the row can travel. A library that fits
+// leaves an empty slot there instead of pretending there is more.
+float slotPitch(const HomeLayout &layout) {
+  return (layout.rowRight - layout.rowLeft) / layout.visibleSlots;
+}
 
-float slotPitch() { return (kRowRight - kRowLeft) / kVisibleSlots; }
-
-CardBox cardBox(float column, bool selected) {
+CardBox cardBox(const HomeLayout &layout, float column, bool selected) {
   const float base =
-      std::min(kMaximumCardWidth, slotPitch() - kCardGap);
+      std::min(kMaximumCardWidth, slotPitch(layout) - kCardGap);
   const float scale = selected ? 1.04f : 1.0f;
   const float width = base * scale;
   const float height = base * kCardAspect * scale;
-  const float centre = kRowLeft + slotPitch() * (column + 0.5f);
-  return {centre - width * 0.5f, kRowBottom - height, width, height};
+  const float centre = layout.rowLeft + slotPitch(layout) * (column + 0.5f);
+  return {centre - width * 0.5f, layout.shelfBottom - height, width, height};
 }
 
 // A title over box art needs contrast, but a solid plate reads as a black bar.
@@ -100,10 +174,10 @@ void drawTitleScrim(SDL_Renderer *renderer, float x, float y, float width,
                     radius, {4, 6, 16, 255}, strength, 1.6f);
 }
 
-void drawCard(SDL_Renderer *renderer, float column, bool selected,
-              bool focused, float focusOpacity, SDL_Color accent,
+void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
+              bool selected, bool focused, float focusOpacity, SDL_Color accent,
               const library::GameEntry *entry, CoverSource *covers) {
-  const CardBox box = cardBox(column, selected);
+  const CardBox box = cardBox(layout, column, selected);
   const float x = box.x;
   // The selected card sits still: the highlight does the work. A vertical
   // float here only moved it a fraction of a pixel per frame, which the
@@ -186,15 +260,18 @@ void drawCard(SDL_Renderer *renderer, float column, bool selected,
     drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
 }
 
-// Footer geometry lives here because the drawing and the hit test have to agree
-// on it; the metrics themselves come from the hint helpers.
-constexpr float kFooterRight = 1222.0f;
-constexpr float kFooterY = 658.0f;
-
-// The quit confirmation is centred on the logical canvas so it covers the
-// shelf no matter which part of it has focus.
-const ConfirmLayout kQuitLayout =
-    confirmLayout({336, 240, 608, 232}, 122, 80, 96, 16);
+// The quit confirmation is centred on the canvas so it covers the shelf no
+// matter which part of it has focus. It narrows with the canvas instead of
+// running off it, and the buttons follow from the same bounds.
+ConfirmLayout quitLayout() {
+  const float width =
+      std::min(608.0f, static_cast<float>(kCanvasWidth) - 96.0f);
+  constexpr float height = 232.0f;
+  return confirmLayout({(static_cast<float>(kCanvasWidth) - width) * 0.5f,
+                        (static_cast<float>(kCanvasHeight) - height) * 0.5f,
+                        width, height},
+                       122, 80, 96, 16);
+}
 
 // Only the two actions live in the footer; leaving the launcher is done by
 // closing the window, the way a console has no "quit" entry on its home row.
@@ -239,31 +316,40 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       covers != nullptr && selectedEntry != nullptr
           ? covers->wallpaper(renderer, *selectedEntry)
           : nullptr;
+  const HomeLayout layout = homeLayout();
   drawBackground(renderer, style, time, wallpaper);
-  rounded(renderer, 58, 46, 4, 26, 2, style.accent);
-  text(renderer, 74, 43, "MRG PLAYER", 3, {255, 255, 255, 255});
-  text(renderer, 74, 79, "RETRO GAMES. TIMELESS PLAY.", 1,
-       {167, 184, 207, 255});
+  rounded(renderer, layout.brandX, layout.brandY, 4, 26, 2, style.accent);
+  text(renderer, static_cast<int>(layout.brandX) + 16,
+       static_cast<int>(layout.brandTitleY), "MRG PLAYER", 3,
+       {255, 255, 255, 255});
+  text(renderer, static_cast<int>(layout.brandX) + 16,
+       static_cast<int>(layout.brandSubtitleY), "RETRO GAMES. TIMELESS PLAY.",
+       1, {167, 184, 207, 255});
   const std::size_t libraryCount = gameLibrary.entries().size();
-  const SDL_FRect libraryPill = pillRect(false, language, libraryCount);
-  const SDL_FRect settingsPill = pillRect(true, language, libraryCount);
+  const SDL_FRect libraryPill = pillRect(layout, false, language, libraryCount);
+  const SDL_FRect settingsPill = pillRect(layout, true, language, libraryCount);
+  const int pillCenterY =
+      static_cast<int>(layout.headerY + layout.headerHeight * 0.5f);
+  const int pillLabelY = static_cast<int>(layout.headerY) + 8;
+  const int pillCountY = static_cast<int>(layout.headerY) + 15;
   rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
           libraryPill.h, 23, {4, 10, 26, 145});
-  circle(renderer, libraryPill.x + 26, 65, 12, style.accent);
-  text(renderer, static_cast<int>(libraryPill.x) + 19, 50, "+", 2,
+  circle(renderer, libraryPill.x + 26, pillCenterY, 12, style.accent);
+  text(renderer, static_cast<int>(libraryPill.x) + 19, pillLabelY, "+", 2,
        {18, 18, 33, 255});
-  text(renderer, static_cast<int>(libraryPill.x) + 48, 50,
+  text(renderer, static_cast<int>(libraryPill.x) + 48, pillLabelY,
        tr(TextId::Library, language), 2, {255, 255, 255, 255});
   const std::string countLabel = std::to_string(libraryCount);
   text(renderer,
        static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
                         static_cast<float>(textWidth(countLabel, 1))),
-        57, countLabel, 1, {191, 201, 220, 255});
+       pillCountY, countLabel, 1, {191, 201, 220, 255});
   rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
           settingsPill.h, 23, {4, 10, 26, 175});
-  circle(renderer, settingsPill.x + 26, 65, 12, {255, 255, 255, 45});
-  gearIcon(renderer, settingsPill.x + 26.0f, 65.0f, 10.0f, style.accent);
-  text(renderer, static_cast<int>(settingsPill.x) + 47, 50,
+  circle(renderer, settingsPill.x + 26, pillCenterY, 12, {255, 255, 255, 45});
+  gearIcon(renderer, settingsPill.x + 26.0f,
+           static_cast<float>(pillCenterY), 10.0f, style.accent);
+  text(renderer, static_cast<int>(settingsPill.x) + 47, pillLabelY,
        tr(TextId::Settings, language), 2, {255, 255, 255, 255});
   // The pills are buttons too, so they take the same ring when the direction
   // keys are on them. The ring is drawn over the pills rather than under them,
@@ -282,24 +368,31 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       libraryEmpty ? TextId::ChooseRom
                    : (startupPage == 0 ? TextId::ContinueSubtitle
                                        : TextId::LibrarySubtitle);
-  text(renderer, 58, 128, tr(sectionTitle, language), 1, style.accent);
-  text(renderer, 58, 154, tr(TextId::ChooseYourGame, language), 3,
-       {255, 255, 255, 255});
-  text(renderer, 58, 190, tr(sectionSubtitle, language), 1,
-       {191, 201, 220, 255});
+  text(renderer, static_cast<int>(layout.marginX),
+       static_cast<int>(layout.sectionLabelY), tr(sectionTitle, language), 1,
+       style.accent);
+  text(renderer, static_cast<int>(layout.marginX),
+       static_cast<int>(layout.sectionTitleY),
+       tr(TextId::ChooseYourGame, language), 3, {255, 255, 255, 255});
+  text(renderer, static_cast<int>(layout.marginX),
+       static_cast<int>(layout.sectionSubtitleY),
+       tr(sectionSubtitle, language), 1, {191, 201, 220, 255});
 
   const bool cardsFocused = focus == HomeFocus::Cards;
   // The shelf is a window, not a canvas: a card that sticks out past the row is
   // cut there, which is what turns the eighth card into the half card that
   // shows there is more to the right.
-  setClipRect(renderer, kRowLeft, 304.0f, kRowRight - kRowLeft, 256.0f);
+  setClipRect(renderer, layout.rowLeft, layout.shelfTop,
+              layout.rowRight - layout.rowLeft,
+              layout.shelfBottom + 18.0f - layout.shelfTop);
   // Draw one column beyond each edge so a card sliding out and the next one
   // sliding in both stay whole while the row travels.
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
   // Always fill the window, including the half column at the right edge: an
   // empty shelf still shows half a placeholder there, so the row reads as a
   // shelf that continues rather than one that simply stops.
-  const int lastColumn = firstColumn + static_cast<int>(std::ceil(kVisibleSlots));
+  const int lastColumn =
+      firstColumn + static_cast<int>(std::ceil(layout.visibleSlots));
   for (int i = std::max(0, firstColumn - 1); i <= lastColumn; ++i) {
     if (i == selectedGame)
       continue;
@@ -307,16 +400,19 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
         i < static_cast<int>(gameLibrary.entries().size())
             ? &gameLibrary.entries()[static_cast<std::size_t>(i)]
             : nullptr;
-    drawCard(renderer, static_cast<float>(i) - rowOffset, false, false,
-             focusOpacity, accent, entry, covers);
+    drawCard(renderer, layout, static_cast<float>(i) - rowOffset, false,
+             false, focusOpacity, accent, entry, covers);
   }
-  drawCard(renderer, static_cast<float>(selectedGame) - rowOffset, true,
-           cardsFocused, focusOpacity, accent, selectedEntry, covers);
+  drawCard(renderer, layout, static_cast<float>(selectedGame) - rowOffset,
+           true, cardsFocused, focusOpacity, accent, selectedEntry, covers);
   clearClipRect(renderer);
 
   if (selectedEntry != nullptr) {
-    centeredText(renderer, 640, 569, fitText(selectedEntry->title, 608, 3), 3,
-                 style.accent);
+    centeredText(renderer, static_cast<int>(layout.centerX),
+                 static_cast<int>(layout.captionY),
+                 fitText(selectedEntry->title,
+                         static_cast<int>(layout.captionWidth), 3),
+                 3, style.accent);
     const std::uint64_t hours = selectedEntry->playSeconds / 3600;
     const std::uint64_t minutes = (selectedEntry->playSeconds % 3600) / 60;
     std::string playTime = tr(TextId::PlayTime, language);
@@ -324,28 +420,33 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
     if (hours > 0)
       playTime += std::to_string(hours) + "h ";
     playTime += std::to_string(minutes) + "m";
-    centeredText(renderer, 640, 606, playTime, 1, {232, 236, 244, 255});
+    centeredText(renderer, static_cast<int>(layout.centerX),
+                 static_cast<int>(layout.playTimeY), playTime, 1,
+                 {232, 236, 244, 255});
   }
 
   // The shelf is the only screen with a footer of its own; the management
   // drawer covers it, so the caller can turn it off and let the drawer draw
   // its own legend in the space it actually owns.
   if (showFooter) {
-    fill(renderer, 58, 638, 1164, 1, {255, 255, 255, 24});
+    fill(renderer, layout.rowLeft, layout.dividerY,
+         layout.rowRight - layout.rowLeft, 1, {255, 255, 255, 24});
     const std::vector<Hint> footer =
         footerHints(selectedEntry != nullptr, language, prompts);
     const int focused =
         focus == HomeFocus::Actions && !footer.empty()
             ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
             : -1;
-    drawHintRow(renderer, kFooterRight, kFooterY, footer, style.accent,
-                focused, focusOpacity);
+    drawHintRow(renderer, layout.footerRight, layout.footerY, footer,
+                style.accent, focused, focusOpacity);
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
-    rounded(renderer, 387, 608, 506, 53, 14, {4, 8, 22, 235});
-    centeredText(renderer, 640, 623, std::string(toastMessage), 2,
-                 style.accent);
+    rounded(renderer, layout.toastX, layout.toastY, layout.toastWidth, 53, 14,
+            {4, 8, 22, 235});
+    centeredText(renderer, static_cast<int>(layout.centerX),
+                 static_cast<int>(layout.toastY + 15),
+                 std::string(toastMessage), 2, style.accent);
   }
 }
 
@@ -354,7 +455,8 @@ int homeActionCount(bool hasGame) { return hasGame ? 2 : 0; }
 
 int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                  const config::InputPrompts &prompts) {
-  const auto layout = hintLayout(kFooterRight, kFooterY,
+  const HomeLayout home = homeLayout();
+  const auto layout = hintLayout(home.footerRight, home.footerY,
                                  footerHints(hasGame, language, prompts));
   for (std::size_t index = 0; index < layout.size(); ++index) {
     // Retain generous pointer padding around the small footer legend.
@@ -365,12 +467,14 @@ int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
 }
 
 int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
-  if (y < 39.0f || y > 91.0f)
+  const HomeLayout layout = homeLayout();
+  if (y < layout.headerY - 3.0f ||
+      y > layout.headerY + layout.headerHeight + 3.0f)
     return -1;
-  const SDL_FRect libraryPill = pillRect(false, language, count);
+  const SDL_FRect libraryPill = pillRect(layout, false, language, count);
   if (x >= libraryPill.x && x <= libraryPill.x + libraryPill.w)
     return 0;
-  const SDL_FRect settingsPill = pillRect(true, language, count);
+  const SDL_FRect settingsPill = pillRect(layout, true, language, count);
   if (x >= settingsPill.x && x <= settingsPill.x + settingsPill.w)
     return 1;
   return -1;
@@ -379,13 +483,14 @@ int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
 int homeCardAt(float x, float y, int count, float rowOffset) {
   // The selected card is drawn a little larger, so accept either size and a
   // click on its rim still counts.
+  const HomeLayout layout = homeLayout();
   const int firstColumn = static_cast<int>(std::floor(rowOffset));
-  const int lastSlot =
-      std::min(count - 1, firstColumn + static_cast<int>(kVisibleSlots) + 1);
+  const int lastSlot = std::min(
+      count - 1, firstColumn + static_cast<int>(layout.visibleSlots) + 1);
   for (int slot = std::max(0, firstColumn - 1); slot <= lastSlot; ++slot) {
     for (const bool selected : {false, true}) {
-      const CardBox box = cardBox(static_cast<float>(slot) - rowOffset,
-                                  selected);
+      const CardBox box =
+          cardBox(layout, static_cast<float>(slot) - rowOffset, selected);
       if (x >= box.x && x <= box.x + box.width && y >= box.y &&
           y <= box.y + box.height)
         return slot;
@@ -397,11 +502,10 @@ int homeCardAt(float x, float y, int count, float rowOffset) {
 float homeRowTarget(int selectedGame, int count) {
   // The row stops at the last game instead of wrapping, so the right edge is
   // flush with the seventh slot once the shelf reaches its end.
-  const float overflow =
-      std::max(0.0f, static_cast<float>(count) - kVisibleSlots);
-  const float start =
-      std::clamp(static_cast<float>(selectedGame) - (kVisibleSlots - 1.5f),
-                 0.0f, overflow);
+  const float slots = homeLayout().visibleSlots;
+  const float overflow = std::max(0.0f, static_cast<float>(count) - slots);
+  const float start = std::clamp(
+      static_cast<float>(selectedGame) - (slots - 1.5f), 0.0f, overflow);
   return start;
 }
 
@@ -409,20 +513,21 @@ void drawQuitConfirm(SDL_Renderer *renderer, int choice,
                      i18n::Language language,
                      const config::InputPrompts &prompts, SDL_Color accent) {
   using i18n::TextId;
-  drawConfirmFrame(renderer, kQuitLayout, tr(TextId::QuitConfirmTitle, language),
+  const ConfirmLayout layout = quitLayout();
+  drawConfirmFrame(renderer, layout, tr(TextId::QuitConfirmTitle, language),
                    tr(TextId::QuitConfirmBody, language), accent, 160);
-  drawChoiceButtons(renderer, kQuitLayout.buttons,
+  drawChoiceButtons(renderer, layout.buttons,
                     {tr(TextId::Cancel, language), tr(TextId::Quit, language)},
                     choice, accent);
   const std::vector<Hint> footer{
       {tr(TextId::Cancel, language), prompts.back, false},
       {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, kQuitLayout.footer.right(), kQuitLayout.footer.y,
-              footer, accent);
+  drawHintRow(renderer, layout.footer.right(), layout.footer.y, footer,
+              accent);
 }
 
 int quitConfirmChoiceAt(float x, float y) {
-  return kQuitLayout.buttons.hit(x, y);
+  return quitLayout().buttons.hit(x, y);
 }
 
 void moveSelection(int &selectedGame, int direction, int count) {

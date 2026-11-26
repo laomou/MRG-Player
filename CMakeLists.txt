@@ -38,6 +38,38 @@ elseif(NOT MRG_PLATFORM STREQUAL "desktop")
   message(FATAL_ERROR "MRG_PLATFORM must be desktop or brick, got ${MRG_PLATFORM}")
 endif()
 
+# Every screen draws on a canvas of logical pixels and the window is letterboxed
+# around it. The canvas follows the panel instead of a fixed 16:9 size: a 4:3
+# handheld draws its interface at 1024x768 and therefore never scales it by 0.8,
+# which is what turned its text to mush. Only the size differs; the layouts are
+# the same code. A preview build can ask for any other size.
+set(MRG_CANVAS_WIDTH "" CACHE STRING "Canvas width in logical pixels (default: 1280 desktop, 1024 brick)")
+set(MRG_CANVAS_HEIGHT "" CACHE STRING "Canvas height in logical pixels (default: 720 desktop, 768 brick)")
+if(MRG_PLATFORM STREQUAL "brick")
+  set(_mrg_default_canvas_width 1024)
+  set(_mrg_default_canvas_height 768)
+else()
+  set(_mrg_default_canvas_width 1280)
+  set(_mrg_default_canvas_height 720)
+endif()
+if(MRG_CANVAS_WIDTH STREQUAL "")
+  set(_mrg_canvas_width ${_mrg_default_canvas_width})
+else()
+  set(_mrg_canvas_width ${MRG_CANVAS_WIDTH})
+endif()
+if(MRG_CANVAS_HEIGHT STREQUAL "")
+  set(_mrg_canvas_height ${_mrg_default_canvas_height})
+else()
+  set(_mrg_canvas_height ${MRG_CANVAS_HEIGHT})
+endif()
+math(EXPR _mrg_canvas_width "${_mrg_canvas_width}")
+math(EXPR _mrg_canvas_height "${_mrg_canvas_height}")
+if(_mrg_canvas_width LESS 320 OR _mrg_canvas_height LESS 240 OR
+   _mrg_canvas_width GREATER 8192 OR _mrg_canvas_height GREATER 8192)
+  message(FATAL_ERROR "Canvas must be between 320x240 and 8192x8192, got ${_mrg_canvas_width}x${_mrg_canvas_height}")
+endif()
+message(STATUS "Canvas: ${_mrg_canvas_width}x${_mrg_canvas_height}")
+
 
 # An unset CMAKE_BUILD_TYPE leaves every target on the compiler's default,
 # which for GCC is -O0: the emulator then runs about five times slower than it
@@ -172,6 +204,12 @@ else()
 
   unset(CMAKE_POLICY_VERSION_MINIMUM)
 endif()
+
+# The canvas size is a property of the whole program, so every target that
+# compiles a screen - the player and the rendering test alike - sees the same
+# numbers. Third-party trees are added above this point and stay untouched.
+add_compile_definitions(MRG_CANVAS_WIDTH=${_mrg_canvas_width}
+                        MRG_CANVAS_HEIGHT=${_mrg_canvas_height})
 
 add_library(mrg-platform STATIC
   src/config/AppPaths.cpp

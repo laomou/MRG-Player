@@ -759,7 +759,7 @@ void drawPanel(SDL_Renderer *renderer, Rect bounds, float radius,
 void drawConfirmFrame(SDL_Renderer *renderer, const ConfirmLayout &layout,
                       const std::string &title, const std::string &body,
                       SDL_Color accent, Uint8 scrimAlpha) {
-  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 5, 12, scrimAlpha});
+  fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 5, 12, scrimAlpha});
   drawPanel(renderer, layout.bounds, 28, {12, 21, 37, 245},
             layout.bounds.translated(8, 10), {0, 0, 0, 70});
   const Rect heading = layout.heading;
@@ -856,8 +856,8 @@ void windowToCanvas(float windowX, float windowY, float &canvasX,
 void canvasRect(float &x, float &y, float &width, float &height) {
   x = gOffsetX;
   y = gOffsetY;
-  width = deviceLength(kLogicalWidth);
-  height = deviceLength(kLogicalHeight);
+  width = deviceLength(kCanvasWidth);
+  height = deviceLength(kCanvasHeight);
 }
 
 void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
@@ -866,8 +866,8 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
   // window size instead of being stretched by the renderer.
   const float left = gOffsetX;
   const float top = gOffsetY;
-  const float width = deviceLength(kLogicalWidth);
-  const float height = deviceLength(kLogicalHeight);
+  const float width = deviceLength(kCanvasWidth);
+  const float height = deviceLength(kCanvasHeight);
   const int rows = std::max(1, static_cast<int>(std::lround(height)));
   if (wallpaper != nullptr) {
     int textureWidth = 0;

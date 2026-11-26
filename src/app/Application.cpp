@@ -307,7 +307,7 @@ int Application::run(int argc, char **argv) {
   SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
   SDL_Window *window = SDL_CreateWindow(
       "MRG Player", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-      ui::kLogicalWidth, ui::kLogicalHeight,
+      ui::kCanvasWidth, ui::kCanvasHeight,
       SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
   if (window == nullptr) {
     std::fprintf(stderr, "SDL_CreateWindow failed: %s\n", SDL_GetError());
@@ -2485,10 +2485,10 @@ int Application::run(int argc, char **argv) {
         !bannerMessage.empty() && SDL_GetTicks64() < bannerUntil) {
       const int bannerWidth = ui::textWidth(bannerMessage, 1) + 44;
       const float bannerX =
-          (static_cast<float>(ui::kLogicalWidth) - bannerWidth) * 0.5f;
+          (static_cast<float>(ui::kCanvasWidth) - bannerWidth) * 0.5f;
       ui::rounded(renderer, bannerX, 30.0f, static_cast<float>(bannerWidth),
                   44.0f, 22.0f, {8, 16, 31, 230});
-      ui::centeredText(renderer, ui::kLogicalWidth / 2, 42, bannerMessage, 1,
+      ui::centeredText(renderer, ui::kCanvasWidth / 2, 42, bannerMessage, 1,
                        {255, 255, 255, 255});
     }
 

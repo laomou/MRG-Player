@@ -2,6 +2,7 @@
 
 #include "config/Settings.hpp"
 #include "ui/Controls.hpp"
+#include "ui/Layout.hpp"
 
 #include <SDL.h>
 
@@ -22,6 +23,14 @@ struct CoreRow {
   std::string size;
   bool installed = false;
 };
+
+// Horizontal bounds for the variable-width fields on a core row. Keeping them
+// together guarantees that a long filename is fitted before the status pill.
+struct CoreRowColumns {
+  Rect filename;
+  Rect status;
+};
+[[nodiscard]] CoreRowColumns coreRowColumns(const std::string &status);
 
 int settingCategoryCount();
 int settingRowCount(int category);

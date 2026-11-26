@@ -43,8 +43,12 @@ constexpr int kContentDescriptionY = kContentTop + 34;
 constexpr int kCompactStartY = kContentTop + 61;
 constexpr int kCompactStep = 27;
 constexpr int kRowHeight = 23;
+// The page keeps its left column and its right margin; only the width between
+// them changes, so the 1280x720 desktop keeps the exact pixels it had and a
+// narrower canvas narrows the rows instead of pushing them off screen.
 constexpr int kTrackX = 373;
-constexpr int kTrackWidth = 808;
+constexpr int kTrackRightInset = 99;
+const int kTrackWidth = kCanvasWidth - kTrackX - kTrackRightInset;
 constexpr int kFixedRowCount = 4;
 constexpr int kColumnGutter = 13;
 // Seven rows per column: the pad actions (A/B/X/Y/L/R with select and start)
@@ -73,12 +77,21 @@ constexpr int kInstallerRowCount = 5;
 constexpr int kCoreRowY = kContentTop + 80;
 constexpr int kCoreRowStep = 45;
 constexpr int kCoreRowHeight = 38;
-constexpr int kCoreRefreshX = 1064;
 constexpr int kCoreRefreshY = kContentTop - 2;
 constexpr int kCoreRefreshWidth = 117;
 constexpr int kCoreRefreshHeight = 27;
-constexpr int kCoreColumnCoreX = 720;
-constexpr int kCorePillRight = 1160;
+constexpr int kCoreColumnOffset = 347;
+constexpr int kCoreReferenceTrackWidth = 808;
+constexpr int kCoreColumnGap = 12;
+constexpr int kCorePillInset = 21;
+// Preserve the desktop column exactly, but let it move left with the narrower
+// track instead of leaving almost no room for filenames on the Brick canvas.
+const int kCoreColumnCoreX =
+    kTrackX + kTrackWidth * kCoreColumnOffset / kCoreReferenceTrackWidth;
+const int kCorePillRight = kTrackX + kTrackWidth - kCorePillInset;
+const int kCoreRefreshX = kTrackX + kTrackWidth - kCoreRefreshWidth;
+const int kFooterX = kCanvasWidth - 58;
+const int kFooterY = kCanvasHeight - 51;
 
 const LinearLayout kGeneralRows{
     {kTrackX, kGeneralRowY, kTrackWidth, kGeneralRowHeight},
@@ -226,6 +239,17 @@ TextId controllerStyleText(config::ControllerStyle style) {
 }
 
 } // namespace
+
+CoreRowColumns coreRowColumns(const std::string &status) {
+  const int statusWidth = textWidth(status, 1) + 26;
+  const int statusX = kCorePillRight - statusWidth;
+  const int filenameWidth =
+      std::max(0, statusX - kCoreColumnGap - kCoreColumnCoreX);
+  return {{static_cast<float>(kCoreColumnCoreX), 0.0f,
+           static_cast<float>(filenameWidth), 0.0f},
+          {static_cast<float>(statusX), 0.0f,
+           static_cast<float>(statusWidth), 0.0f}};
+}
 
 int settingCategoryCount() { return kCategoryCount; }
 
@@ -415,7 +439,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   const bool refreshRing = !railFocused && refreshFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game, time);
-  fill(renderer, 0, 0, kLogicalWidth, kLogicalHeight, {2, 8, 20, 128});
+  fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 8, 20, 128});
 
   rounded(renderer, 58, 46, 4, 26, 2, game.accent);
   text(renderer, 74, 43, "MRG PLAYER", 3, {255, 255, 255, 255});
@@ -449,9 +473,9 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                        : SDL_Color{165, 183, 199, 255});
   }
 
-  text(renderer, 373, kContentTitleY, tr(categoryText(category), language),
+  text(renderer, kTrackX, kContentTitleY, tr(categoryText(category), language),
        3, {255, 255, 255, 255});
-  text(renderer, 373, kContentDescriptionY,
+  text(renderer, kTrackX, kContentDescriptionY,
        tr(categoryDescription(category), language), 1, {144, 165, 184, 255});
 
   if (category == 0) {
@@ -619,16 +643,18 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
            entry.platform, 2,
            selected ? SDL_Color{255, 255, 255, 255}
                     : SDL_Color{232, 238, 246, 255});
-      text(renderer, kCoreColumnCoreX, textCenteredY(entry.core, centerY, 1),
-           entry.core, 1, {176, 193, 211, 255});
-      const int pillWidth = textWidth(entry.status, 1) + 26;
-      rounded(renderer, static_cast<float>(kCorePillRight - pillWidth),
-              static_cast<float>(y + 4), static_cast<float>(pillWidth), 30.0f,
-              15.0f,
+      const CoreRowColumns columns = coreRowColumns(entry.status);
+      const std::string fittedCore =
+          fitText(entry.core, static_cast<int>(columns.filename.w), 1);
+      text(renderer, static_cast<int>(columns.filename.x),
+           textCenteredY(fittedCore, centerY, 1), fittedCore, 1,
+           {176, 193, 211, 255});
+      rounded(renderer, columns.status.x, static_cast<float>(y + 4),
+              columns.status.w, 30.0f, 15.0f,
               entry.installed
                   ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
                   : SDL_Color{26, 40, 60, 180});
-      text(renderer, kCorePillRight - pillWidth + 13,
+      text(renderer, static_cast<int>(columns.status.x) + 13,
            textCenteredY(entry.status, y + 24, 1), entry.status, 1,
            entry.installed ? game.accent
                            : SDL_Color{150, 168, 188, 255});
@@ -639,8 +665,15 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    tr(TextId::AccentColour, language),
                    tr(TextId::AccentDescription, language), accentName,
                    game.accent, focusOpacity);
-    // A swatch so the choice reads as a colour and not only a name.
-    circle(renderer, 1136 - textWidth(accentName, 2) - 24, 365, 10,
+    // A swatch so the choice reads as a colour and not only a name. It sits
+    // just left of the value, on the row's centre line.
+    const Rect themeRow = kSettingRows.item(0);
+    const auto themeColumns = labelValueLayout(themeRow.inset(26, 0, 45, 0),
+                                              textWidth(accentName, 2));
+    circle(renderer,
+           static_cast<int>(themeColumns.value.right() -
+                            textWidth(accentName, 2) - 24),
+           static_cast<int>(themeRow.centerY()), 10,
            accentColor(settings.accent));
   } else if (category == 4) {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused,
@@ -674,7 +707,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     footer.push_back(
         {tr(TextId::ChangeControl, language), prompts.change, true});
   }
-  drawHintRow(renderer, 1222.0f, 669.0f, footer, game.accent);
+  drawHintRow(renderer, static_cast<float>(kFooterX),
+              static_cast<float>(kFooterY), footer, game.accent);
 }
 
 } // namespace launcher::ui

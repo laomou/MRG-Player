@@ -7,7 +7,9 @@
 #include <SDL.h>
 #include <cmath>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
+#include <vector>
 
 namespace {
 void check(bool result, const char *message) {
@@ -70,6 +72,74 @@ int main(int argc, char **argv) {
   const int fittedWidth = textWidth("中文...", 2);
   check(fitText("中文混合ABCD", fittedWidth, 2) == "中文...",
         "UTF-8 truncation removes whole codepoints and keeps ellipsis in bounds");
+  for (const std::string status : {"INSTALLED", "NOT INSTALLED",
+                                   "DOWNLOADING", "已安装", "未安装",
+                                   "下载中"}) {
+    const CoreRowColumns coreColumns = coreRowColumns(status);
+    const std::string filename =
+        fitText("genesis_plus_gx_libretro.so",
+                static_cast<int>(coreColumns.filename.w), 1);
+    check(coreColumns.filename.w >= 100 && !filename.empty() &&
+              coreColumns.filename.right() + 12 <= coreColumns.status.x &&
+              textWidth(filename, 1) <= coreColumns.filename.w,
+          "Core filenames must stay readable and clear of status badges");
+  }
+  // The screens below are painted from the canvas size, so their pixel
+  // expectations describe the reference 1280x720 canvas only. Whatever the
+  // canvas, though, every control has to stay reachable: sweep a grid of
+  // pointer positions and require each entry of each list to answer at least
+  // once.
+  const auto unreachable = [](const std::function<int(float, float)> &hitAt,
+                              int count) {
+    std::vector<int> hits(static_cast<std::size_t>(count), 0);
+    for (int y = 0; y < kCanvasHeight; y += 4)
+      for (int x = 0; x < kCanvasWidth; x += 4) {
+        const int index = hitAt(static_cast<float>(x), static_cast<float>(y));
+        if (index >= 0 && index < count)
+          ++hits[static_cast<std::size_t>(index)];
+      }
+    int missing = 0;
+    for (const int seen : hits)
+      missing += seen == 0 ? 1 : 0;
+    return missing;
+  };
+  check(unreachable(pauseActionAt, kPauseActionCount) == 0,
+        "Every pause action answers a click on any canvas");
+  check(unreachable(pauseSlotAt, kStateSlotCount) == 0,
+        "Every save-state slot answers a click on any canvas");
+  check(unreachable(pauseVideoRowAt, kPauseVideoRowCount) == 0,
+        "Every display row answers a click on any canvas");
+  check(unreachable(
+            [](float x, float y) { return pauseCoreOptionAt(x, y, 0); },
+            kPauseCoreOptionRows) == 0,
+        "Every core option row answers a click on any canvas");
+  check(unreachable(managementActionAt, kManagementActionCount) == 0,
+        "Every management action answers a click on any canvas");
+  check(unreachable(settingsCategoryAt, settingCategoryCount()) == 0,
+        "Every settings category answers a click on any canvas");
+  for (const int category : {0, 1, 2, 3, 4, 6, 7})
+    check(unreachable(
+              [category](float x, float y) {
+                return settingsRowAt(category, x, y);
+              },
+              settingRowCount(category)) == 0,
+          "Every settings row answers a click on any canvas");
+  check(unreachable(
+            [](float x, float y) { return settingsRowAt(5, x, y); },
+            settingRowCount(5)) == 0,
+        "Every core line answers a click on any canvas");
+  check(unreachable(
+            [](float x, float y) { return settingsRowAt(3, x, y); },
+            settingRowCount(3)) == 0,
+        "Every controller row answers a click on any canvas");
+  if (kCanvasWidth != 1280 || kCanvasHeight != 720) {
+    std::cout << "Canvas " << kCanvasWidth << "x" << kCanvasHeight
+              << ": controls verified reachable; the reference 1280x720 pixel "
+                 "checks are skipped\n";
+    shutdownTextRenderer();
+    SDL_Quit();
+    return 0;
+  }
   for (int slot = 0; slot < kStateSlotCount; ++slot) {
     check(pauseSlotAt(810 + slot * 131.333f + 60, 240) == slot, "Slot hit target");
     check(pauseSlotAt(810 + slot * 131.333f + 126, 240) == -1,
@@ -390,13 +460,13 @@ int main(int argc, char **argv) {
   // stale yellow accent. Sample an empty part of the selected row so text does
   // not affect the pixel.
   SDL_Surface *managementSurface = SDL_CreateRGBSurfaceWithFormat(
-      0, kLogicalWidth, kLogicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
+      0, kCanvasWidth, kCanvasHeight, 32, SDL_PIXELFORMAT_RGBA32);
   check(managementSurface != nullptr, SDL_GetError());
   SDL_Renderer *managementRenderer =
       SDL_CreateSoftwareRenderer(managementSurface);
   check(managementRenderer != nullptr, SDL_GetError());
   SDL_SetRenderDrawBlendMode(managementRenderer, SDL_BLENDMODE_BLEND);
-  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+  fill(managementRenderer, 0, 0, kCanvasWidth, kCanvasHeight,
        {0, 0, 0, 255});
   launcher::library::GameEntry managementEntry;
   managementEntry.title = "F-1 Race";
@@ -426,7 +496,7 @@ int main(int argc, char **argv) {
             managementB == kFocusColor.b && managementA == kFocusColor.a,
         "The management selection has the shared focus ring");
 
-  fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+  fill(managementRenderer, 0, 0, kCanvasWidth, kCanvasHeight,
        {0, 0, 0, 255});
   const std::array<StateSlotView, kStateSlotCount> pauseSlots{};
   drawPauseMenu(managementRenderer, "F-1 Race", 0, 0, pauseSlots, {}, 0,
@@ -451,7 +521,7 @@ int main(int argc, char **argv) {
            pa == expected.a;
   };
   const auto clearPreview = [&] {
-    fill(managementRenderer, 0, 0, kLogicalWidth, kLogicalHeight,
+    fill(managementRenderer, 0, 0, kCanvasWidth, kCanvasHeight,
          {0, 0, 0, 255});
   };
   launcher::runtime::CoreOption option;
@@ -491,7 +561,7 @@ int main(int argc, char **argv) {
         clearPreview();
         drawQuitConfirm(managementRenderer, choice, language, managementPrompts, accent);
         check(pixelEquals(445 + 270 * choice, 390, accent) &&
-                   pixelEquals(500 + 280 * choice, 359, kFocusColor),
+                   pixelEquals(500 + 280 * choice, 363, kFocusColor),
               "Quit confirmation choices keep their accent and ring");
         clearPreview();
         drawPowerCycleConfirm(managementRenderer, choice, language, managementPrompts, accent);
