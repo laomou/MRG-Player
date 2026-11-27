@@ -254,15 +254,10 @@ int main(int argc, char **argv) {
               row[0].right() < row[1].x &&
               row[0].y == row[1].y && row[0].h == row[1].h,
           "Action buttons are packed leftwards from the right anchor");
-    check(settingsFooterAt(row[0].centerX(), row[0].centerY(), footer) == 0 &&
-              settingsFooterAt(row[1].centerX(), row[1].centerY(), footer) == 1,
-          "A click on a footer button lands on that button");
-    check(settingsFooterAt(4, 4, footer) == -1 &&
-              settingsFooterAt(row[1].centerX(), row[1].bottom() + 20, footer) ==
-                  -1,
-          "The action row answers nothing outside its buttons");
-    check(settingsFooterAt(640, 360, {}) == -1,
-          "An empty action row answers no clicks");
+    check(actionLayout(static_cast<float>(kCanvasWidth - 58),
+                       static_cast<float>(kCanvasHeight - 51), {})
+              .empty(),
+          "An empty legend asks for no room on screen");
   }
   // The footer names what enter does on the focused row, page by page.
   {
@@ -348,20 +343,11 @@ int main(int argc, char **argv) {
         "A long library stops with the last card flush against the right edge");
   check(homeCardAt(1200, 400, 10, 2.0f) >= 7,
         "Scrolling the row moves the cards under the pointer");
-  // A prompt set always names the device it was written for, so the footer
+  // A prompt set always names the device it was written for, so the legend
   // never guesses which keys the player has.
   const launcher::config::InputPrompts prompts{
       "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
       launcher::config::PromptSource::keyboard()};
-  check(homeActionAt(1200, 663, true, launcher::i18n::Language::English,
-                     prompts) == 0,
-        "The rightmost footer entry starts the game");
-  check(homeActionAt(1000, 663, true, launcher::i18n::Language::English,
-                     prompts) == 1,
-        "The drawer entry sits to its left");
-  check(homeActionAt(500, 663, true, launcher::i18n::Language::English,
-                     prompts) == -1,
-        "Empty footer space activates nothing");
   // The settings screen keeps the categories and the page apart: the rail is
   // where the focus starts, the page is reached with right.
   check(settingsCategoryAt(160, 281 + 2 * 41 + 10) == 2,

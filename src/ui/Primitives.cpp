@@ -1457,19 +1457,12 @@ void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
 }
 
 namespace {
-// The badge is the same whether the row holds the keys or not: it answers
-// "which key", so the eye learns one shape for keys and the ring is the only
-// thing that ever moves.
+// The badge answers "which key", so the eye learns one shape for keys; the word
+// next to it is plain text.
 constexpr SDL_Color kKeyPlate{33, 45, 68, 255};
 constexpr SDL_Color kKeyInk{236, 243, 252, 255};
-constexpr SDL_Color kActionRim{72, 88, 116, 255};
 constexpr SDL_Color kActionInk{220, 230, 244, 255};
-constexpr SDL_Color kActionPlate{24, 52, 58, 230};
-constexpr SDL_Color kActionFocusInk{255, 255, 255, 255};
 constexpr float kActionRadius = 8.0f;
-// Three pixels of accent around a filled plate, not a ring: the frame owns the
-// keys while it is focused, so a line outside it would read as a second border.
-constexpr float kActionGlow = 3.0f;
 
 // A one-character key is a circle, the way a pad button is drawn; anything
 // spelled out keeps the rectangle the eye already reads as a keyboard key.
@@ -1515,9 +1508,7 @@ std::vector<Rect> actionLayout(float rightX, float y,
   return result;
 }
 
-void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action,
-                bool focused, float focusOpacity, SDL_Color accent) {
-  const float opacity = std::clamp(focusOpacity, 0.0f, 1.0f);
+void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action) {
   const float badge = keyBadgeWidth(action);
   const float centerX = x + badge * 0.5f;
   const float centerY = y + kActionHeight * 0.5f;
@@ -1530,40 +1521,21 @@ void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action,
   centeredGlyph(renderer, static_cast<int>(std::lround(centerX)),
                 static_cast<int>(std::lround(centerY)), action.key, 1, kKeyInk);
 
+  // The word is drawn straight onto the background: the key badge is the only
+  // shape in the strip, so the bottom of the screen never grows another row of
+  // boxes. The padding still counts as part of the entry, which is what gives
+  // the pointer something to aim at.
   const float frameX = x + badge + kActionKeyGap;
-  const float frameWidth = actionFrameWidth(action);
-  if (focused) {
-    SDL_Color glow = accent;
-    glow.a = static_cast<Uint8>(std::lround(60.0f * opacity));
-    roundedBand(renderer, frameX - kActionGlow, y - kActionGlow,
-                frameWidth + kActionGlow * 2.0f,
-                kActionHeight + kActionGlow * 2.0f,
-                kActionRadius + kActionGlow, kActionGlow, glow);
-    SDL_Color plate = kActionPlate;
-    plate.a = static_cast<Uint8>(std::lround(
-        static_cast<float>(kActionPlate.a) * opacity));
-    rounded(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
-            plate);
-    SDL_Color rim = accent;
-    rim.a = static_cast<Uint8>(std::lround(255.0f * opacity));
-    roundedBand(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
-                2.0f, rim);
-  } else {
-    roundedBand(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
-                1.0f, kActionRim);
-  }
   text(renderer, static_cast<int>(std::lround(frameX + kActionPadding)),
        textCenteredY(action.label, static_cast<int>(std::lround(centerY)), 1),
-       action.label, 1, focused ? kActionFocusInk : kActionInk);
+       action.label, 1, kActionInk);
 }
 
 void drawActionRow(SDL_Renderer *renderer, float rightX, float y,
-                   const std::vector<Hint> &actions, int focused,
-                   float focusOpacity, SDL_Color accent) {
+                   const std::vector<Hint> &actions) {
   const auto layout = actionLayout(rightX, y, actions);
   for (std::size_t index = 0; index < actions.size(); ++index)
-    drawAction(renderer, layout[index].x, layout[index].y, actions[index],
-               static_cast<int>(index) == focused, focusOpacity, accent);
+    drawAction(renderer, layout[index].x, layout[index].y, actions[index]);
 }
 
 // The shelf's card body: the gradient a card without box art shows.
