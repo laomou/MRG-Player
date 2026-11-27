@@ -78,6 +78,8 @@ void loadSettings(AppSettings &settings) {
       settings.runahead = std::clamp(value, 0, 3);
     else if (key == "accent")
       settings.accent = std::clamp(value, 0, 5);
+    else if (key == "led_lighting")
+      settings.ledLighting = value != 0;
     else if (key == "selected_game")
       settings.selectedGame = std::max(0, value);
     else if (key == "prompt_device")
@@ -134,6 +136,7 @@ void saveSettings(const AppSettings &settings) {
          << "rewind=" << (settings.rewind ? 1 : 0) << '\n'
          << "runahead=" << settings.runahead << '\n'
          << "accent=" << settings.accent << '\n'
+         << "led_lighting=" << (settings.ledLighting ? 1 : 0) << '\n'
          << "selected_game=" << settings.selectedGame << '\n'
          << "prompt_device=" << static_cast<int>(settings.promptDevice) << '\n'
          << "controller_style=" << static_cast<int>(settings.controllerStyle)

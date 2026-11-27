@@ -264,6 +264,10 @@ Dialogs are the one place with no key hints: they are just two buttons, cancel o
 
 Two controllers are supported at the same time. The controller rows above apply to both players, so each connected pad drives the player it was assigned to in Settings.
 
+On a TrimUI Brick the panel is read directly, so its buttons are the controller in the table. The two function keys are shortcuts of their own: **F1** saves the current slot and **F2** loads it while a game is running, and both are ignored in the menus because a slot only means something in a game. The firmware also watches these keys, so leave them unbound in the stock **Fnkey setting** app; binding a function there fires both actions at once.
+
+The case lighting follows the accent colour: the **THEME** page has an **LED LIGHTING** switch, the lights turn the accent colour while MRG Player runs, and the stock lighting is put back when it exits. This only applies where the Brick exposes the system LEDs, so desktop builds do not show the switch.
+
 Every platform uses the same keyboard and controller mapping. The eight console actions are forwarded to the core's joypad, turbo is applied in front of the core, and the pause menu, fast-forward, slow motion, rewind, frame stepping, and screenshots behave identically.
 
 Holding **Turbo A** or **Turbo B** repeats that button: the console sees it pressed for two frames and released for two, which is fifteen presses per second at the NTSC field rate. Turbo is a front-end feature and never reaches the emulator as a button of its own, so it works for any game that rewards rapid tapping, and a normal A or B press still wins while the turbo key is held.
