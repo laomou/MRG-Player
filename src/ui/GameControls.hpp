@@ -45,8 +45,7 @@ bool controlHelpBackAt(float x, float y);
 bool controlHelpBackEvent(const SDL_Event &event);
 int controlHelpPageStep(const SDL_Event &event);
 void drawControlHelp(SDL_Renderer *renderer, const ControlHelp &help, int page,
-                     i18n::Language language,
-                     const config::InputPrompts &prompts, SDL_Color accent);
+                     i18n::Language language, SDL_Color accent);
 
 // Elapsed gameplay time, not a deadline: starting at tick zero works too.
 float gameEntryHintOpacity(Uint64 elapsedMs);

@@ -32,12 +32,27 @@ const PauseLayout &pauseLayout() {
   static const PauseLayout layout = [] {
     constexpr float kMargin = 57.0f;
     constexpr float kPanelWidth = 442.0f;
+    // The card is exactly as tall as its nine rows: it floats in the middle of
+    // the canvas instead of running the full height with a key legend under the
+    // last row.
+    constexpr float kTopInset = 32.0f;
+    constexpr float kBottomInset = 24.0f;
+    constexpr float kHeaderHeight = 91.0f;
+    constexpr float kGap = 13.0f;
+    constexpr float kRowsTop = 130.0f;
+    constexpr float kRowHeight = 32.0f;
+    constexpr float kRowGap = 2.0f;
+    const float rowsHeight =
+        kPauseActionCount * kRowHeight + (kPauseActionCount - 1) * kRowGap;
+    const float panelHeight = kTopInset + kHeaderHeight + 2 * kGap + kRowsTop +
+                              rowsHeight + kBottomInset;
     const float width = static_cast<float>(kCanvasWidth);
     const float height = static_cast<float>(kCanvasHeight);
-    const Rect bounds{width - kMargin - kPanelWidth, 51.0f, kPanelWidth,
-                      height - 102.0f};
-    const PanelLayout panel =
-        panelLayout(bounds, bounds.inset(29, 32, 29, 3), 91, 21, 13);
+    const Rect bounds{width - kMargin - kPanelWidth, (height - panelHeight) / 2,
+                      kPanelWidth, panelHeight};
+    const PanelLayout panel = panelLayout(
+        bounds, bounds.inset(29, kTopInset, 29, kBottomInset), kHeaderHeight, 0,
+        kGap);
     const Rect &content = panel.content;
     PauseLayout out;
     out.panel = panel;
@@ -80,13 +95,6 @@ void drawSidebar(SDL_Renderer *renderer, const PauseLayout &layout,
        {245, 247, 252, 255});
   fill(renderer, header.x, header.bottom(), header.w, 1,
        {255, 255, 255, 30});
-}
-
-void drawSidebarFooter(SDL_Renderer *renderer, const PauseLayout &layout,
-                       const std::vector<Hint> &hints, SDL_Color accent) {
-  const Rect &footer = layout.panel.footer;
-  fill(renderer, footer.x, footer.y - 16, footer.w, 1, {255, 255, 255, 30});
-  drawHintRow(renderer, footer.right(), footer.y, hints, accent);
 }
 
 } // namespace
@@ -180,12 +188,8 @@ void drawPauseMenu(
          selected ? SDL_Color{24, 24, 39, 255} : SDL_Color{255, 255, 255, 255});
   }
 
-  // Two keys only: the one that acts and the one that leaves. Which key moves
-  // between the entries is never written down.
-  const std::vector<Hint> footer{
-      {tr(TextId::ResumeGame, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawSidebarFooter(renderer, layout, footer, accent);
+  // No key legend under the list: CONTINUE and RETURN HOME are rows of their
+  // own, so a strip naming the same two keys would repeat them.
 
   if (SDL_GetTicks64() < feedbackUntil && !feedback.empty()) {
     const Rect &toast = layout.toast;
@@ -222,7 +226,6 @@ int pauseVideoRowAt(float x, float y) {
 
 void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                          const PauseVideoState &video, i18n::Language language,
-                         const config::InputPrompts &prompts,
                          SDL_Color accent) {
   const PauseLayout &layout = pauseLayout();
   const PanelLayout &panel = layout.panel;
@@ -277,10 +280,6 @@ void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                static_cast<int>(panel.content.w), 1),
        1, {165, 181, 204, 255});
 
-  const std::vector<Hint> footer{
-      {tr(TextId::Back, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawSidebarFooter(renderer, layout, footer, accent);
 }
 
 int pauseActionAt(float x, float y) {
@@ -294,9 +293,7 @@ int pauseCoreOptionAt(float x, float y, int scroll) {
 
 void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
                                const runtime::CoreOptionList &options,
-                               i18n::Language language,
-                               const config::InputPrompts &prompts,
-                               SDL_Color accent) {
+                               i18n::Language language, SDL_Color accent) {
   const PauseLayout &layout = pauseLayout();
   const PanelLayout &panel = layout.panel;
   drawSidebar(renderer, layout, tr(TextId::CoreOptions, language), language,
@@ -349,15 +346,7 @@ void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
          static_cast<int>(rowsBottom + 23),
          std::to_string(cursor + 1) + " / " + std::to_string(total), 1,
          {165, 181, 204, 255});
-    drawHintRow(renderer, panel.content.right(),
-                static_cast<float>(rowsBottom + 55),
-                {{tr(TextId::ResetCoreOptions, language), "R", false}},
-                accent);
   }
-  const std::vector<Hint> footer{
-      {tr(TextId::Back, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawSidebarFooter(renderer, layout, footer, accent);
 }
 
 } // namespace launcher::ui

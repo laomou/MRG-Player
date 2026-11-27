@@ -22,7 +22,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
               float focusOpacity, SDL_Color accent,
-              CoverSource *covers = nullptr, bool showFooter = true);
+              CoverSource *covers = nullptr, bool showFooter = true,
+              bool showPills = true);
 void moveSelection(int &selectedGame, int direction, int count);
 
 // The action row has two entries -- start the game, manage it -- and no entry
