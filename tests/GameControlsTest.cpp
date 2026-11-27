@@ -142,6 +142,35 @@ void testGameControls(const char *fontPath) {
       check(SDL_SaveBMP(surface, path.string().c_str()) == 0, "Save UI snapshot");
     }
   };
+  // The CJK face carries no arrow glyphs. A missing glyph comes back as a
+  // hollow box, whose middle column holds ink only on its two borders, while a
+  // real arrow has a shaft running down the middle.
+  clear();
+  text(renderer, 40, 40, "↑", 3, {255, 255, 255, 255});
+  SDL_RenderPresent(renderer);
+  const auto inked = [&](int x, int y) {
+    const auto *row = reinterpret_cast<const Uint32 *>(
+        static_cast<const Uint8 *>(surface->pixels) + y * surface->pitch);
+    SDL_Color ink{};
+    SDL_GetRGBA(row[x], surface->format, &ink.r, &ink.g, &ink.b, &ink.a);
+    return ink.r > 180 && ink.g > 180 && ink.b > 180;
+  };
+  int left = 120, right = -1, top = 120, bottom = -1;
+  for (int y = 0; y < 120; ++y)
+    for (int x = 0; x < 120; ++x)
+      if (inked(x, y)) {
+        left = std::min(left, x);
+        right = std::max(right, x);
+        top = std::min(top, y);
+        bottom = std::max(bottom, y);
+      }
+  check(right > left && bottom > top, "Arrow glyph painted something");
+  int middle = 0;
+  for (int y = top; y <= bottom; ++y)
+    middle += inked((left + right) / 2, y) ? 1 : 0;
+  check(middle * 2 >= bottom - top,
+        "Arrows come from a face that has them instead of an empty box");
+
   bindings = config::defaultInputBindings();
   for (const auto language : {Language::English, Language::SimplifiedChinese}) {
     for (int theme = 0; theme < kAccentCount; ++theme) {

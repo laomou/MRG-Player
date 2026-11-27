@@ -390,6 +390,61 @@ TTF_Font *fontForScale(int scale, bool latin = false) {
   return font;
 }
 
+// Every run of one script is drawn with one face, so that face has to own every
+// code point in the run. The CJK face carries the ideographs but none of the
+// arrows or the middle dot, which the Latin face has; asking the face instead
+// of guessing from the byte range keeps those from turning into tofu boxes.
+// SDL_ttf 2.0.18 replaced the 16-bit glyph query with a 32-bit one, and the
+// Brick sysroot still ships 2.0.13, where a code point past the BMP cannot be
+// asked about at all.
+#if SDL_TTF_MAJOR_VERSION > 2 || SDL_TTF_MINOR_VERSION > 0 || \
+    SDL_TTF_PATCHLEVEL >= 18
+bool faceHasCodePoint(TTF_Font *font, Uint32 code) {
+  return TTF_GlyphIsProvided32(font, code) != 0;
+}
+#else
+bool faceHasCodePoint(TTF_Font *font, Uint32 code) {
+  return code <= 0xFFFFU &&
+         TTF_GlyphIsProvided(font, static_cast<Uint16>(code)) != 0;
+}
+#endif
+
+bool faceCovers(TTF_Font *font, const std::string &value) {
+  if (font == nullptr)
+    return false;
+  for (std::size_t i = 0; i < value.size();) {
+    const auto lead = static_cast<unsigned char>(value[i]);
+    Uint32 code = lead;
+    std::size_t length = 1;
+    if (lead >= 0xF0U) {
+      code = lead & 0x07U;
+      length = 4;
+    } else if (lead >= 0xE0U) {
+      code = lead & 0x0FU;
+      length = 3;
+    } else if (lead >= 0xC0U) {
+      code = lead & 0x1FU;
+      length = 2;
+    }
+    for (std::size_t extra = 1; extra < length && i + extra < value.size(); ++extra)
+      code = (code << 6) | (static_cast<unsigned char>(value[i + extra]) & 0x3FU);
+    if (!faceHasCodePoint(font, code))
+      return false;
+    i += length;
+  }
+  return true;
+}
+
+TTF_Font *fontForValue(int scale, const std::string &value) {
+  if (!requiresUtf8Font(value))
+    return fontForScale(scale, true);
+  TTF_Font *cjk = fontForScale(scale);
+  if (faceCovers(cjk, value))
+    return cjk;
+  TTF_Font *latin = fontForScale(scale, true);
+  return faceCovers(latin, value) ? latin : cjk;
+}
+
 void setColor(SDL_Renderer *renderer, SDL_Color color) {
   SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
 }
@@ -774,7 +829,7 @@ void drawBitmapText(SDL_Renderer *renderer, int x, int y,
 int utf8TextWidth(const std::string &value, int scale) {
   int width = 0;
   int height = 0;
-  TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
+  TTF_Font *font = fontForValue(scale, value);
   if (font == nullptr ||
       TTF_SizeUTF8(font, value.c_str(), &width, &height) != 0) {
     return bitmapTextAdvance(value, scale);
@@ -814,7 +869,7 @@ void textDevice(SDL_Renderer *renderer, int x, int y,
       ++end;
     }
     const std::string run = value.substr(begin, end - begin);
-    TTF_Font *font = fontForScale(scale, !utf8);
+    TTF_Font *font = fontForValue(scale, run);
     if (font == nullptr) {
       drawBitmapText(renderer, cursor, y, run, scale, color);
       cursor += bitmapTextAdvance(run, scale);
@@ -882,7 +937,7 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
     return;
   const int cx = static_cast<int>(std::lround(deviceX(centerX)));
   const int cy = static_cast<int>(std::lround(deviceY(centerY)));
-  TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
+  TTF_Font *font = fontForValue(scale, value);
   int width = 0;
   int height = 0;
   if (font == nullptr ||
@@ -901,7 +956,7 @@ void centeredGlyph(SDL_Renderer *renderer, int centerX, int centerY,
 int textCenteredY(const std::string &value, int centerY, int scale) {
   if (value.empty())
     return centerY;
-  TTF_Font *font = fontForScale(scale, !requiresUtf8Font(value));
+  TTF_Font *font = fontForValue(scale, value);
   int width = 0;
   int height = 0;
   if (font == nullptr ||
