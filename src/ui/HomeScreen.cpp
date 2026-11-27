@@ -285,8 +285,8 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
   if (hasGame) {
     // Confirming is the primary action, so it sits on the right where every
     // other screen puts it; the drawer is secondary and takes the left slot.
-    hints.push_back(
-        {i18n::tr(i18n::TextId::HintOptions, language), "X", false});
+    hints.push_back({i18n::tr(i18n::TextId::HintOptions, language),
+                     prompts.options, false});
     hints.push_back(
         {i18n::tr(i18n::TextId::ConfirmControl, language), prompts.confirm,
          true});

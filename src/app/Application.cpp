@@ -739,7 +739,10 @@ int Application::run(int argc, char **argv) {
         settings.promptDevice, lastInputDevice, controllerConnected);
   };
   auto currentPrompts = [&] {
-    return config::inputPrompts(currentPromptDevice(), resolvedControllerStyle());
+    // The bindings come along because the shelf's options drawer names the key
+    // bound to the pad's X button rather than a menu key of its own.
+    return config::inputPrompts(currentPromptDevice(), resolvedControllerStyle(),
+                                &settings.input);
   };
   // The settings page drops the shortcuts a key owns once the prompts come
   // from a pad: rewind and the binding reset answer to keys a pad never sends.
@@ -2020,7 +2023,10 @@ int Application::run(int argc, char **argv) {
         const std::size_t player =
             static_cast<std::size_t>(std::clamp(settings.bindingsPlayer, 0, 1));
         if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-          if (event.key.keysym.sym != SDLK_ESCAPE) {
+          const bool escape = event.key.keysym.sym == SDLK_ESCAPE;
+          // Player 1 is the port with a keyboard; on player 2's page a key has
+          // nothing to bind, so the capture waits for a pad button instead.
+          if (player == 0 && !escape) {
             const std::size_t index = static_cast<std::size_t>(settingRow - 4);
             config::keyboardBindings(settings.input, player)[index] =
                 event.key.keysym.sym;
@@ -2028,7 +2034,8 @@ int Application::run(int argc, char **argv) {
             if (activeRuntime)
               activeRuntime->setInputBindings(settings.input);
           }
-          bindingCapture = false;
+          if (player == 0 || escape)
+            bindingCapture = false;
           continue;
         }
         if (event.type == SDL_CONTROLLERBUTTONDOWN) {
@@ -2347,7 +2354,12 @@ int Application::run(int argc, char **argv) {
       case SDL_KEYDOWN: {
         if (event.key.repeat != 0)
           break;
-        const SDL_Keycode key = event.key.keysym.sym;
+        // A key bound to a face button or the d-pad means here what it means
+        // in a game. The shelf, the settings page and the drawers answer to
+        // the pad's buttons, so the keys standing in for them are translated
+        // before any screen sees them.
+        const SDL_Keycode key =
+            config::launcherMenuKey(settings.input, event.key.keysym.sym);
         if (screen == Screen::Home) {
           if ((key == SDLK_LEFT || key == SDLK_RIGHT) &&
               homeFocus == ui::HomeFocus::Pills) {

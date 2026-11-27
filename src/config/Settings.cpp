@@ -23,10 +23,6 @@ constexpr std::array<const char *, config::kInputActionCount> kPadNames{
     "pad_a",    "pad_b",    "pad_select",  "pad_start",   "pad_up",
     "pad_down", "pad_left", "pad_right",   "pad_turbo_a", "pad_turbo_b",
     "pad_x",    "pad_y",    "pad_l",       "pad_r"};
-constexpr std::array<const char *, config::kInputActionCount> kKey2Names{
-    "key2_a",    "key2_b",    "key2_select",  "key2_start",   "key2_up",
-    "key2_down", "key2_left", "key2_right",   "key2_turbo_a", "key2_turbo_b",
-    "key2_x",    "key2_y",    "key2_l",       "key2_r"};
 constexpr std::array<const char *, config::kInputActionCount> kPad2Names{
     "pad2_a",    "pad2_b",    "pad2_select",  "pad2_start",   "pad2_up",
     "pad2_down", "pad2_left", "pad2_right",   "pad2_turbo_a", "pad2_turbo_b",
@@ -104,9 +100,6 @@ void loadSettings(AppSettings &settings) {
                  value < SDL_CONTROLLER_BUTTON_MAX)
           settings.input.controller[index] =
               static_cast<SDL_GameControllerButton>(value);
-        else if (key == kKey2Names[index] && value >= 0)
-          settings.input.keyboardPlayer2[index] =
-              static_cast<SDL_Keycode>(value);
         else if (key == kPad2Names[index] && value >= 0 &&
                  value < SDL_CONTROLLER_BUTTON_MAX)
           settings.input.controllerPlayer2[index] =
@@ -114,7 +107,6 @@ void loadSettings(AppSettings &settings) {
       }
     }
   }
-  (void)config::migrateLegacyKeyboardDefaults(settings.input);
 }
 
 void saveSettings(const AppSettings &settings) {
@@ -151,8 +143,6 @@ void saveSettings(const AppSettings &settings) {
     output << kKeyNames[index] << '=' << settings.input.keyboard[index] << '\n'
            << kPadNames[index] << '='
            << static_cast<int>(settings.input.controller[index]) << '\n'
-           << kKey2Names[index] << '=' << settings.input.keyboardPlayer2[index]
-           << '\n'
            << kPad2Names[index] << '='
            << static_cast<int>(settings.input.controllerPlayer2[index]) << '\n';
   }
