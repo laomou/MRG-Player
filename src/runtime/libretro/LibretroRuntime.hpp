@@ -33,6 +33,10 @@ public:
   LibretroRuntime &operator=(const LibretroRuntime &) = delete;
 
   bool load(const library::GameEntry &game, SDL_Renderer *renderer, int volume) override;
+
+  // The SDL pixel format that hands the core's own pixels to the driver: the
+  // frame is uploaded as it arrives instead of being converted first.
+  [[nodiscard]] static std::uint32_t sdlPixelFormatFor(unsigned retroFormat) noexcept;
   void stop() override;
   void handleEvent(const SDL_Event &event) override;
   void handleRawJoystickEvent(const SDL_Event &event) override;
@@ -163,7 +167,7 @@ private:
   std::string systemDirectory_;
   std::string saveDirectory_;
   std::vector<std::uint8_t> romBytes_;
-  std::vector<std::uint32_t> frame_;
+  std::uint32_t textureFormat_ = 0;
   std::vector<std::uint8_t> stateBuffer_;
   std::vector<std::uint8_t> runaheadBuffer_;
   // Reused audio scratch space: the core hands over a batch sixty times a

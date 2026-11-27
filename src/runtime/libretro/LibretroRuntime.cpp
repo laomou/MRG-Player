@@ -283,7 +283,7 @@ void LibretroRuntime::stop() {
   systemDirectory_.clear();
   saveDirectory_.clear();
   romBytes_.clear();
-  frame_.clear();
+  textureFormat_ = 0;
   stateBuffer_.clear();
   audioScaled_.clear();
   audioConverted_.clear();
@@ -766,6 +766,18 @@ struct ChannelTables {
 constexpr ChannelTables kChannels{};
 } // namespace
 
+std::uint32_t LibretroRuntime::sdlPixelFormatFor(unsigned retroFormat) noexcept {
+  switch (retroFormat) {
+  case RETRO_PIXEL_FORMAT_RGB565:
+    return SDL_PIXELFORMAT_RGB565;
+  case RETRO_PIXEL_FORMAT_0RGB1555:
+    return SDL_PIXELFORMAT_RGB555;
+  case RETRO_PIXEL_FORMAT_XRGB8888:
+  default:
+    return SDL_PIXELFORMAT_XRGB8888;
+  }
+}
+
 void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height, std::size_t pitch) {
   // Runahead runs throw-away frames before the one that is shown; they must
   // not reach the texture at all.
@@ -773,72 +785,30 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
     return;
   if (width == 0 || height == 0)
     return;
-  // The buffer is sized from the frame the core just handed over, never from
-  // the geometry it announced earlier: SET_GEOMETRY may advertise a larger
-  // picture before a frame of that size exists, and the copy below writes
-  // width * height pixels whatever width_ happens to say.
-  const std::size_t required =
-      static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
-  if (required > kMaximumFramePixels)
+  if (static_cast<std::size_t>(width) * static_cast<std::size_t>(height) > kMaximumFramePixels)
     return;
-  if (frame_.size() != required) {
-    frame_.assign(required, 0xFF000000U);
-    if (texture_ != nullptr) {
-      SDL_DestroyTexture(texture_);
-      texture_ = nullptr;
-    }
-  }
-  width_ = width;
-  height_ = height;
   if (data == nullptr || renderer_ == nullptr)
     return;
-  const auto *source = static_cast<const std::uint8_t *>(data);
-  // One loop per pixel format: the format is a loop invariant, so testing it
-  // inside the inner loop only costs a branch per pixel of a frame that is
-  // converted sixty times a second. Each channel is expanded through a table
-  // built at compile time, which is one load instead of two shifts and an or:
-  // on the build machine that took a 256x240 frame from 90 us to 55 us and a
-  // 512x448 frame from 310 us to 199 us. SDL_ConvertPixels was measured on the
-  // same frames and came out slower, between a third and two thirds of the hand
-  // written loop, so the frame does not go through it.
-  if (pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888) {
-    for (unsigned y = 0; y < height; ++y) {
-      const auto *pixels = reinterpret_cast<const std::uint32_t *>(
-          source + static_cast<std::size_t>(y) * pitch);
-      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
-      for (unsigned x = 0; x < width; ++x)
-        target[x] = pixels[x] | 0xFF000000U;
-    }
-  } else if (pixelFormat_ == RETRO_PIXEL_FORMAT_RGB565) {
-    for (unsigned y = 0; y < height; ++y) {
-      const auto *pixels = reinterpret_cast<const std::uint16_t *>(
-          source + static_cast<std::size_t>(y) * pitch);
-      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
-      for (unsigned x = 0; x < width; ++x) {
-        const std::uint32_t pixel = pixels[x];
-        target[x] = 0xFF000000U | (kChannels.five[(pixel >> 11) & 0x1FU] << 16) |
-                    (kChannels.six[(pixel >> 5) & 0x3FU] << 8) | kChannels.five[pixel & 0x1FU];
-      }
-    }
-  } else {
-    for (unsigned y = 0; y < height; ++y) {
-      const auto *pixels = reinterpret_cast<const std::uint16_t *>(
-          source + static_cast<std::size_t>(y) * pitch);
-      std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
-      for (unsigned x = 0; x < width; ++x) {
-        const std::uint32_t pixel = pixels[x];
-        target[x] = 0xFF000000U | (kChannels.five[(pixel >> 10) & 0x1FU] << 16) |
-                    (kChannels.five[(pixel >> 5) & 0x1FU] << 8) | kChannels.five[pixel & 0x1FU];
-      }
-    }
-  }
-  if (texture_ == nullptr) {
-    texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, width_, height_);
+  // The frame goes to the driver in the core's own pixel format. Converting it
+  // first would cost a full read, a full write and a second copy of the whole
+  // picture, and SDL uploads packed 32/16-bit rows as they are.
+  const std::uint32_t format = sdlPixelFormatFor(pixelFormat_);
+  if (texture_ == nullptr || textureFormat_ != format || width_ != width || height_ != height) {
+    if (texture_ != nullptr)
+      SDL_DestroyTexture(texture_);
+    texture_ = SDL_CreateTexture(renderer_, format, SDL_TEXTUREACCESS_STREAMING,
+                                static_cast<int>(width), static_cast<int>(height));
+    textureFormat_ = texture_ != nullptr ? format : 0;
     if (texture_ == nullptr)
       return;
     SDL_SetTextureScaleMode(texture_, SDL_ScaleModeNearest);
+    // A console frame is opaque: blending a full screen of pixels would only
+    // cost the driver work that cannot change the result.
+    SDL_SetTextureBlendMode(texture_, SDL_BLENDMODE_NONE);
   }
-  (void)SDL_UpdateTexture(texture_, nullptr, frame_.data(), static_cast<int>(width_ * sizeof(std::uint32_t)));
+  width_ = width;
+  height_ = height;
+  (void)SDL_UpdateTexture(texture_, nullptr, data, static_cast<int>(pitch));
 }
 
 std::size_t LibretroRuntime::onAudio(const std::int16_t *data, std::size_t frames) {
@@ -1224,11 +1194,34 @@ void LibretroRuntime::writeStateMetadata(const std::string &path) const {
   std::ostringstream meta;
   meta << "epoch=" << static_cast<std::uint64_t>(std::time(nullptr)) << '\n' << "frames=" << frameCount_ << '\n';
   writeTextFile(path + ".meta", meta.str());
-  if (frame_.empty() || width_ == 0 || height_ == 0)
+  if (texture_ == nullptr || renderer_ == nullptr || width_ == 0 || height_ == 0)
+    return;
+  // The picture lives in the driver, so it is read back through a temporary
+  // target exactly once, when a state is saved, rather than kept in memory for
+  // every frame that is never going to be a thumbnail.
+  SDL_Texture *target = SDL_CreateTexture(
+      renderer_, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET,
+      static_cast<int>(width_), static_cast<int>(height_));
+  if (target == nullptr)
+    return;
+  SDL_Texture *previous = SDL_GetRenderTarget(renderer_);
+  if (SDL_SetRenderTarget(renderer_, target) != 0) {
+    SDL_DestroyTexture(target);
+    return;
+  }
+  SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+  SDL_RenderClear(renderer_);
+  SDL_RenderCopy(renderer_, texture_, nullptr, nullptr);
+  std::vector<std::uint32_t> pixels(static_cast<std::size_t>(width_) * height_);
+  const bool read = SDL_RenderReadPixels(
+                        renderer_, nullptr, SDL_PIXELFORMAT_ARGB8888,
+                        pixels.data(), static_cast<int>(width_ * sizeof(std::uint32_t))) == 0;
+  SDL_SetRenderTarget(renderer_, previous);
+  SDL_DestroyTexture(target);
+  if (!read)
     return;
   SDL_Surface *thumbnail = SDL_CreateRGBSurfaceWithFormatFrom(
-      const_cast<std::uint32_t *>(frame_.data()), static_cast<int>(width_),
-      static_cast<int>(height_), 32,
+      pixels.data(), static_cast<int>(width_), static_cast<int>(height_), 32,
       static_cast<int>(width_ * sizeof(std::uint32_t)), SDL_PIXELFORMAT_ARGB8888);
   if (thumbnail == nullptr)
     return;

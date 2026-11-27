@@ -28,6 +28,11 @@ retro_input_poll_t inputPoll = nullptr;
 retro_core_option_v2_definition optionDefinitions[3] = {};
 retro_core_option_v2_category optionCategories[2] = {};
 std::vector<std::uint32_t> framebuffer;
+std::vector<std::uint16_t> packedFramebuffer;
+// The format is XRGB8888 unless the test asks for a packed one: the front end
+// has to give the driver the core's own pixels, so every format has to arrive
+// on screen without a conversion pass.
+retro_pixel_format pixelFormat = RETRO_PIXEL_FORMAT_XRGB8888;
 std::vector<std::uint8_t> rom;
 std::uint16_t saveRam[kSaveRamSize] = {};
 unsigned frameCounter = 0;
@@ -37,7 +42,7 @@ bool loaded = false;
 void pokeEnvironment() {
   if (environment == nullptr)
     return;
-  retro_pixel_format format = RETRO_PIXEL_FORMAT_XRGB8888;
+  retro_pixel_format format = pixelFormat;
   environment(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format);
 }
 
@@ -135,6 +140,12 @@ void retro_reset(void) {
 }
 
 bool retro_load_game(const struct retro_game_info *game) {
+  pixelFormat = RETRO_PIXEL_FORMAT_XRGB8888;
+  const char *requested = std::getenv("MRG_STUB_PIXEL_FORMAT");
+  if (requested != nullptr && std::strcmp(requested, "rgb565") == 0)
+    pixelFormat = RETRO_PIXEL_FORMAT_RGB565;
+  else if (requested != nullptr && std::strcmp(requested, "rgb1555") == 0)
+    pixelFormat = RETRO_PIXEL_FORMAT_0RGB1555;
   pokeEnvironment();
   declareOptions();
   // Real cores read retro_game_info::path, so a front end that leaves it null
@@ -142,6 +153,7 @@ bool retro_load_game(const struct retro_game_info *game) {
   if (game == nullptr || game->path == nullptr)
     return false;
   framebuffer.assign(static_cast<std::size_t>(kWidth) * kHeight, 0xFF000000U);
+  packedFramebuffer.assign(static_cast<std::size_t>(kWidth) * kHeight, 0);
   rom.clear();
   if (game != nullptr && game->data != nullptr && game->size != 0) {
     const auto *bytes = static_cast<const std::uint8_t *>(game->data);
@@ -196,11 +208,27 @@ void retro_run(void) {
   }
   // Bright enough to see in a screenshot: green, with the frame counter and the
   // input bitmask in the low channels.
-  const std::uint32_t colour = 0xFF000000U | (0xC0U << 8) | (frameCounter & 0xFFU) | ((lastInput & 0xFFU) << 16);
-  for (std::uint32_t &pixel : framebuffer)
-    pixel = colour;
-  if (video != nullptr)
-    video(framebuffer.data(), kWidth, kHeight, kWidth * sizeof(std::uint32_t));
+  if (pixelFormat == RETRO_PIXEL_FORMAT_XRGB8888) {
+    const std::uint32_t colour =
+        0xFF000000U | (0xC0U << 8) | (frameCounter & 0xFFU) | ((lastInput & 0xFFU) << 16);
+    for (std::uint32_t &pixel : framebuffer)
+      pixel = colour;
+    if (video != nullptr)
+      video(framebuffer.data(), kWidth, kHeight, kWidth * sizeof(std::uint32_t));
+  } else if (pixelFormat == RETRO_PIXEL_FORMAT_RGB565) {
+    const std::uint16_t colour = static_cast<std::uint16_t>((0x30U << 5) | (frameCounter & 0x1FU));
+    for (std::uint16_t &pixel : packedFramebuffer)
+      pixel = colour;
+    if (video != nullptr)
+      video(packedFramebuffer.data(), kWidth, kHeight, kWidth * sizeof(std::uint16_t));
+  } else {
+    const std::uint16_t colour =
+        static_cast<std::uint16_t>((0x18U << 10) | (0x18U << 5) | (frameCounter & 0x1FU));
+    for (std::uint16_t &pixel : packedFramebuffer)
+      pixel = colour;
+    if (video != nullptr)
+      video(packedFramebuffer.data(), kWidth, kHeight, kWidth * sizeof(std::uint16_t));
+  }
   if (audioBatch != nullptr) {
     std::int16_t samples[64 * 2];
     for (std::size_t index = 0; index < 128; ++index)
