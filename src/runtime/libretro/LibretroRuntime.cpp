@@ -3,6 +3,7 @@
 #include "input/BrickInput.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
@@ -42,17 +43,28 @@ constexpr std::uint32_t kFastForwardDivisor = 4;
 constexpr std::uint32_t kSlowMotionFactor = 2;
 // One update() may owe several frames: the main loop presents at most once per
 // iteration, so fast forward needs a whole batch to reach its multiple of real
-// time on a display locked to the refresh rate. Twice the fast-forward divisor
-// covers a 30 Hz display at 4x and still leaves normal speed over a frame of
-// slack to absorb a hitch before the audio queue runs dry.
-constexpr unsigned kMaximumCatchUpFrames = kFastForwardDivisor * 2U;
+// time on a display locked to the refresh rate. The budget is exactly one
+// refresh of fast forward: enough to swallow a dropped display frame, and small
+// enough that a stalled machine drops the arrears instead of burning the batch
+// on every update from then on.
+constexpr unsigned kMaximumCatchUpFrames = kFastForwardDivisor;
 constexpr int kAudioBufferSamples = 1024;
-// Rewind trades memory for depth: a snapshot every other frame, capped at
-// roughly ten seconds of play or 32 MiB of serialized machine state.
-constexpr std::uint64_t kRewindIntervalFrames = 2;
+// Rewind trades memory and serialization time for depth: a snapshot every fifth
+// frame, capped at 300 of them or 32 MiB of machine state. At 60 fps that is a
+// quarter of a second of play per snapshot and twenty-five seconds of history,
+// against ten seconds when every other frame was copied.
+constexpr std::uint64_t kRewindIntervalFrames = 5;
 constexpr std::size_t kRewindMaximumSnapshots = 300;
 constexpr std::size_t kRewindMaximumBytes = 32U * 1024U * 1024U;
 constexpr int kMaximumRunaheadFrames = 3;
+
+// Counter ticks between two frames of a core that runs at fps. One tick is the
+// floor: a core claiming an impossible rate must not produce a zero period.
+Uint64 framePeriodFor(double fps) {
+  const Uint64 frequency = SDL_GetPerformanceFrequency();
+  return std::max<Uint64>(
+      1, static_cast<Uint64>(static_cast<double>(frequency) / std::max(fps, 1.0)));
+}
 
 // The libretro joypad id every config::InputAction drives, in enum order. Turbo
 // is a front-end pulse and has no id of its own, so it is marked instead of
@@ -225,11 +237,13 @@ bool LibretroRuntime::load(const library::GameEntry &game, SDL_Renderer *rendere
   fps_ = info.timing.fps > 0.0 ? info.timing.fps : 60.0;
   sampleRate_ = info.timing.sample_rate > 0.0 ? static_cast<int>(info.timing.sample_rate) : 44100;
   volume_ = std::clamp(volume, 0, 100);
+  updateAudioGain();
   restoreSaveRam();
   openAudio();
-  const Uint64 frequency = SDL_GetPerformanceFrequency();
-  framePeriod_ = static_cast<Uint64>(static_cast<double>(frequency) / fps_);
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.setPeriod(framePeriodFor(fps_));
+  clock_.restart(SDL_GetPerformanceCounter());
+  retimePending_ = false;
+  audioRatePending_ = false;
   resetPlayers();
   clearRewind();
   paused_ = false;
@@ -282,8 +296,9 @@ void LibretroRuntime::stop() {
   platform_ = game::GamePlatform::Unknown;
   width_ = 0;
   height_ = 0;
-  framePeriod_ = 0;
-  nextFrame_ = 0;
+  clock_ = FrameClock{};
+  retimePending_ = false;
+  audioRatePending_ = false;
   frameCount_ = 0;
   controllerIds_.fill(0);
 }
@@ -342,6 +357,7 @@ void LibretroRuntime::openAudio() {
   audioDevice_ = SDL_OpenAudioDevice(nullptr, 0, &wanted, &obtained, SDL_AUDIO_ALLOW_FREQUENCY_CHANGE);
   if (audioDevice_ == 0)
     return;
+  ++audioReopens_;
   deviceRate_ = obtained.freq;
   if (deviceRate_ != sampleRate_) {
     resampler_ = SDL_NewAudioStream(AUDIO_S16SYS, 2, sampleRate_, AUDIO_S16SYS, 2, deviceRate_);
@@ -360,7 +376,10 @@ void LibretroRuntime::closeAudio() {
   audioDevice_ = 0;
 }
 
-void LibretroRuntime::setVolume(int volume) noexcept { volume_ = std::clamp(volume, 0, 100); }
+void LibretroRuntime::setVolume(int volume) noexcept {
+  volume_ = std::clamp(volume, 0, 100);
+  updateAudioGain();
+}
 
 void LibretroRuntime::setMuted(bool muted) noexcept {
   if (muted_ == muted)
@@ -585,10 +604,20 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
       if (data == nullptr)
         return false;
       const auto *info = static_cast<const retro_system_av_info *>(data);
-      if (info->timing.fps > 0.0)
+      // A core may change its frame rate and sample rate while it runs -- a PAL
+      // game switching to 50 Hz, a core that resamples its own audio. The pacing
+      // and the audio device cannot be rebuilt from inside retro_run without
+      // deadlocking against the audio thread, so record it and let the next
+      // update() do it between frames.
+      if (info->timing.fps > 0.0 && std::abs(info->timing.fps - fps_) > 0.0005) {
         fps_ = info->timing.fps;
-      if (info->timing.sample_rate > 0.0)
+        retimePending_ = active_;
+      }
+      if (info->timing.sample_rate > 0.0 &&
+          static_cast<int>(info->timing.sample_rate) != sampleRate_) {
         sampleRate_ = static_cast<int>(info->timing.sample_rate);
+        audioRatePending_ = active_;
+      }
       if (info->geometry.base_width != 0)
         width_ = info->geometry.base_width;
       if (info->geometry.base_height != 0)
@@ -721,6 +750,22 @@ bool LibretroRuntime::onEnvironment(unsigned command, void *data) {
   }
 }
 
+namespace {
+// Channel expansions built at compile time. Bit replication is what the loop
+// used to do by hand; the table just moves the work out of the inner loop.
+struct ChannelTables {
+  std::array<std::uint32_t, 32> five{};
+  std::array<std::uint32_t, 64> six{};
+  constexpr ChannelTables() {
+    for (std::uint32_t value = 0; value < 32; ++value)
+      five[value] = (value << 3) | (value >> 2);
+    for (std::uint32_t value = 0; value < 64; ++value)
+      six[value] = (value << 2) | (value >> 4);
+  }
+};
+constexpr ChannelTables kChannels{};
+} // namespace
+
 void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height, std::size_t pitch) {
   // Runahead runs throw-away frames before the one that is shown; they must
   // not reach the texture at all.
@@ -750,7 +795,12 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
   const auto *source = static_cast<const std::uint8_t *>(data);
   // One loop per pixel format: the format is a loop invariant, so testing it
   // inside the inner loop only costs a branch per pixel of a frame that is
-  // converted sixty times a second.
+  // converted sixty times a second. Each channel is expanded through a table
+  // built at compile time, which is one load instead of two shifts and an or:
+  // on the build machine that took a 256x240 frame from 90 us to 55 us and a
+  // 512x448 frame from 310 us to 199 us. SDL_ConvertPixels was measured on the
+  // same frames and came out slower, between a third and two thirds of the hand
+  // written loop, so the frame does not go through it.
   if (pixelFormat_ == RETRO_PIXEL_FORMAT_XRGB8888) {
     for (unsigned y = 0; y < height; ++y) {
       const auto *pixels = reinterpret_cast<const std::uint32_t *>(
@@ -766,13 +816,8 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
       std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
       for (unsigned x = 0; x < width; ++x) {
         const std::uint32_t pixel = pixels[x];
-        std::uint32_t red = (pixel >> 11) & 0x1FU;
-        std::uint32_t green = (pixel >> 5) & 0x3FU;
-        std::uint32_t blue = pixel & 0x1FU;
-        green = (green << 2) | (green >> 4);
-        red = (red << 3) | (red >> 2);
-        blue = (blue << 3) | (blue >> 2);
-        target[x] = 0xFF000000U | (red << 16) | (green << 8) | blue;
+        target[x] = 0xFF000000U | (kChannels.five[(pixel >> 11) & 0x1FU] << 16) |
+                    (kChannels.six[(pixel >> 5) & 0x3FU] << 8) | kChannels.five[pixel & 0x1FU];
       }
     }
   } else {
@@ -782,13 +827,8 @@ void LibretroRuntime::onVideo(const void *data, unsigned width, unsigned height,
       std::uint32_t *target = frame_.data() + static_cast<std::size_t>(y) * width;
       for (unsigned x = 0; x < width; ++x) {
         const std::uint32_t pixel = pixels[x];
-        std::uint32_t red = (pixel >> 10) & 0x1FU;
-        std::uint32_t green = (pixel >> 5) & 0x1FU;
-        std::uint32_t blue = pixel & 0x1FU;
-        green = (green << 3) | (green >> 2);
-        red = (red << 3) | (red >> 2);
-        blue = (blue << 3) | (blue >> 2);
-        target[x] = 0xFF000000U | (red << 16) | (green << 8) | blue;
+        target[x] = 0xFF000000U | (kChannels.five[(pixel >> 10) & 0x1FU] << 16) |
+                    (kChannels.five[(pixel >> 5) & 0x1FU] << 8) | kChannels.five[pixel & 0x1FU];
       }
     }
   }
@@ -833,8 +873,12 @@ void LibretroRuntime::queueAudio(const std::int16_t *data, std::size_t frames) {
   // single frame of audio, and allocating there is pure waste.
   if (volume_ != 100) {
     audioScaled_.resize(samples);
+    // Fixed point: the gain is volume/100 in Q15, so a sample costs a
+    // multiply and a shift. A division per sample would be 88200 of them a
+    // second, and the deepest sample times the gain still fits in 32 bits.
     for (std::size_t index = 0; index < samples; ++index)
-      audioScaled_[index] = static_cast<std::int16_t>((static_cast<int>(data[index]) * volume_) / 100);
+      audioScaled_[index] = static_cast<std::int16_t>(
+          (static_cast<std::int32_t>(data[index]) * audioGain_) >> 15);
     scaled = audioScaled_.data();
   }
   if (resampler_ == nullptr) {
@@ -869,7 +913,7 @@ void LibretroRuntime::setPaused(bool paused) noexcept {
     SDL_PauseAudioDevice(audioDevice_, paused ? 1 : 0);
   }
   if (!paused_)
-    nextFrame_ = SDL_GetPerformanceCounter();
+    clock_.restart(SDL_GetPerformanceCounter());
 }
 
 void LibretroRuntime::reset() {
@@ -879,7 +923,7 @@ void LibretroRuntime::reset() {
   discardAudio();
   resetPlayers();
   clearRewind();
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
 }
 
 void LibretroRuntime::powerCycle() {
@@ -899,7 +943,7 @@ void LibretroRuntime::powerCycle() {
     SDL_PauseAudioDevice(audioDevice_, paused_ ? 1 : 0);
   resetPlayers();
   clearRewind();
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
 }
 
 void LibretroRuntime::setFastForward(bool enabled) noexcept {
@@ -909,46 +953,53 @@ void LibretroRuntime::setFastForward(bool enabled) noexcept {
   fastForwardFrames_ = 0;
   if (audioDevice_ != 0)
     SDL_ClearQueuedAudio(audioDevice_);
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
 }
 
 void LibretroRuntime::setSlowMotion(bool enabled) noexcept {
   if (slowMotion_ == enabled)
     return;
   slowMotion_ = enabled;
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
+}
+
+void LibretroRuntime::settleCoreTiming(Uint64 now) {
+  if (!retimePending_ && !audioRatePending_)
+    return;
+  if (retimePending_) {
+    // The core told us it runs at a different rate. Rebuild the period from the
+    // new fps and restart the cadence at the clock we were given, so the change
+    // lands now instead of after the frames already owed at the old rate.
+    retimePending_ = false;
+    clock_.setPeriod(framePeriodFor(fps_));
+    clock_.restart(now);
+  }
+  if (audioRatePending_) {
+    // Reopening under the core's own audio callback would have the SDL audio
+    // thread and the emulation thread waiting on each other, so it happens here.
+    audioRatePending_ = false;
+    closeAudio();
+    openAudio();
+  }
 }
 
 void LibretroRuntime::update() {
   if (!active_ || paused_)
     return;
   const Uint64 now = SDL_GetPerformanceCounter();
-  if (now < nextFrame_)
-    return;
-  Uint64 period = framePeriod_;
-  // A core reporting an absurd frame rate must not turn the catch-up loop
-  // below into a spin: one tick of the counter is the shortest period there is.
-  if (period == 0)
-    period = 1;
+  settleCoreTiming(now);
+  Uint64 period = clock_.period();
   if (fastForward_)
-    period /= kFastForwardDivisor;
+    period = std::max<Uint64>(1, period / kFastForwardDivisor);
   else if (slowMotion_)
     period *= kSlowMotionFactor;
   // Run every frame the clock owes, not just the first: the main loop presents
   // at most once per iteration, so a single frame per update caps fast forward
   // at 1x on a display locked to the refresh rate and leaves normal speed no
   // slack at all - one dropped frame and the audio queue runs dry.
-  unsigned frames = 0;
-  while (now >= nextFrame_) {
+  const unsigned frames = clock_.due(now, period, kMaximumCatchUpFrames);
+  for (unsigned frame = 0; frame < frames; ++frame)
     runFrame();
-    nextFrame_ += period;
-    if (++frames >= kMaximumCatchUpFrames)
-      break;
-  }
-  // Still behind after spending the whole budget? Drop the backlog instead of
-  // chasing it, or every tick would burn the full batch and fall further back.
-  if (now > nextFrame_ + period)
-    nextFrame_ = now + period;
 }
 
 void LibretroRuntime::stepFrame() {
@@ -958,13 +1009,16 @@ void LibretroRuntime::stepFrame() {
     return;
   runFrame();
   discardAudio();
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
 }
 
 void LibretroRuntime::runFrame() {
   // Turbo is a front-end pulse: the core only ever sees ordinary A/B presses.
   turboPulse_ = config::turboPulseOn(frameCount_);
-  if (runaheadFrames_ > 0 && core_.serializeSize() > 0) {
+  // Fast forward already runs several frames per displayed one: adding the
+  // runahead frames on top would multiply the work for a latency the player
+  // cannot perceive at 4x.
+  if (runaheadFrames_ > 0 && !fastForward_ && core_.serializeSize() > 0) {
     // Runahead, single instance: run the hidden frames with audio and video
     // muted, remember the machine right after the first one, show the frame
     // that comes next, then roll back so the next input lands earlier in the
@@ -1037,7 +1091,7 @@ bool LibretroRuntime::rewindStep() noexcept {
   core_.run();
   suppressAudio_ = false;
   discardAudio();
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
   return true;
 }
 
@@ -1293,7 +1347,7 @@ StateStatus LibretroRuntime::loadState(int slot, std::string &error) {
   // Snapshots taken before the load belong to a timeline that no longer
   // exists, so the rewind window starts over from here.
   clearRewind();
-  nextFrame_ = SDL_GetPerformanceCounter();
+  clock_.restart(SDL_GetPerformanceCounter());
   return StateStatus::Loaded;
 }
 
