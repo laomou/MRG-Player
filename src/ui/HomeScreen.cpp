@@ -268,16 +268,18 @@ void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
 ConfirmLayout quitLayout() {
   const float width =
       std::min(608.0f, static_cast<float>(kCanvasWidth) - 96.0f);
-  constexpr float height = 272.0f;
+  // Just the heading, one line of body text and the two buttons: the dialog no
+  // longer carries a key legend underneath, so the box ends below the buttons.
+  constexpr float height = 240.0f;
   return confirmLayout({(static_cast<float>(kCanvasWidth) - width) * 0.5f,
                         (static_cast<float>(kCanvasHeight) - height) * 0.5f,
                         width, height},
                        158, 80, 96, 16);
 }
 
-// The footer names the two keys that act on the selected game instead of being
-// a place the direction keys walk to: Enter starts it, X manages it. Writing
-// the same key twice said neither of them was really a shortcut.
+// The two things this screen can do with the selected game, written as the
+// buttons they are: start it, or open its drawer. One word each, because the
+// shelf above already says which game it is.
 std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
@@ -285,7 +287,7 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
     hints.push_back(
         {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
     hints.push_back(
-        {i18n::tr(i18n::TextId::ManageGame, language), "X", false});
+        {i18n::tr(i18n::TextId::HintManage, language), "X", false});
   }
   return hints;
 }
@@ -296,8 +298,9 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, float rowOffset, float focusOpacity,
-              SDL_Color accent, CoverSource *covers, bool showFooter) {
+              int focusedPill, int focusedAction, float rowOffset,
+              float focusOpacity, SDL_Color accent, CoverSource *covers,
+              bool showFooter) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -433,10 +436,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
   if (showFooter) {
     fill(renderer, layout.rowLeft, layout.dividerY,
          layout.rowRight - layout.rowLeft, 1, {255, 255, 255, 24});
-    const std::vector<Hint> footer =
+    const std::vector<Hint> actions =
         footerHints(selectedEntry != nullptr, language, prompts);
-    drawHintRow(renderer, layout.footerRight, layout.footerY, footer,
-                style.accent);
+    drawActionRow(renderer, layout.footerRight, layout.footerY, actions,
+                  focus == HomeFocus::Actions ? focusedAction : -1,
+                  focusOpacity, style.accent);
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
@@ -451,11 +455,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
 int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                  const config::InputPrompts &prompts) {
   const HomeLayout home = homeLayout();
-  const auto layout = hintLayout(home.footerRight, home.footerY,
-                                 footerHints(hasGame, language, prompts));
+  const auto layout = actionLayout(home.footerRight, home.footerY,
+                                   footerHints(hasGame, language, prompts));
   for (std::size_t index = 0; index < layout.size(); ++index) {
-    // Retain generous pointer padding around the small footer legend.
-    if (layout[index].expanded(10, 13).translated(0, 1).contains(x, y))
+    // Retain a little pointer padding around the small frames.
+    if (layout[index].expanded(4, 6).contains(x, y))
       return static_cast<int>(index);
   }
   return -1;
@@ -505,8 +509,7 @@ float homeRowTarget(int selectedGame, int count) {
 }
 
 void drawQuitConfirm(SDL_Renderer *renderer, int choice,
-                     i18n::Language language,
-                     const config::InputPrompts &prompts, SDL_Color accent) {
+                     i18n::Language language, SDL_Color accent) {
   using i18n::TextId;
   const ConfirmLayout layout = quitLayout();
   drawConfirmFrame(renderer, layout, tr(TextId::QuitConfirmTitle, language),
@@ -514,11 +517,9 @@ void drawQuitConfirm(SDL_Renderer *renderer, int choice,
   drawChoiceButtons(renderer, layout.buttons,
                     {tr(TextId::Cancel, language), tr(TextId::Quit, language)},
                     choice, accent);
-  const std::vector<Hint> footer{
-      {tr(TextId::Cancel, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, layout.footer.right(), layout.footer.y, footer,
-              accent);
+  // A dialog is just its two buttons: cancel on the left, confirm on the right,
+  // and no key glyphs underneath. Repeating the keys here would label the same
+  // action twice and crowd a box that is narrow by design.
 }
 
 int quitConfirmChoiceAt(float x, float y) {

@@ -211,6 +211,12 @@ enum class TextId {
   PauseMenuControl,
   ControlHelpNote,
   Unbound,
+  // Footer legends. A hint is a key plus one word: the screen already says
+  // what the action applies to, so the noun is left out.
+  HintManage,
+  HintInstall,
+  HintRefresh,
+  HintDetails,
   Count
 };
 

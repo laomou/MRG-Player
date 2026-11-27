@@ -66,9 +66,7 @@ int pauseCoreOptionAt(float x, float y, int scroll);
 // Power cycling wipes unsaved progress, so it asks first. Choice 0 cancels
 // (the default) and choice 1 confirms.
 void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
-                           i18n::Language language,
-                           const config::InputPrompts &prompts,
-                           SDL_Color accent);
+                           i18n::Language language, SDL_Color accent);
 int powerCycleChoiceAt(float x, float y);
 
 } // namespace launcher::ui

@@ -11,22 +11,24 @@
 
 namespace launcher::ui {
 
-// Which part of the home screen the direction keys drive. The footer is a
-// legend rather than a stop on the way: the keys it names act on their own, so
-// the ring only ever sits on the shelf or on the pills.
-enum class HomeFocus { Cards, Pills };
+// Which part of the home screen the direction keys drive. The pills and the
+// shelf are content; the action row is the two things the screen can do with
+// the selected game, and it is walked to like the other two.
+enum class HomeFocus { Cards, Pills, Actions };
 
 void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, float rowOffset, float focusOpacity,
-              SDL_Color accent,
+              int focusedPill, int focusedAction, float rowOffset,
+              float focusOpacity, SDL_Color accent,
               CoverSource *covers = nullptr, bool showFooter = true);
 void moveSelection(int &selectedGame, int direction, int count);
 
-// The footer keeps two hit targets when a game is selected, none when the
-// library is empty, so a pointer can click the legend the keys describe.
+// The action row has two entries -- start the game, manage it -- and no entry
+// at all while the shelf has no selection, so the direction keys never walk
+// into a row of buttons that cannot act.
+inline constexpr int kHomeActionCount = 2;
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
                                i18n::Language language,
                                const config::InputPrompts &prompts);
@@ -40,9 +42,10 @@ void moveSelection(int &selectedGame, int direction, int count);
                              std::size_t count);
 
 // The launcher asks before it closes: 0 is the cancel button, 1 the quit one.
+// The dialog is only its two buttons -- cancel left, confirm right -- so it
+// needs no key prompts.
 void drawQuitConfirm(SDL_Renderer *renderer, int choice,
-                     i18n::Language language,
-                     const config::InputPrompts &prompts, SDL_Color accent);
+                     i18n::Language language, SDL_Color accent);
 [[nodiscard]] int quitConfirmChoiceAt(float x, float y);
 
 } // namespace launcher::ui

@@ -1093,4 +1093,114 @@ void drawHintFocus(SDL_Renderer *renderer, float x, float y, const Hint &hint,
               kHintChipHeight + 12.0f, 11.0f, 2.0f, focusColor(opacity));
 }
 
+namespace {
+// The badge is the same whether the row holds the keys or not: it answers
+// "which key", so the eye learns one shape for keys and the ring is the only
+// thing that ever moves.
+constexpr SDL_Color kKeyPlate{33, 45, 68, 255};
+constexpr SDL_Color kKeyInk{236, 243, 252, 255};
+constexpr SDL_Color kActionRim{72, 88, 116, 255};
+constexpr SDL_Color kActionInk{220, 230, 244, 255};
+constexpr SDL_Color kActionPlate{24, 52, 58, 230};
+constexpr SDL_Color kActionFocusInk{255, 255, 255, 255};
+constexpr float kActionRadius = 8.0f;
+// Three pixels of accent around a filled plate, not a ring: the frame owns the
+// keys while it is focused, so a line outside it would read as a second border.
+constexpr float kActionGlow = 3.0f;
+
+// A one-character key is a circle, the way a pad button is drawn; anything
+// spelled out keeps the rectangle the eye already reads as a keyboard key.
+bool singleGlyph(const std::string &key) { return key.size() == 1; }
+
+float keyBadgeWidth(const Hint &action) {
+  if (singleGlyph(action.key))
+    return kActionHeight;
+  return std::max(kActionHeight, static_cast<float>(textWidth(action.key, 1)) +
+                                     kActionPadding * 2.0f);
+}
+
+float actionFrameWidth(const Hint &action) {
+  return static_cast<float>(textWidth(action.label, 1)) + kActionPadding * 2.0f;
+}
+
+float actionRowWidth(const std::vector<Hint> &actions) {
+  float total = 0.0f;
+  for (const Hint &action : actions)
+    total += keyBadgeWidth(action) + kActionKeyGap + actionFrameWidth(action);
+  if (actions.size() > 1)
+    total += kActionGap * static_cast<float>(actions.size() - 1);
+  return total;
+}
+} // namespace
+
+int actionWidth(const Hint &action) {
+  return static_cast<int>(keyBadgeWidth(action) + kActionKeyGap +
+                          actionFrameWidth(action));
+}
+
+std::vector<Rect> actionLayout(float rightX, float y,
+                               const std::vector<Hint> &actions) {
+  std::vector<Rect> result;
+  result.reserve(actions.size());
+  float x = rightX - actionRowWidth(actions);
+  for (const Hint &action : actions) {
+    const float width =
+        keyBadgeWidth(action) + kActionKeyGap + actionFrameWidth(action);
+    result.push_back({x, y, width, kActionHeight});
+    x += width + kActionGap;
+  }
+  return result;
+}
+
+void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action,
+                bool focused, float focusOpacity, SDL_Color accent) {
+  const float opacity = std::clamp(focusOpacity, 0.0f, 1.0f);
+  const float badge = keyBadgeWidth(action);
+  const float centerX = x + badge * 0.5f;
+  const float centerY = y + kActionHeight * 0.5f;
+  if (singleGlyph(action.key))
+    circle(renderer, static_cast<int>(std::lround(centerX)),
+           static_cast<int>(std::lround(centerY)),
+           static_cast<int>(kActionHeight * 0.5f), kKeyPlate);
+  else
+    rounded(renderer, x, y, badge, kActionHeight, kActionRadius, kKeyPlate);
+  centeredGlyph(renderer, static_cast<int>(std::lround(centerX)),
+                static_cast<int>(std::lround(centerY)), action.key, 1, kKeyInk);
+
+  const float frameX = x + badge + kActionKeyGap;
+  const float frameWidth = actionFrameWidth(action);
+  if (focused) {
+    SDL_Color glow = accent;
+    glow.a = static_cast<Uint8>(std::lround(60.0f * opacity));
+    roundedBand(renderer, frameX - kActionGlow, y - kActionGlow,
+                frameWidth + kActionGlow * 2.0f,
+                kActionHeight + kActionGlow * 2.0f,
+                kActionRadius + kActionGlow, kActionGlow, glow);
+    SDL_Color plate = kActionPlate;
+    plate.a = static_cast<Uint8>(std::lround(
+        static_cast<float>(kActionPlate.a) * opacity));
+    rounded(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
+            plate);
+    SDL_Color rim = accent;
+    rim.a = static_cast<Uint8>(std::lround(255.0f * opacity));
+    roundedBand(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
+                2.0f, rim);
+  } else {
+    roundedBand(renderer, frameX, y, frameWidth, kActionHeight, kActionRadius,
+                1.0f, kActionRim);
+  }
+  text(renderer, static_cast<int>(std::lround(frameX + kActionPadding)),
+       textCenteredY(action.label, static_cast<int>(std::lround(centerY)), 1),
+       action.label, 1, focused ? kActionFocusInk : kActionInk);
+}
+
+void drawActionRow(SDL_Renderer *renderer, float rightX, float y,
+                   const std::vector<Hint> &actions, int focused,
+                   float focusOpacity, SDL_Color accent) {
+  const auto layout = actionLayout(rightX, y, actions);
+  for (std::size_t index = 0; index < actions.size(); ++index)
+    drawAction(renderer, layout[index].x, layout[index].y, actions[index],
+               static_cast<int>(index) == focused, focusOpacity, accent);
+}
+
 } // namespace launcher::ui

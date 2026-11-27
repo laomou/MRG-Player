@@ -218,7 +218,11 @@ constexpr Entry kText[]{
     {"DIRECTION", "方向"},
     {"PAUSE MENU", "暂停菜单"},
     {"See the game for in-game actions.", "具体游戏动作以游戏内说明为准。"},
-    {"UNBOUND", "未绑定"}};
+    {"UNBOUND", "未绑定"},
+    {"MANAGE", "管理"},
+    {"INSTALL", "安装"},
+    {"REFRESH", "刷新"},
+    {"DETAILS", "详情"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

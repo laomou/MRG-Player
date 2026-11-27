@@ -1,8 +1,10 @@
 #pragma once
 
 #include "config/Settings.hpp"
+#include "i18n/Localization.hpp"
 #include "ui/Controls.hpp"
 #include "ui/Layout.hpp"
+#include "ui/Primitives.hpp"
 
 #include <SDL.h>
 
@@ -59,6 +61,18 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts);
 // The core page also carries a refresh button on its heading line, which is a
 // button rather than a row, so it answers a hit test of its own.
 bool coreRefreshAt(float x, float y);
+
+// The footer is the same pair of buttons as the shelf's: back on the left, and
+// whatever this page does with the focused row on the right. The labels differ
+// per page, so the row is built once and used by both the renderer and the hit
+// test.
+[[nodiscard]] std::vector<Hint> settingsFooterHints(
+    int category, int row, const std::vector<CoreRow> &cores,
+    bool refreshFocused, i18n::Language language,
+    const config::InputPrompts &prompts);
+// Which entry of that row a point lands on, or -1. 0 is back, 1 the action.
+[[nodiscard]] int settingsFooterAt(float x, float y,
+                                   const std::vector<Hint> &hints);
 void changeSetting(AppSettings &settings, int category, int row, int direction,
                    bool keyboardPrompts);
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
@@ -67,6 +81,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused = false);
+                  float focusOpacity, bool refreshFocused = false,
+                  bool footerFocused = false, int footerAction = 1);
 
 } // namespace launcher::ui

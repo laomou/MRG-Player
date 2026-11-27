@@ -52,7 +52,7 @@ const PauseLayout &pauseLayout() {
                       kPauseCoreOptionRows, 5};
     // Sits a little below the optical centre, exactly as the fixed box did.
     out.power =
-        confirmLayout({(width - 544) / 2, height / 2 - 120, 544, 256}, 136, 38,
+        confirmLayout({(width - 544) / 2, height / 2 - 104, 544, 224}, 136, 38,
                       19, 16);
     // The card floats over the dimmed picture in the gutter left of the drawer.
     out.thumbnail = {std::max(24.0f, bounds.x - 240), 221, 214, 248};
@@ -201,20 +201,15 @@ int pauseSlotAt(float x, float y) {
 }
 
 void drawPowerCycleConfirm(SDL_Renderer *renderer, int choice,
-                           i18n::Language language,
-                           const config::InputPrompts &prompts,
-                           SDL_Color accent) {
+                           i18n::Language language, SDL_Color accent) {
   const ConfirmLayout &power = pauseLayout().power;
   drawConfirmFrame(renderer, power, tr(TextId::PowerCycleTitle, language),
                    tr(TextId::PowerCycleBody, language), accent, 150);
   drawChoiceButtons(renderer, power.buttons,
                     {tr(TextId::Cancel, language),
                      tr(TextId::PowerCycle, language)}, choice, accent);
-  // Cancel sits on the left button, so its key is written first.
-  const std::vector<Hint> footer{
-      {tr(TextId::Cancel, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, power.footer.right(), power.footer.y, footer, accent);
+  // Cancel on the left, confirm on the right, no keys underneath: the buttons
+  // carry the words, so a legend would only repeat them.
 }
 
 int powerCycleChoiceAt(float x, float y) {

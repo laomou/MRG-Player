@@ -144,6 +144,28 @@ std::vector<Rect> hintLayout(float rightX, float y, const std::vector<Hint> &hin
 void drawHintRow(SDL_Renderer *renderer, float rightX, float y,
                  const std::vector<Hint> &hints, SDL_Color accent,
                  int focused = -1, float focusOpacity = 1.0f);
+
+// The action row is the same pair of ideas written as buttons: the key sits in
+// a badge that never changes colour, because it answers "which key" and not
+// "where are the keys", and the action is written in a frame that takes the
+// plate and the ring. A legend can only be read; this row can be walked to, so
+// it is laid out and hit-tested through the same numbers.
+inline constexpr float kActionHeight = 30.0f;
+inline constexpr float kActionKeyGap = 10.0f;
+inline constexpr float kActionPadding = 11.0f;
+inline constexpr float kActionGap = 22.0f;
+
+[[nodiscard]] int actionWidth(const Hint &action);
+// Lays the row out so its last frame ends at rightX, the way hintLayout does
+// for a legend.
+std::vector<Rect> actionLayout(float rightX, float y,
+                               const std::vector<Hint> &actions);
+void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action,
+                bool focused, float focusOpacity, SDL_Color accent);
+void drawActionRow(SDL_Renderer *renderer, float rightX, float y,
+                   const std::vector<Hint> &actions, int focused,
+                   float focusOpacity, SDL_Color accent);
+
 // The focus ring never takes the accent of the game or the section on
 // screen: it answers "where do the keys go", which is a property of the
 // system, so it stays one colour everywhere.
