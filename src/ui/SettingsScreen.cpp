@@ -265,6 +265,14 @@ CoreRowColumns coreRowColumns(const std::string &status) {
            static_cast<float>(statusWidth), 0.0f}};
 }
 
+#if defined(MRG_PLATFORM_BRICK)
+// The case lighting only exists on the handheld, so the theme page grows a
+// second row there and stays a single row everywhere else.
+constexpr int kThemeRowCount = 2;
+#else
+constexpr int kThemeRowCount = 1;
+#endif
+
 int settingCategoryCount() { return kCategoryCount; }
 
 int settingRowCount(int category, bool keyboardPrompts) {
@@ -278,6 +286,8 @@ int settingRowCount(int category, bool keyboardPrompts) {
     return 4 + static_cast<int>(config::kInputActionCount) + 1;
   if (category == 5)
     return 5;
+  if (category == 6)
+    return kThemeRowCount;
   return 1;
 }
 
@@ -370,7 +380,8 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts) {
   if (category == 5)
     return kCoreRows.hit(x, y);
   auto rows = kSettingRows;
-  rows.count = category == 1 ? 4 : (category == 2 ? 3 : 1);
+  rows.count = category == 1 ? 4
+               : (category == 2 ? 3 : (category == 6 ? kThemeRowCount : 1));
   return rows.hit(x, y);
 }
 
@@ -421,6 +432,8 @@ void changeSetting(AppSettings &settings, int category, int row,
     if (row == 0)
       settings.accent = (settings.accent + direction + kAccentCount) %
                         kAccentCount;
+    else if (kThemeRowCount > 1)
+      settings.ledLighting = !settings.ledLighting;
   } else if (category == 3) {
     if (row == 0) {
       const int value =
@@ -707,6 +720,14 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                             textWidth(accentName, 2) - 24),
            static_cast<int>(themeRow.centerY()), 10,
            accentColor(settings.accent));
+    if (kThemeRowCount > 1)
+      drawSettingRow(renderer, kSettingRows.item(1), row == 1,
+                     contentFocused && row == 1,
+                     tr(TextId::LedLighting, language),
+                     tr(TextId::LedDescription, language),
+                     tr(settings.ledLighting ? TextId::On : TextId::Off,
+                        language),
+                     game.accent, focusOpacity);
   } else if (category == 4) {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused,
                    tr(TextId::RomDirectory, language),

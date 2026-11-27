@@ -263,6 +263,7 @@ add_executable(mrg-player
   src/ui/Controls.cpp
   src/ui/CoverCache.cpp
   src/ui/GameManagementScreen.cpp
+  src/platform/BrickLed.cpp
   src/platform/RomFilePicker.cpp
   src/ui/HomeScreen.cpp
   src/ui/GameControls.cpp

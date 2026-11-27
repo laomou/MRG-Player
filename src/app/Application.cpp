@@ -26,6 +26,7 @@
 #include "library/GameLibrary.hpp"
 #include "library/RomScanner.hpp"
 #include "model/Game.hpp"
+#include "platform/BrickLed.hpp"
 #include "platform/RomFilePicker.hpp"
 #include "runtime/IGameRuntime.hpp"
 #include "runtime/RuntimeRegistry.hpp"
@@ -792,6 +793,29 @@ int Application::run(int argc, char **argv) {
     syncPlayerControllers();
   };
 
+#if defined(MRG_PLATFORM_BRICK)
+  // The case lighting follows the accent colour, but only while we hold it:
+  // the stock launcher's settings are read back on the way out.
+  platform::BrickLeds caseLeds;
+  bool caseLit = false;
+  caseLeds.capture();
+  auto syncCaseLighting = [&] {
+    if (!settings.ledLighting) {
+      if (caseLit) {
+        caseLeds.restore();
+        caseLit = false;
+      }
+      return;
+    }
+    const SDL_Color accent = ui::accentColor(settings.accent);
+    caseLeds.apply((static_cast<std::uint32_t>(accent.r) << 16) |
+                   (static_cast<std::uint32_t>(accent.g) << 8) |
+                   static_cast<std::uint32_t>(accent.b));
+    caseLit = true;
+  };
+  syncCaseLighting();
+#endif
+
   auto applySetting = [&](int direction) {
     if (settingCategory == 3 && settingRow == 2)
       cycleController(direction);
@@ -811,6 +835,9 @@ int Application::run(int argc, char **argv) {
     syncAudioOptions();
     syncPlaybackOptions();
     saveSettings(settings);
+#if defined(MRG_PLATFORM_BRICK)
+    syncCaseLighting();
+#endif
   };
   auto currentLanguage = [&] {
     return i18n::languageFromSetting(settings.language);
@@ -1260,6 +1287,31 @@ int Application::run(int argc, char **argv) {
   };
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
+#if defined(MRG_PLATFORM_BRICK)
+  // F1 and F2 reach us as stick clicks, and the panel has no sticks, so the
+  // two function keys save and reload the running game from the current slot.
+  auto quickState = [&](bool save) {
+    if (!activeRuntime)
+      return;
+    std::string stateError;
+    const runtime::StateStatus status =
+        save ? activeRuntime->saveState(stateSlot, stateError)
+             : activeRuntime->loadState(stateSlot, stateError);
+    if (status == runtime::StateStatus::Saved) {
+      refreshStateSlots();
+      showBanner(i18n::tr(i18n::TextId::StateSaved, currentLanguage()));
+    } else if (status == runtime::StateStatus::Loaded) {
+      showBanner(i18n::tr(i18n::TextId::StateLoaded, currentLanguage()));
+    } else if (status == runtime::StateStatus::Missing) {
+      showBanner(i18n::tr(i18n::TextId::StateMissing, currentLanguage()));
+    } else {
+      if (!stateError.empty())
+        std::fprintf(stderr, "Save-state operation failed: %s\n",
+                     stateError.c_str());
+      showBanner(i18n::tr(i18n::TextId::StateFailed, currentLanguage()));
+    }
+  };
+#endif
   auto saveScreenshot = [&]() -> std::string {
     std::string error;
     const std::string path = saveFrameToFile(renderer, error);
@@ -1796,6 +1848,15 @@ int Application::run(int argc, char **argv) {
                   event.jbutton.button == input::kBrickButtonVolumeUp)) {
         adjustVolume(event.jbutton.button == input::kBrickButtonVolumeUp ? 1
                                                                          : -1);
+        continue;
+      } else if (fromBrick && event.type == SDL_JOYBUTTONDOWN &&
+                 (event.jbutton.button == input::kBrickButtonL3 ||
+                  event.jbutton.button == input::kBrickButtonR3)) {
+        // F1 and F2 arrive as stick clicks. They only mean something while a
+        // game is running, so in the menus the press is simply swallowed.
+        if (screen == Screen::Game && !quitConfirm) {
+          quickState(event.jbutton.button == input::kBrickButtonL3);
+        }
         continue;
       }
 #endif
@@ -3007,6 +3068,8 @@ int Application::run(int argc, char **argv) {
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
 #if defined(MRG_PLATFORM_BRICK)
+  if (caseLit)
+    caseLeds.restore();
   if (brickJoystick != nullptr)
     SDL_JoystickClose(brickJoystick);
 #endif

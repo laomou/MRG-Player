@@ -222,7 +222,9 @@ constexpr Entry kText[]{
     {"OPTIONS", "选项"},
     {"INSTALL", "安装"},
     {"REFRESH", "刷新"},
-    {"DETAILS", "详情"}};
+    {"DETAILS", "详情"},
+    {"LED LIGHTING", "机壳灯"},
+    {"LIGHT THE CASE IN THE ACCENT COLOUR", "机壳灯跟随主题色"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

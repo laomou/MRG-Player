@@ -29,6 +29,9 @@ struct AppSettings {
   int runahead = 0;
   // Accent colour shared by every screen, 0 to 5 (ui::kAccentCount).
   int accent = 0;
+  // The Brick lights its case in the accent colour while we run; the stock
+  // lighting is put back on exit.
+  bool ledLighting = true;
   int selectedGame = 2;
   config::PromptDeviceMode promptDevice = config::PromptDeviceMode::Auto;
   config::ControllerStyle controllerStyle = config::ControllerStyle::Auto;

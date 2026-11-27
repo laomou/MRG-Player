@@ -217,6 +217,8 @@ enum class TextId {
   HintInstall,
   HintRefresh,
   HintDetails,
+  LedLighting,
+  LedDescription,
   Count
 };
 
