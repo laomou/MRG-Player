@@ -16,10 +16,12 @@
 
 namespace launcher::ui {
 
-// Box art for the shelf. Covers live as plain PNG files in <data>/covers, so a
-// player can drop one in by hand and keep it offline. When a cover is missing
-// the cache asks the libretro thumbnail repositories once, in the background,
-// and silently gives up when the network is not there.
+// Box art for the shelf. A cover is one PNG file in the card's own tree,
+// Imgs/<system>/<title>.png, which is exactly the file the stock launcher shows
+// for that ROM: art dropped in by hand, shipped with an image pack, or
+// downloaded here is a single picture instead of two that can disagree. When
+// the file is missing the cache asks the libretro thumbnail repositories once,
+// in the background, and writes whatever comes back into the same place.
 class CoverCache : public CoverSource {
  public:
   CoverCache() = default;
@@ -27,11 +29,11 @@ class CoverCache : public CoverSource {
   CoverCache(const CoverCache &) = delete;
   CoverCache &operator=(const CoverCache &) = delete;
 
-  // Creates the directory, writes covers/names.json the first time, and loads
-  // the name mapping. A malformed mapping is reported and then ignored.
-  // cardRoots are the Imgs/ folders that came with the games; art found there
-  // is used as is and nothing is downloaded for that game.
-  void initialize(const std::string &directory, std::vector<std::string> cardRoots = {});
+  // Loads the name mapping, writing cover-names.json the first time. A
+  // malformed mapping is reported and then ignored. coverRoots are the Imgs/
+  // folders paired with the ROM trees: art found there is used as is, and a
+  // download is saved into the first one.
+  void initialize(std::string namesPath, std::vector<std::string> coverRoots = {});
 
   // Joins the worker and drops every texture. Must run before the renderer.
   void shutdown();
@@ -48,7 +50,6 @@ class CoverCache : public CoverSource {
   void poll(SDL_Renderer *renderer);
 
   [[nodiscard]] bool downloading() const noexcept { return job_ != nullptr && !job_->done.load(); }
-  [[nodiscard]] const std::string &directory() const noexcept { return directory_; }
 
  private:
   // A download outlives a quick quit: the worker holds this record instead of
@@ -57,22 +58,25 @@ class CoverCache : public CoverSource {
     std::atomic<bool> done{false};
     bool ok = false;
     std::string id;
+    std::string target;
   };
 
-  [[nodiscard]] std::string pathFor(const std::string &id) const;
-  // The art that came with the game on a card, or an empty string when neither
-  // the card nor its Imgs/ folder has one. The answer is remembered per game so
-  // a card is not probed again on every frame.
-  [[nodiscard]] std::string cardCoverPath(const library::GameEntry &game);
+  // The cover file that already exists for a game, or an empty string. The
+  // answer is remembered per game so the folders are not probed on every frame.
+  [[nodiscard]] std::string existingCoverPath(const library::GameEntry &game);
+  // Where a new cover is written: Imgs/<system>/<title>.png under the first
+  // root whose system folder exists, so a card keeps its art on the volume it
+  // came from.
+  [[nodiscard]] std::string coverTarget(const library::GameEntry &game) const;
   [[nodiscard]] SDL_Texture *loadCover(SDL_Renderer *renderer, const std::string &id,
                                        const std::string &path);
   [[nodiscard]] SDL_Texture *loadWallpaper(SDL_Renderer *renderer, const std::string &id,
                                            const std::string &path);
   void startDownload(const library::GameEntry &game);
 
-  std::string directory_;
-  std::vector<std::string> cardRoots_;
-  std::map<std::string, std::string> cardCovers_;
+  std::string namesPath_;
+  std::vector<std::string> coverRoots_;
+  std::map<std::string, std::string> coverPaths_;
   library::CoverNames names_;
   std::map<std::string, SDL_Texture *> covers_;
   std::map<std::string, SDL_Texture *> wallpapers_;

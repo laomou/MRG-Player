@@ -11,7 +11,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Platform-neutral game model, managed library, runtime interface, and runtime registry
 - Dynamic platform and file-type labels in the library and management UI
 - Persistent managed library with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
-- Box art per game: drop a PNG into `covers/`, or map a local title to a libretro-thumbnails name in `covers/names.json` and let the launcher fetch it; cards without art keep the plain navy card with a console badge, and the selected game's art becomes the blurred background
+- Box art per game in the card's own `Imgs/<system>/` folder, the file the stock launcher shows, so art dropped in by hand and art the launcher fetches are the same picture; map a local title to a libretro-thumbnails name in `cover-names.json` to make lookups hit, and cards without art keep the plain navy card with a console badge while the selected game's art becomes the blurred background
 - Non-destructive migration from the legacy NES Player data directory
 - Console-agnostic runtime: video, audio, input, pacing, battery saves, and controller hot plugging are handled once for every core
 - In-game pause menu with three persistent instant-state slots, console reset, and a confirmed power cycle (cold boot that keeps battery saves)
@@ -31,7 +31,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
 - Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
-- ROM folder scanning: on a build without a file dialog, the folders named by `MRG_ROM_DIRS` are imported on first start, and the Home import action rescans them
+- ROM folder scanning: on a build without a file dialog, the folders named by `MRG_ROM_DIRS` are imported on first start, and the Home import action rescans them; without that variable a desktop build reads the card layout, `Roms/<system>` beside `Imgs/<system>` under the data root and beside the executable, and still reads an older `roms/`
 - Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, rewind, runahead, frame stepping, screenshots, turbo, display overrides, and mute
 
 Every platform needs a libretro core installed on the machine — see [libretro cores](#libretro-cores). The project bundles no cores, ROMs, or BIOS files, and reports a clear error instead of guessing when no suitable core is found. Use only game images that you are legally entitled to use.
@@ -73,9 +73,15 @@ MRGPlayer/
 │   ├── nes/
 │   └── gba/
 ├── core-options/             # one `<core>.tsv` of chosen values per core
-├── covers/                   # box art, plus names.json for automatic lookups
-└── screenshots/              # F12 captures
+├── cover-names.json          # local title to libretro-thumbnails name, for lookups
+├── screenshots/              # F12 captures
+├── Roms/                     # the card layout: Roms/FC, Roms/MD, Roms/GBA, ...
+└── Imgs/                     # art beside it: Imgs/FC/<title>.png
 ```
+
+A desktop build reads the same layout a card uses, `Roms/<system>` with `Imgs/<system>` beside
+it, so a folder copied off a device opens as it left it and one cover file serves both. A tree
+named `roms/` next to the executable or the data root is still scanned for older setups.
 
 Library metadata is keyed by platform and stable content ID, so favorite, custom-title, play-history, and per-game display data survives removing and later reimporting the same game. `metadata.tsv` is written in a versioned format that also holds each game's optional display override; files written by older builds still load and are rewritten in the current format on the next save.
 
@@ -134,16 +140,13 @@ Select a populated card and press **M** or keyboard **X**, controller **X**, or 
 
 ### Box art
 
-Art that came with the games on a card is used before anything is downloaded:
-`Imgs/<system>/<title>.png` (or `.jpg`) beside the `Roms/` tree, with the system folder named the
-way the card names it, so `Imgs/FC/F1赛车.png` covers `Roms/FC/F1赛车.nes`.
+Box art lives in one place on the card: `Imgs/<system>/<title>.png` (or `.jpg`) beside the `Roms/`
+tree, with the system folder named the way the card names it, so `Imgs/FC/F1赛车.png` covers
+`Roms/FC/F1赛车.nes`. That is exactly the file the stock launcher shows, so art dropped in by hand,
+shipped with an image pack, or fetched here is the same picture instead of two that can disagree.
 
-A card shows art when the data root has a PNG for the game: `covers/<game id>.png`, where the id
-is the 16-hex suffix of the managed file (`library/nes/超级马里奥__0f3a...c1.nes` →
-`covers/0f3a...c1.png`). Dropping a file there works offline and always wins over a download.
-
-Most people have no art on disk, so the launcher can fetch it. It reads `covers/names.json`, which
-is created with three examples and never overwritten:
+Most people have no art on disk, so the launcher can fetch it. It reads `cover-names.json` in the
+data root, which is created with three examples and never overwritten:
 
 ```json
 {
@@ -161,9 +164,9 @@ full `https://` URL, which is fetched as-is.
 
 Downloads run one at a time in the background, only from the platform's thumbnail repository, and
 stop at 8 MiB. A failure is silent: the card keeps its gradient and the next launch tries again. A
-success is cached as `covers/<game id>.png`, so later launches never touch the network. The selected
-game's art is also blurred into the launcher background; without it the background uses the selected
-console's palette.
+success is written to `Imgs/<system>/<title>.png` beside the ROMs, so the stock launcher shows it too
+and later launches never touch the network. The selected game's art is also blurred into the
+launcher background; without it the background uses the selected console's palette.
 
 ### Starting a ROM from the command line
 

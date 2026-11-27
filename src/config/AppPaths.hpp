@@ -23,10 +23,15 @@ namespace launcher::config {
 // the managed library and next to the executable. Missing folders are dropped.
 [[nodiscard]] std::vector<std::string> romSearchDirectories();
 
-// Folders holding box art that shipped with the games, one per entry of
-// romSearchDirectories: a ROM tree on a card is paired with the Imgs/ folder
-// beside it, which is where the stock launcher keeps its artwork. Missing
-// folders are dropped.
-[[nodiscard]] std::vector<std::string> coverSearchDirectories();
+// Folders holding box art, one per ROM tree: Roms/ is paired with the Imgs/
+// folder beside it, which is where the stock launcher keeps its artwork. They
+// are returned whether or not they exist yet, because a downloaded cover is
+// written there too, and the stock launcher and MRG Player then share one file.
+[[nodiscard]] std::vector<std::string> coverDirectories();
+
+// cover-names.json in the data root: the launcher title to No-Intro name
+// mapping used by automatic lookups. An older covers/names.json is copied over
+// the first time.
+[[nodiscard]] std::string coverNamesPath();
 
 } // namespace launcher::config

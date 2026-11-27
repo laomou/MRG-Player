@@ -57,7 +57,7 @@ bool appendUtf8(std::string &out, std::uint32_t code) {
   return true;
 }
 
-// A deliberately small JSON reader: covers/names.json is a flat object of
+// A deliberately small JSON reader: cover-names.json is a flat object of
 // strings, and anything else is reported instead of being guessed at.
 class JsonReader {
  public:
@@ -303,6 +303,36 @@ std::vector<std::string> coverUrls(game::GamePlatform platform, const std::strin
                     ".png");
   }
   return urls;
+}
+
+std::string coverFileName(const std::string &title) {
+  constexpr std::string_view kForbidden = "/\\:*?\"<>|";
+  std::string name;
+  name.reserve(title.size());
+  for (char value : title) {
+    const bool forbidden = kForbidden.find(value) != std::string_view::npos;
+    const bool control = static_cast<unsigned char>(value) < 0x20;
+    name.push_back(forbidden || control ? '_' : value);
+  }
+  // Windows drops trailing dots and spaces, and the stock launcher would end up
+  // looking for a name that cannot exist.
+  while (!name.empty() && (name.back() == ' ' || name.back() == '.'))
+    name.pop_back();
+  if (name.empty())
+    name = "cover";
+  return name;
+}
+
+std::string coverTargetPath(const std::string &root, game::GamePlatform platform, const std::string &title) {
+  const std::string system(game::platformDescriptor(platform).cardDirectory);
+  if (root.empty() || system.empty())
+    return {};
+  std::string base = root;
+  while (!base.empty() && (base.back() == '/' || base.back() == '\\'))
+    base.pop_back();
+  if (base.empty())
+    return {};
+  return base + "/" + system + "/" + coverFileName(title) + ".png";
 }
 
 }  // namespace launcher::library
