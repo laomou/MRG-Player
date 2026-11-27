@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "config/AppPaths.hpp"
+#include "config/InputBindings.hpp"
 #include "game/GamePlatform.hpp"
 #include "library/GameLibrary.hpp"
 #include "runtime/IGameRuntime.hpp"
@@ -436,6 +437,10 @@ int main(int, char **) {
 
   // Both SDL GameController and Brick raw joystick axes must reach the same
   // libretro inputs. Mix the two event paths so this one frame covers both.
+  // Bindings start empty in the runtime; the app installs the defaults when a
+  // game starts, so do the same before driving it with events.
+  runtime->setInputBindings(launcher::config::defaultInputBindings());
+
   SDL_Event controllerAxis{};
   controllerAxis.type = SDL_CONTROLLERAXISMOTION;
   controllerAxis.caxis.which = 17;
@@ -445,6 +450,22 @@ int main(int, char **) {
   controllerAxis.caxis.axis = SDL_CONTROLLER_AXIS_RIGHTX;
   controllerAxis.caxis.value = -12345;
   runtime->handleEvent(controllerAxis);
+
+  // The keyboard is player 1's controller, so a key has to reach the core joypad
+  // exactly like a pad button does. Hold every bound console key while the same
+  // frame also carries the pad events above.
+  const auto pressKey = [&runtime](SDL_Keycode key) {
+    SDL_Event event{};
+    event.type = SDL_KEYDOWN;
+    event.key.state = SDL_PRESSED;
+    event.key.repeat = 0;
+    event.key.keysym.sym = key;
+    runtime->handleEvent(event);
+  };
+  for (const SDL_Keycode key :
+       {SDLK_x, SDLK_z, SDLK_RSHIFT, SDLK_RETURN, SDLK_UP, SDLK_DOWN,
+        SDLK_LEFT, SDLK_RIGHT, SDLK_s, SDLK_a, SDLK_q, SDLK_w})
+    pressKey(key);
 
   SDL_Event rawAxis{};
   rawAxis.type = SDL_JOYAXISMOTION;
@@ -479,6 +500,17 @@ int main(int, char **) {
                                  (1U << RETRO_DEVICE_ID_JOYPAD_R2));
   expect((inputWord(8) & triggerMask) == triggerMask,
          "L2/R2 did not reach the core joypad mask");
+  const std::uint16_t keyboardMask = static_cast<std::uint16_t>(
+      (1U << RETRO_DEVICE_ID_JOYPAD_A) | (1U << RETRO_DEVICE_ID_JOYPAD_B) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_X) | (1U << RETRO_DEVICE_ID_JOYPAD_Y) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_SELECT) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_START) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_UP) | (1U << RETRO_DEVICE_ID_JOYPAD_DOWN) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_LEFT) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_RIGHT) | (1U << RETRO_DEVICE_ID_JOYPAD_L) |
+      (1U << RETRO_DEVICE_ID_JOYPAD_R));
+  expect((inputWord(8) & keyboardMask) == keyboardMask,
+         "the player 1 keyboard did not reach the core joypad mask");
   expect(static_cast<std::int16_t>(inputWord(9)) == -12345,
          "the standard controller right X axis did not reach the core");
   expect(static_cast<std::int16_t>(inputWord(10)) == 23456,
