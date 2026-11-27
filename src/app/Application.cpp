@@ -675,8 +675,15 @@ int Application::run(int argc, char **argv) {
   Uint64 toastUntil = 0;
   std::string toastMessage;
   Uint64 lastAxisMove = 0;
+#if defined(MRG_PLATFORM_BRICK)
+  // The panel is the only input the handheld ships with, so the first screen
+  // has to advertise its buttons before the player has touched anything.
+  config::InputDeviceKind lastInputDevice =
+      config::InputDeviceKind::Controller;
+#else
   config::InputDeviceKind lastInputDevice =
       config::InputDeviceKind::KeyboardMouse;
+#endif
   const Uint64 start = SDL_GetPerformanceCounter();
   const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
 
@@ -732,6 +739,11 @@ int Application::run(int argc, char **argv) {
     bool controllerConnected = controller != nullptr;
 #if defined(MRG_PLATFORM_BRICK)
     controllerConnected = controllerConnected || brickJoystick != nullptr;
+    // "Auto" means the panel on a handheld: there is no desk keyboard to
+    // switch to, so a host keyboard under an emulator cannot take over the
+    // labels either. Picking Keyboard & Mouse by hand still wins.
+    if (settings.promptDevice == config::PromptDeviceMode::Auto)
+      return config::InputDeviceKind::Controller;
 #endif
     return config::resolvePromptDevice(
         settings.promptDevice, lastInputDevice, controllerConnected);
