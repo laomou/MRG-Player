@@ -581,6 +581,39 @@ int main(int argc, char **argv) {
   check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
             managementB == kFocusColor.b && managementA == kFocusColor.a,
         "The pause selection has the shared focus ring");
+  // The pause rows sit on a canvas height that halves between whole pixels, so
+  // a ring drawn from the raw float lands half a row low and ends up flush with
+  // the plate's bottom edge. Ring and plate have to share one pixel grid.
+  fill(managementRenderer, 0, 0, kCanvasWidth, kCanvasHeight, {0, 0, 0, 255});
+  drawFocusablePlate(managementRenderer, 200.0f, 200.5f, 300.0f, 56.0f, 14.0f,
+                     teal, true, 1.0f);
+  SDL_RenderPresent(managementRenderer);
+  int plateTop = -1;
+  int plateBottom = -1;
+  int ringTop = -1;
+  int ringBottom = -1;
+  for (int y = 0; y < kCanvasHeight; ++y) {
+    const auto *ringPixels = reinterpret_cast<const Uint32 *>(
+        static_cast<const Uint8 *>(managementSurface->pixels) +
+        y * managementSurface->pitch);
+    Uint8 pr, pg, pb, pa;
+    SDL_GetRGBA(ringPixels[220], managementSurface->format, &pr, &pg, &pb, &pa);
+    if (pr == teal.r && pg == teal.g && pb == teal.b && pa == teal.a) {
+      if (plateTop < 0)
+        plateTop = y;
+      plateBottom = y;
+    }
+    if (pr == kFocusColor.r && pg == kFocusColor.g && pb == kFocusColor.b &&
+        pa == kFocusColor.a) {
+      if (ringTop < 0)
+        ringTop = y;
+      ringBottom = y;
+    }
+  }
+  check(ringTop >= 0 && plateTop > ringTop && ringBottom > plateBottom,
+        "The focus ring is drawn clear of the plate on both sides");
+  check(plateTop - ringTop == ringBottom - plateBottom,
+        "The focus ring keeps the same gap above and below its plate");
   const auto pixelEquals = [&](int x, int y, SDL_Color expected) {
     SDL_RenderPresent(managementRenderer);
     const auto *pixels = reinterpret_cast<const Uint32 *>(
@@ -648,12 +681,12 @@ int main(int argc, char **argv) {
       drawPauseVideoPanel(managementRenderer, 0, {}, language, accent);
       check(pixelEquals(1050, 288, accent),
             "Display rows retain theme accent");
-      check(pixelEquals(1000, 242, kFocusColor),
+      check(pixelEquals(1000, 243, kFocusColor),
             "Display rows retain the shared focus ring");
       clearPreview();
       drawPauseCoreOptionsPanel(managementRenderer, 0, 0, {option}, language,
                                 accent);
-      check(pixelEquals(1050, 275, accent) && pixelEquals(1000, 242, kFocusColor),
+      check(pixelEquals(1050, 275, accent) && pixelEquals(1000, 243, kFocusColor),
             "Core option rows retain theme accent and focus ring");
       launcher::AppSettings settings;
       settings.accent = theme;
