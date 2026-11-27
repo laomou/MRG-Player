@@ -170,8 +170,8 @@ CardBox cardBox(const HomeLayout &layout, float column, bool selected) {
 // round, because every row is inset by the radius the card already uses.
 void drawTitleScrim(SDL_Renderer *renderer, float x, float y, float width,
                     float height, float radius, Uint8 strength) {
-  fadeBottomRounded(renderer, x, y + height * 0.50f, width, height * 0.50f,
-                    radius, {4, 6, 16, 255}, strength, 1.6f);
+  drawCardScrim(renderer, x, y + height * 0.50f, width, height * 0.50f,
+                radius, {4, 6, 16, 255}, strength, 1.6f);
 }
 
 void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
@@ -190,9 +190,8 @@ void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
   const float radius = (selected ? 22.0f : 18.0f) * unit;
 
   if (entry == nullptr) {
-    rounded(renderer, x, y, width, height, radius, {13, 20, 36, 255});
-    rounded(renderer, x + 1, y + 1, width - 2, height - 2, radius - 1,
-            {19, 28, 48, 255});
+    drawCardSlot(renderer, x, y, width, height, radius, {13, 20, 36, 255},
+                 {19, 28, 48, 255});
     if (focused)
       drawFocusRing(renderer, x, y, width, height, radius, focusOpacity);
     return;
@@ -207,9 +206,8 @@ void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
     drawTexture(renderer, art, x, y, width, height);
     SDL_SetTextureAlphaMod(art, 255);
   } else {
-    gradientRounded(renderer, x, y, width, height, radius,
-                    {kCardTop.r, kCardTop.g, kCardTop.b, alpha},
-                    {kCardBottom.r, kCardBottom.g, kCardBottom.b, alpha});
+    drawCardPanel(renderer, x, y, width, height, radius, kCardTop, kCardBottom,
+                  alpha);
   }
 
   const float margin = 12.0f * unit;
@@ -296,8 +294,7 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
 
 } // namespace
 
-void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
-              Uint64 toastUntil, std::string_view toastMessage, int startupPage,
+void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
@@ -324,7 +321,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
           ? covers->wallpaper(renderer, *selectedEntry)
           : nullptr;
   const HomeLayout layout = homeLayout();
-  drawBackground(renderer, style, time, wallpaper);
+  drawBackground(renderer, style, wallpaper);
   rounded(renderer, layout.brandX, layout.brandY, 4, 26, 2, style.accent);
   text(renderer, static_cast<int>(layout.brandX) + 16,
        static_cast<int>(layout.brandTitleY), "MRG PLAYER", 3,

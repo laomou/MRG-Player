@@ -76,8 +76,7 @@ bool coreRefreshAt(float x, float y);
 void changeSetting(AppSettings &settings, int category, int row, int direction,
                    bool keyboardPrompts);
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
-                  int category, int row, float time,
-                  bool bindingCapture, std::string_view activeControllerName,
+                  int category, int row, bool bindingCapture, std::string_view activeControllerName,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,

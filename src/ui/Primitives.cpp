@@ -29,6 +29,10 @@ std::string gLatinFontPath;
 float gScale = 1.0f;
 float gOffsetX = 0.0f;
 float gOffsetY = 0.0f;
+// Shift applied while a layer is baked into a texture, so the shape lands at
+// the texture origin without the caller having to move it.
+int gBakeShiftX = 0;
+int gBakeShiftY = 0;
 
 // The sizes the last frame reported: output is the framebuffer the widgets are
 // drawn into, window is the surface SDL measures mouse positions against. On a
@@ -41,8 +45,12 @@ int gWindowHeight = 0;
 
 constexpr int kSubRows = 4;
 
-float deviceX(float value) { return gOffsetX + value * gScale; }
-float deviceY(float value) { return gOffsetY + value * gScale; }
+float deviceX(float value) {
+  return gOffsetX + value * gScale - static_cast<float>(gBakeShiftX);
+}
+float deviceY(float value) {
+  return gOffsetY + value * gScale - static_cast<float>(gBakeShiftY);
+}
 float deviceLength(float value) { return value * gScale; }
 
 void releaseGearTexture();
@@ -93,6 +101,185 @@ void releaseBackdrop() {
     SDL_DestroyTexture(gBackdrop.texture);
   gBackdrop = Backdrop{};
 }
+
+// A card is three shapes stacked: the panel, the shade the title sits on and,
+// for an empty slot, two rounded plates. They are identical every frame and
+// only move when the shelf travels, so each one is rasterised once into a
+// texture and copied afterwards. A card went from a few hundred one-row fills
+// to one copy per layer.
+enum class LayerKind { Panel, Slot, Scrim };
+
+struct Layer {
+  SDL_Texture *texture = nullptr;
+  SDL_Renderer *renderer = nullptr;
+  LayerKind kind = LayerKind::Panel;
+  int width = 0;
+  int height = 0;
+  // Sub-pixel part of the origin, in 1/256 of a pixel: two cards at the same
+  // fraction share a texture even when their whole-pixel origins differ.
+  int offsetX = 0;
+  int offsetY = 0;
+  int radius = 0;
+  int strength = 0;
+  Uint32 color = 0;
+  Uint32 inner = 0;
+  int exponent = 0;
+  Uint64 used = 0;
+};
+
+std::vector<Layer> gLayers;
+constexpr std::size_t kLayerLimit = 16;
+Uint64 gLayerClock = 0;
+
+void releaseLayers() {
+  for (Layer &layer : gLayers) {
+    if (layer.texture != nullptr)
+      SDL_DestroyTexture(layer.texture);
+  }
+  gLayers.clear();
+}
+
+Uint32 packColor(SDL_Color color) {
+  return (static_cast<Uint32>(color.r) << 24) |
+         (static_cast<Uint32>(color.g) << 16) |
+         (static_cast<Uint32>(color.b) << 8) | color.a;
+}
+
+struct LayerSpec {
+  LayerKind kind = LayerKind::Panel;
+  float x = 0.0f;
+  float y = 0.0f;
+  float width = 0.0f;
+  float height = 0.0f;
+  float radius = 0.0f;
+  SDL_Color color{};
+  SDL_Color inner{};
+  Uint8 strength = 0;
+  float exponent = 1.0f;
+};
+
+void paintLayer(SDL_Renderer *renderer, const LayerSpec &spec) {
+  switch (spec.kind) {
+  case LayerKind::Panel:
+    gradientRounded(renderer, spec.x, spec.y, spec.width, spec.height,
+                    spec.radius, spec.color, spec.inner);
+    break;
+  case LayerKind::Slot:
+    rounded(renderer, spec.x, spec.y, spec.width, spec.height, spec.radius,
+            spec.color);
+    rounded(renderer, spec.x + 1.0f, spec.y + 1.0f, spec.width - 2.0f,
+            spec.height - 2.0f, spec.radius - 1.0f, spec.inner);
+    break;
+  case LayerKind::Scrim:
+    fadeBottomRounded(renderer, spec.x, spec.y, spec.width, spec.height,
+                      spec.radius, spec.color, spec.strength, spec.exponent);
+    break;
+  }
+}
+
+// Bakes the layer and returns its cache entry, or nullptr when the backend
+// cannot render into a texture. Everything is painted with blending off so the
+// texture keeps the exact per-pixel alpha the direct draw would have produced;
+// the copy then blends it onto the frame the way the spans would have.
+const Layer *layerTexture(SDL_Renderer *renderer, const LayerSpec &spec,
+                          int originX, int originY) {
+  const int width =
+      std::max(1, static_cast<int>(std::ceil(deviceLength(spec.width))) + 1);
+  const int height =
+      std::max(1, static_cast<int>(std::ceil(deviceLength(spec.height))) + 1);
+  const int offsetX = static_cast<int>(std::lround(
+      (deviceX(spec.x) - static_cast<float>(originX)) * 256.0f));
+  const int offsetY = static_cast<int>(std::lround(
+      (deviceY(spec.y) - static_cast<float>(originY)) * 256.0f));
+  const int radius =
+      static_cast<int>(std::lround(deviceLength(spec.radius) * 64.0f));
+  const Uint32 color = packColor(spec.color);
+  const Uint32 inner = packColor(spec.inner);
+  const int exponent = static_cast<int>(std::lround(spec.exponent * 100.0f));
+
+  for (Layer &layer : gLayers) {
+    if (layer.renderer == renderer && layer.kind == spec.kind &&
+        layer.width == width && layer.height == height &&
+        layer.offsetX == offsetX && layer.offsetY == offsetY &&
+        layer.radius == radius && layer.strength == spec.strength &&
+        layer.color == color && layer.inner == inner &&
+        layer.exponent == exponent) {
+      layer.used = ++gLayerClock;
+      return &layer;
+    }
+  }
+
+  SDL_Texture *texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                        SDL_TEXTUREACCESS_TARGET, width, height);
+  if (texture == nullptr)
+    return nullptr;
+  if (SDL_SetRenderTarget(renderer, texture) != 0) {
+    SDL_DestroyTexture(texture);
+    return nullptr;
+  }
+  SDL_Rect clip{0, 0, 0, 0};
+  const bool clipped = SDL_RenderIsClipEnabled(renderer) == SDL_TRUE;
+  if (clipped)
+    SDL_RenderGetClipRect(renderer, &clip);
+  SDL_RenderSetClipRect(renderer, nullptr);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+  SDL_RenderClear(renderer);
+  gBakeShiftX = originX;
+  gBakeShiftY = originY;
+  paintLayer(renderer, spec);
+  gBakeShiftX = 0;
+  gBakeShiftY = 0;
+  SDL_SetRenderTarget(renderer, nullptr);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  if (clipped)
+    SDL_RenderSetClipRect(renderer, &clip);
+  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+
+  Layer layer;
+  layer.texture = texture;
+  layer.renderer = renderer;
+  layer.kind = spec.kind;
+  layer.width = width;
+  layer.height = height;
+  layer.offsetX = offsetX;
+  layer.offsetY = offsetY;
+  layer.radius = radius;
+  layer.strength = spec.strength;
+  layer.color = color;
+  layer.inner = inner;
+  layer.exponent = exponent;
+  layer.used = ++gLayerClock;
+  if (gLayers.size() >= kLayerLimit) {
+    std::size_t oldest = 0;
+    for (std::size_t i = 1; i < gLayers.size(); ++i) {
+      if (gLayers[i].used < gLayers[oldest].used)
+        oldest = i;
+    }
+    if (gLayers[oldest].texture != nullptr)
+      SDL_DestroyTexture(gLayers[oldest].texture);
+    gLayers.erase(gLayers.begin() + static_cast<std::ptrdiff_t>(oldest));
+  }
+  gLayers.push_back(layer);
+  return &gLayers.back();
+}
+
+void drawLayer(SDL_Renderer *renderer, const LayerSpec &spec) {
+  const int originX = static_cast<int>(std::floor(deviceX(spec.x)));
+  const int originY = static_cast<int>(std::floor(deviceY(spec.y)));
+  const Layer *layer = layerTexture(renderer, spec, originX, originY);
+  if (layer == nullptr) {
+    paintLayer(renderer, spec);
+    return;
+  }
+  const SDL_FRect box{static_cast<float>(originX),
+                      static_cast<float>(originY),
+                      static_cast<float>(layer->width),
+                      static_cast<float>(layer->height)};
+  SDL_RenderCopyF(renderer, layer->texture, nullptr, &box);
+}
+
 
 // Drops every rasterised font, so the next measurement opens one at the size
 // the new output scale asks for. Text is cached per string, so the cache goes
@@ -372,6 +559,7 @@ bool initializeTextRenderer(const std::string &fontPath) {
 void shutdownTextRenderer() {
   clearTextCache();
   releaseBackdrop();
+  releaseLayers();
   closeFonts();
   gLatinFontPath.clear();
   gFontPath.clear();
@@ -1038,15 +1226,15 @@ bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
 }
 } // namespace
 
-// The backdrop is a couple of thousand one-row fills, and none of it changes
-// between frames: only the sun drifts, and it is already rounded to a pixel.
-// Baking it and repainting when that pixel moves turns the frame into a single
-// blit.
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+// The backdrop is a couple of thousand one-row fills and it never moves, so it
+// is baked once and every frame after that is a single blit. Nothing here
+// follows the clock: a still picture costs nothing to hold on screen and lets
+// the loop stop drawing entirely while the shelf sits untouched.
+void drawBackground(SDL_Renderer *renderer, const Game &game,
                     SDL_Texture *wallpaper) {
   if (renderer == nullptr)
     return;
-  const int sunX = 1008 + static_cast<int>(std::sin(time * 0.08f) * 18.0f);
+  const int sunX = 1008;
   const int width = gOutputWidth;
   const int height = gOutputHeight;
   if (gBackdrop.renderer != renderer) {
@@ -1318,5 +1506,63 @@ void drawActionRow(SDL_Renderer *renderer, float rightX, float y,
     drawAction(renderer, layout[index].x, layout[index].y, actions[index],
                static_cast<int>(index) == focused, focusOpacity, accent);
 }
+
+// The shelf's card body: the gradient a card without box art shows.
+void drawCardPanel(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color top, SDL_Color bottom,
+                   Uint8 alpha) {
+  if (renderer == nullptr)
+    return;
+  LayerSpec spec;
+  spec.kind = LayerKind::Panel;
+  spec.x = x;
+  spec.y = y;
+  spec.width = width;
+  spec.height = height;
+  spec.radius = radius;
+  top.a = alpha;
+  bottom.a = alpha;
+  spec.color = top;
+  spec.inner = bottom;
+  drawLayer(renderer, spec);
+}
+
+// An empty slot: an outer plate with a slightly lighter one inside it.
+void drawCardSlot(SDL_Renderer *renderer, float x, float y, float width,
+                  float height, float radius, SDL_Color outer,
+                  SDL_Color inner) {
+  if (renderer == nullptr)
+    return;
+  LayerSpec spec;
+  spec.kind = LayerKind::Slot;
+  spec.x = x;
+  spec.y = y;
+  spec.width = width;
+  spec.height = height;
+  spec.radius = radius;
+  spec.color = outer;
+  spec.inner = inner;
+  drawLayer(renderer, spec);
+}
+
+// The fade under a card title, so the name stays readable over box art.
+void drawCardScrim(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color color, Uint8 strength,
+                   float exponent) {
+  if (renderer == nullptr)
+    return;
+  LayerSpec spec;
+  spec.kind = LayerKind::Scrim;
+  spec.x = x;
+  spec.y = y;
+  spec.width = width;
+  spec.height = height;
+  spec.radius = radius;
+  spec.color = color;
+  spec.strength = strength;
+  spec.exponent = exponent;
+  drawLayer(renderer, spec);
+}
+
 
 } // namespace launcher::ui

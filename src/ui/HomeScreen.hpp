@@ -16,8 +16,7 @@ namespace launcher::ui {
 // the selected game, and it is walked to like the other two.
 enum class HomeFocus { Cards, Pills, Actions };
 
-void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
-              Uint64 toastUntil, std::string_view toastMessage, int startupPage,
+void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,

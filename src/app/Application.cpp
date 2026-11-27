@@ -686,8 +686,6 @@ int Application::run(int argc, char **argv) {
   config::InputDeviceKind lastInputDevice =
       config::InputDeviceKind::KeyboardMouse;
 #endif
-  const Uint64 start = SDL_GetPerformanceCounter();
-  const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
 
   auto controllerLabel = [&](SDL_GameController *pad) -> std::string {
     if (pad == nullptr)
@@ -1808,7 +1806,14 @@ int Application::run(int argc, char **argv) {
         1, 1000U / static_cast<Uint32>(mode.refresh_rate));
   Uint64 nextMenuFrame = 0;
 
+  // A menu frame is only worth drawing when something in it moved, so the loop
+  // remembers what the frame on screen was made of instead of redrawing it at
+  // the refresh rate forever.
+  bool menuDrawn = false;
+  std::uint64_t menuCoverRevision = 0;
+  bool menuToastActive = false;
   while (running) {
+    bool menuDirty = false;
     if (coreInstallDone.exchange(false)) {
       if (coreInstallThread != nullptr) {
         SDL_WaitThread(coreInstallThread, nullptr);
@@ -1825,6 +1830,8 @@ int Application::run(int argc, char **argv) {
     }
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
+      // Anything the player or the window does can change the picture.
+      menuDirty = true;
 #if defined(MRG_PLATFORM_BRICK)
       const bool fromBrick =
           brickJoystick != nullptr &&
@@ -2763,8 +2770,6 @@ int Application::run(int argc, char **argv) {
       }
     }
 
-    const float time =
-        static_cast<float>((SDL_GetPerformanceCounter() - start) / frequency);
     const config::InputPrompts prompts = currentPrompts();
     // One ring, one control: the key names whichever control currently owns
     // the focus, and moving to a different one restarts the fade.
@@ -2806,6 +2811,8 @@ int Application::run(int argc, char **argv) {
       homeRow += (rowTarget - homeRow) * 0.35f;
       if (std::abs(rowTarget - homeRow) < 0.002f)
         homeRow = rowTarget;
+      if (homeRow != rowTarget)
+        menuDirty = true;
     } else {
       homeRowSettled = false;
     }
@@ -2820,6 +2827,26 @@ int Application::run(int argc, char **argv) {
     }
     // Downloads and decodes finish here, never inside a draw call.
     coverCache.poll(renderer);
+    // What a menu frame shows: the art, a toast that is still counting down and
+    // a focus ring that is still fading in. Nothing else moves, so when none of
+    // those changed the pixels on screen are already right.
+    const bool toastActive =
+        toastUntil != 0 && SDL_GetTicks64() < toastUntil;
+    if (coverCache.revision() != menuCoverRevision ||
+        toastActive != menuToastActive || focusOpacity < 1.0f ||
+        screenshotRequested)
+      menuDirty = true;
+    menuCoverRevision = coverCache.revision();
+    menuToastActive = toastActive;
+    if (screen != Screen::Game && !options.smokeTest() && menuDrawn &&
+        !menuDirty) {
+      // Skip the draw and the present and let the CPU sleep: a still shelf
+      // costs nothing to keep on screen. Twenty milliseconds is short enough
+      // that a press still feels instant, long enough to stay off the
+      // wake-up treadmill the display refresh would otherwise lock us into.
+      SDL_Delay(20);
+      continue;
+    }
     // The interface draws itself in output pixels, so every frame starts by
     // telling the UI how big the window's framebuffer is.
     int outputWidth = 0;
@@ -2880,19 +2907,19 @@ int Application::run(int argc, char **argv) {
                                     currentLanguage(), accent);
       }
     } else if (screen == Screen::Home) {
-      ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
+      ui::drawHome(renderer, selectedGame, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
                    focusOpacity, ui::accentColor(settings.accent),
                    &coverCache);
     } else if (screen == Screen::Settings) {
-      ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
+      ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
                        settingsRailFocus, focusOpacity, coreRefreshFocused,
                        settingsFooterFocus, settingsFooterAction);
     } else if (selectedEntryAvailable()) {
-      ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
+      ui::drawHome(renderer, selectedGame, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
                    focusOpacity, ui::accentColor(settings.accent), &coverCache,
@@ -3049,6 +3076,7 @@ int Application::run(int argc, char **argv) {
       (void)saveScreenshot();
     }
     SDL_RenderPresent(renderer);
+    menuDrawn = true;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
     if (options.smokeTest() &&
         (!options.smokeSettings || smokeSettingsAbout) &&
