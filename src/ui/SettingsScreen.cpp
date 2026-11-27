@@ -625,12 +625,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         game.accent, focusOpacity);
     for (std::size_t index = 0; index < config::kInputActionCount; ++index) {
       const int bindingRow = static_cast<int>(index) + 4;
+      // The pad button every port can bind; the key half only exists on the port
+      // the keyboard belongs to.
+      const std::string binding =
+          config::controllerButtonPrompt(pads[index], resolvedControllerStyle);
       const std::string value =
           bindingCapture && row == bindingRow
               ? tr(TextId::PressInput, language)
-              : config::keyBindingName(keys[index]) + " / " +
-                    config::controllerButtonPrompt(pads[index],
-                                                   resolvedControllerStyle);
+              : player == 0
+                    ? config::keyBindingName(keys[index]) + " / " + binding
+                    : binding;
       drawCompactRow(
           renderer, controllerRowBounds(bindingRow),
           row == bindingRow, contentFocused && row == bindingRow,

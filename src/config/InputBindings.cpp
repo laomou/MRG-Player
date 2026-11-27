@@ -6,19 +6,22 @@
 namespace launcher::config {
 namespace {
 
-constexpr std::array<SDL_Keycode, kInputActionCount> kLegacyKeyboardDefaults{
-    SDLK_z,     SDLK_x, SDLK_RSHIFT, SDLK_RETURN, SDLK_UP,
-    SDLK_DOWN,  SDLK_LEFT, SDLK_RIGHT, SDLK_c,     SDLK_v,
-    SDLK_f,     SDLK_j, SDLK_q,      SDLK_e};
+using KeyMap = std::array<SDL_Keycode, kInputActionCount>;
+
+// What a port with no keyboard reads from: nothing. SDL reports an unbound key
+// as SDLK_UNKNOWN, which no event ever carries, so the table never matches. A
+// write lands here and is forgotten, which is what the settings page deserves
+// for asking a pad-only port to bind a key.
+KeyMap kNoKeys{};
 
 } // namespace
 
 InputBindings defaultInputBindings() {
   InputBindings bindings;
-  // Match the conventional RetroArch keyboard layout printed on handheld and
-  // emulator key charts: the lower face pair is X/Z, the upper pair is S/A,
-  // and the shoulders are Q/W. Turbo remains on C/V because it is an MRG-only
-  // action rather than a console button.
+  // The conventional RetroArch pair — X/Z for the face buttons, the arrow keys
+  // for the d-pad — with the upper pair and the shoulders on S/A and Q/W.
+  // Turbo remains on C/V because it is an MRG-only action rather than a console
+  // button.
   bindings.keyboard = {SDLK_x,    SDLK_z,    SDLK_RSHIFT, SDLK_RETURN,
                        SDLK_UP,   SDLK_DOWN, SDLK_LEFT,   SDLK_RIGHT,
                        SDLK_c,    SDLK_v,    SDLK_s,      SDLK_a,
@@ -35,32 +38,48 @@ InputBindings defaultInputBindings() {
       SDL_CONTROLLER_BUTTON_LEFTSTICK,    SDL_CONTROLLER_BUTTON_RIGHTSTICK,
       SDL_CONTROLLER_BUTTON_Y,            SDL_CONTROLLER_BUTTON_B,
       SDL_CONTROLLER_BUTTON_LEFTSHOULDER, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER};
-  // Player 2 shares the pad layout (a second pad uses the same buttons) but
-  // gets its own keys so one keyboard can drive both ports.
-  bindings.keyboardPlayer2 = {SDLK_g, SDLK_h, SDLK_r, SDLK_t,
-                              SDLK_w, SDLK_s, SDLK_a, SDLK_d,
-                              SDLK_b, SDLK_n, SDLK_i, SDLK_k,
-                              SDLK_o, SDLK_p};
+  // A second pad uses the same buttons as the first, so player 2 shares the pad
+  // layout; there is no second keyboard layout to fill in.
   bindings.controllerPlayer2 = bindings.controller;
   bindings.analogDeadZone = 16000;
   return bindings;
 }
 
-bool migrateLegacyKeyboardDefaults(InputBindings &bindings) noexcept {
-  if (bindings.keyboard != kLegacyKeyboardDefaults)
-    return false;
-  bindings.keyboard = defaultInputBindings().keyboard;
-  return true;
+SDL_Keycode launcherMenuKey(const InputBindings &bindings,
+                            SDL_Keycode key) noexcept {
+  const auto &keys = bindings.keyboard;
+  const auto bound = [&](InputAction action) {
+    return keys[static_cast<std::size_t>(action)];
+  };
+  // Confirmation, and the button a pad player reaches for to start a game, both
+  // land on Enter -- the menu's own confirm key. Back is Escape so that leaving
+  // the shelf asks before it quits, exactly as the pad's B does on a desktop.
+  if (key == bound(InputAction::A) || key == bound(InputAction::Start))
+    return SDLK_RETURN;
+  if (key == bound(InputAction::B))
+    return SDLK_ESCAPE;
+  // X opens the drawer and Y does the same, matching the pad.
+  if (key == bound(InputAction::X) || key == bound(InputAction::Y))
+    return SDLK_x;
+  if (key == bound(InputAction::Up))
+    return SDLK_UP;
+  if (key == bound(InputAction::Down))
+    return SDLK_DOWN;
+  if (key == bound(InputAction::Left))
+    return SDLK_LEFT;
+  if (key == bound(InputAction::Right))
+    return SDLK_RIGHT;
+  return key;
 }
 
 std::array<SDL_Keycode, kInputActionCount> &
 keyboardBindings(InputBindings &bindings, std::size_t player) noexcept {
-  return player == 0 ? bindings.keyboard : bindings.keyboardPlayer2;
+  return player == 0 ? bindings.keyboard : kNoKeys;
 }
 
 const std::array<SDL_Keycode, kInputActionCount> &
 keyboardBindings(const InputBindings &bindings, std::size_t player) noexcept {
-  return player == 0 ? bindings.keyboard : bindings.keyboardPlayer2;
+  return player == 0 ? bindings.keyboard : kNoKeys;
 }
 
 std::array<SDL_GameControllerButton, kInputActionCount> &
@@ -160,9 +179,19 @@ std::string controllerButtonPrompt(SDL_GameControllerButton button,
   return controllerBindingName(button);
 }
 
-InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
+InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style,
+                          const InputBindings *bindings) {
+  static const InputBindings fallback = defaultInputBindings();
+  const InputBindings &bound = bindings != nullptr ? *bindings : fallback;
+  const std::size_t options = static_cast<std::size_t>(InputAction::X);
   if (device == InputDeviceKind::KeyboardMouse)
-    return {"ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+    return {"ENTER",
+            "ESC",
+            "TAB",
+            "ENTER",
+            "LEFT/RIGHT",
+            ".",
+            keyBindingName(bound.keyboard[options]),
             PromptSource::keyboard()};
   std::string category = "LB/RB";
   if (style == ControllerStyle::Nintendo)
@@ -175,6 +204,9 @@ InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style) {
           controllerButtonPrompt(SDL_CONTROLLER_BUTTON_A, style),
           "D-PAD",
           "RB",
+          // The launcher's drawer answers to the button printed X, whatever
+          // the binding does inside a game.
+          controllerButtonPrompt(SDL_CONTROLLER_BUTTON_X, style),
           PromptSource::controller()};
 }
 

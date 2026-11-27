@@ -64,23 +64,28 @@ enum class ControllerStyle : int {
   Generic = 4
 };
 
-// The console has two controller ports; every binding set is kept per player
-// so two people can share one keyboard and one pad.
+// The console has two controller ports. Both take a pad; only the first has a
+// keyboard, because two people on one keyboard end up sharing the keys they
+// need -- a second player is a second pad.
 inline constexpr std::size_t kPlayerCount = 2;
 
 struct InputBindings {
   std::array<SDL_Keycode, kInputActionCount> keyboard{};
   std::array<SDL_GameControllerButton, kInputActionCount> controller{};
-  std::array<SDL_Keycode, kInputActionCount> keyboardPlayer2{};
   std::array<SDL_GameControllerButton, kInputActionCount> controllerPlayer2{};
   int analogDeadZone = 16000;
 };
 
-// Upgrades only the exact former P1 default, leaving every customized layout
-// untouched. Returns true when a migration was applied.
-[[nodiscard]] bool
-migrateLegacyKeyboardDefaults(InputBindings &bindings) noexcept;
+// The launcher's own menus answer to the pad's face buttons, so a key bound to
+// one of them has to mean the same thing there: the shelf cannot ask a player to
+// learn that confirmation is Enter after the games taught them it is A. Keys
+// bound to A, B, X, Y, START and the d-pad are rewritten into the keys those
+// menus already understand; anything else is returned untouched.
+[[nodiscard]] SDL_Keycode launcherMenuKey(const InputBindings &bindings,
+                                          SDL_Keycode key) noexcept;
 
+// Player 1's key table. Ports past the first answer to a pad only, so they get
+// an empty table: every entry is SDLK_UNKNOWN, which no key event carries.
 [[nodiscard]] std::array<SDL_Keycode, kInputActionCount> &
 keyboardBindings(InputBindings &bindings, std::size_t player) noexcept;
 [[nodiscard]] const std::array<SDL_Keycode, kInputActionCount> &
@@ -130,6 +135,9 @@ struct InputPrompts {
   std::string change;
   std::string horizontal;
   std::string frameStep;
+  // The button that opens a game's options drawer on the shelf. It follows the
+  // bindings, so the strip names the key the player actually presses.
+  std::string options;
   PromptSource source;
 };
 
@@ -145,6 +153,10 @@ InputDeviceKind resolvePromptDevice(PromptDeviceMode mode,
                                     bool controllerConnected) noexcept;
 std::string controllerButtonPrompt(SDL_GameControllerButton button,
                                    ControllerStyle style);
-InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style);
+// Bindings decide the words for buttons whose bound key is not a menu key --
+// the shelf's options drawer -- so the prompt set has to see them. Passing none
+// falls back to the defaults, which is what the tests and the first frame use.
+InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style,
+                          const InputBindings *bindings = nullptr);
 
 } // namespace launcher::config

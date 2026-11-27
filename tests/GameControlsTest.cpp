@@ -53,7 +53,6 @@ void testGameControls(const char *fontPath) {
         "Genesis explicitly names the core input layout");
   const auto a = static_cast<std::size_t>(InputAction::A);
   bindings.keyboard[a] = SDLK_k;
-  bindings.keyboardPlayer2[a] = SDLK_p;
   bindings.controller[a] = SDL_CONTROLLER_BUTTON_RIGHTSHOULDER;
   check(help(GamePlatform::Nes, ControlHelpDevice::Keyboard).rows[1].binding == "K" &&
             help(GamePlatform::Nes, ControlHelpDevice::Controller).rows[1].binding == "RB" &&

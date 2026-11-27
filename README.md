@@ -26,7 +26,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - In-game screenshots: **F12** writes a PNG of the current picture to the data root's `screenshots/` directory
 - Audio options: master volume, a mute toggle with a keyboard hotkey, and the fast-forward audio policy
 - Persistent game metadata: favorites, custom titles, total play time, and last-played time
-- Configurable keyboard/controller bindings for both players, editable per player, with turbo A/B autofire, plus an analog-stick dead zone
+- Configurable keyboard/controller bindings, editable per port, with turbo A/B autofire, plus an analog-stick dead zone
 - libretro back end for NES, GBA, SNES, Game Boy, and Genesis: core discovery, `MRG_CORES_DIR` override, `.so.zip` unpacking, isolated `SDL_LoadObject` loading, and software framebuffer handling for 0RGB1555, RGB565, and XRGB8888 cores
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
@@ -240,38 +240,42 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 
 ### Key hints
 
-The strip along the bottom of a screen is a button row that never takes focus. The direction keys stay on the content — cards, rows, the category rail — and the strip is always drawn idle, with no focus ring anywhere on it. The pointer can still click either entry and runs it on the spot, which is the only way to press one. Each entry is one key plus one short word; the key is drawn as a filled badge, the word is plain text with no plate or outline around it, so the bottom of the screen never grows a second row of boxes. The word drops the noun the screen already shows, so the shelf reads `X OPTIONS` next to `ENTER CONFIRM` (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
+The strip along the bottom of a screen is a button row that never takes focus. The direction keys stay on the content — cards, rows, the category rail — and the strip is always drawn idle, with no focus ring anywhere on it. The pointer can still click either entry and runs it on the spot, which is the only way to press one. Each entry is one key plus one short word; the key is drawn as a filled badge, the word is plain text with no plate or outline around it, so the bottom of the screen never grows a second row of boxes. The word drops the noun the screen already shows, so the shelf reads `S OPTIONS` next to `ENTER CONFIRM` on the keyboard and `X OPTIONS` on a pad (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
 
 Two entries is the rule: the left one opens the drawer or backs out, the right one acts on what is focused. A shelf with nothing selected has no strip at all, since there is nothing to act on.
+
+The keys in the strip follow the bindings. Outside a game the keys bound to the pad's buttons mean what the buttons mean: **X** confirms like A, **Z** backs out like B, **S** opens the options drawer like X, **A** does the same as Y, and the d-pad keys stay arrows. So the same four keys do the same four things whether the player is holding a pad or a keyboard, and the strip always names the key it is actually listening to.
 
 Dialogs are the one place with no key hints: they are just two buttons, cancel on the left and the confirming verb on the right, both focusable and clickable. Caption text never takes focus anywhere — it is the label of the control above it.
 
 ### Controls
 
-| Console action | Player 1 keyboard | Player 2 keyboard | Controller |
-|---|---|---|---|
-| D-pad | Arrow keys | W / A / S / D | D-pad / left stick |
-| A | X | G | A |
-| B | Z | H | X |
-| Select | Right Shift | R | Back |
-| Start | Enter | T | Start |
-| Turbo A | C | B | Left stick button |
-| Turbo B | V | N | Right stick button |
-| Open pause menu | Escape | Escape | Guide |
-| Fast-forward (hold) | Tab | Tab | Right shoulder |
-| Slow motion (hold) | Left Shift | Left Shift | Left shoulder |
-| Rewind (hold) | Backspace | Backspace | — |
-| Step one frame (paused) | . (period) | . (period) | Right shoulder |
-| Mute / unmute | M | M | — |
-| Screenshot | F12 | F12 | — |
+| Console action | Player 1 keyboard | Controller |
+|---|---|---|
+| D-pad | Arrow keys | D-pad / left stick |
+| A | X | A |
+| B | Z | X |
+| X | S | Y |
+| Y | A | B |
+| Select | Right Shift | Back |
+| Start | Enter | Start |
+| Turbo A | C | Left stick button |
+| Turbo B | V | Right stick button |
+| Open pause menu | Escape | Guide |
+| Fast-forward (hold) | Tab | Right shoulder |
+| Slow motion (hold) | Left Shift | Left shoulder |
+| Rewind (hold) | Backspace | — |
+| Step one frame (paused) | . (period) | Right shoulder |
+| Mute / unmute | M | — |
+| Screenshot | F12 | F12 (keyboard only) |
 
-Two controllers are supported at the same time. The controller rows above apply to both players, so each connected pad drives the player it was assigned to in Settings.
+**The keyboard is a one-player device.** Player 1 keeps the whole keyboard; player 2 is a second pad. Two people on one keyboard would have to share the keys the first player is already holding, so Settings → Controller shows the key column for player 1 and only the button column for player 2. To play player 1 on the keyboard against player 2 on a pad, open Settings → Controller, switch **Editing bindings for** to **Player 2**, and cycle the pad onto that port. Two pads on ports 1 and 2 work with no setup at all.
 
 On a TrimUI Brick the panel is read directly, so its buttons are the controller in the table. The two function keys are shortcuts of their own: **F1** saves the current slot and **F2** loads it while a game is running, and both are ignored in the menus because a slot only means something in a game. The firmware also watches these keys, so leave them unbound in the stock **Fnkey setting** app; binding a function there fires both actions at once.
 
 The case lighting follows the accent colour: the **THEME** page has an **LED LIGHTING** switch, the lights turn the accent colour while MRG Player runs, and the stock lighting is put back when it exits. This only applies where the Brick exposes the system LEDs, so desktop builds do not show the switch.
 
-Every platform uses the same keyboard and controller mapping. The eight console actions are forwarded to the core's joypad, turbo is applied in front of the core, and the pause menu, fast-forward, slow motion, rewind, frame stepping, and screenshots behave identically.
+Every platform uses the same controller mapping and the same player 1 keyboard. The eight console actions are forwarded to the core's joypad, turbo is applied in front of the core, and the pause menu, fast-forward, slow motion, rewind, frame stepping, and screenshots behave identically.
 
 Holding **Turbo A** or **Turbo B** repeats that button: the console sees it pressed for two frames and released for two, which is fifteen presses per second at the NTSC field rate. Turbo is a front-end feature and never reaches the emulator as a button of its own, so it works for any game that rewards rapid tapping, and a normal A or B press still wins while the turbo key is held.
 
@@ -347,7 +351,7 @@ The same three options can be overridden for a single game from **Display** in t
 
 Open **Settings → Controller** to choose the UI prompt mode (**Auto**, **Keyboard & Mouse**, or **Controller**), controller label style (**Auto**, Xbox, Nintendo Switch, PlayStation, or Generic), and the active controller when multiple devices are connected. These choices change presentation only: keyboard, mouse, and controllers remain usable together. Auto mode follows the most recent meaningful input and ignores analog movement inside the configured dead zone; it falls back to keyboard prompts when no controller is available. The preferred controller is restored by SDL controller GUID after hotplug or restart.
 
-The knobs on this screen follow the console convention: the category rail and the page next to it are two halves of one screen, so enter the screen on the rail, move the focus between the rail and the page with Left and Right, and press Enter on a category to step into its page. Back/Escape returns to the rail and, from there, to the home screen. The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys step through every control: up leaves the shelf for the library and settings pills, down leaves it for the footer, and Enter or A runs whichever entry is focused. Every clickable control on the settings screen draws the same focus ring, which only adds a border around the row: the plate underneath keeps its colour as the selection moves. The cores page re-reads the installed cores whenever the settings screen is opened, so it lists them without a click.
+The knobs on this screen follow the console convention: the category rail and the page next to it are two halves of one screen, so enter the screen on the rail, move the focus between the rail and the page with Left and Right, and press Enter on a category to step into its page. Back/Escape returns to the rail and, from there, to the home screen. The same page configures all eight console actions (A, B, Select, Start, and D-pad) plus the two turbo actions, laid out in two columns. Select an action and press the desired keyboard key or controller button. Press **R** on the controller settings page to restore defaults. The analog-stick dead zone is adjustable from 4000 to 30000. Prompt preferences, the preferred controller, bindings, and dead zone are saved in `settings.ini`. Home, settings, game-management, and pause hints use the selected keyboard/controller presentation, with the button first and what it does written beside it. On the home screen the direction keys stay on the content: left and right walk the shelf, up moves to the library and settings pills, and down comes back. The strip along the bottom never takes focus, so Enter or A always starts the selected card and S (or X on a pad) opens its drawer. Every clickable control on the settings screen draws the same focus ring, which only adds a border around the row: the plate underneath keeps its colour as the selection moves. The cores page re-reads the installed cores whenever the settings screen is opened, so it lists them without a click.
 
 The shelf always shows seven and a half cards: seven whole ones and a half card at the right edge, so a library that continues past the screen says so on its own. Once there are more than seven games, the row slides as the selection moves so the highlighted card stays in view and the half card is always the next one; the row stops at the last game instead of wrapping, and settles into place when the screen is opened rather than sliding in from the first game.
 

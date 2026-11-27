@@ -60,18 +60,18 @@ int main() {
   check(defaults.keyboard[static_cast<std::size_t>(InputAction::R)] == SDLK_w,
         "player 1 R is W");
 
-  launcher::config::InputBindings legacy = defaults;
-  legacy.keyboard = {SDLK_z,    SDLK_x,    SDLK_RSHIFT, SDLK_RETURN,
-                     SDLK_UP,   SDLK_DOWN, SDLK_LEFT,   SDLK_RIGHT,
-                     SDLK_c,    SDLK_v,    SDLK_f,      SDLK_j,
-                     SDLK_q,    SDLK_e};
-  check(launcher::config::migrateLegacyKeyboardDefaults(legacy),
-        "former keyboard defaults are migrated");
-  check(legacy.keyboard == defaults.keyboard,
-        "former keyboard defaults become the conventional layout");
-  legacy.keyboard[static_cast<std::size_t>(InputAction::A)] = SDLK_k;
-  check(!launcher::config::migrateLegacyKeyboardDefaults(legacy),
-        "custom keyboard layouts are not migrated");
+  // The keyboard belongs to the first port. A second player is a second pad, so
+  // the port past the first reads from an empty table rather than a layout that
+  // would have to share the keys player 1 is already holding.
+  launcher::config::InputBindings shared = defaults;
+  for (std::size_t index = 0; index < kInputActionCount; ++index) {
+    check(launcher::config::keyboardBindings(shared, 1)[index] == SDLK_UNKNOWN,
+          "player 2 has no key for any action");
+  }
+  launcher::config::keyboardBindings(shared, 1)
+      [static_cast<std::size_t>(InputAction::A)] = SDLK_k;
+  check(shared.keyboard[static_cast<std::size_t>(InputAction::A)] == SDLK_x,
+        "a write aimed at player 2 never lands on player 1");
   // Turbo moved to the stick clicks: a pad that presses Y or B for a turbo
   // pulse could never press the real Y or B at the same time.
   check(defaults.controller[static_cast<std::size_t>(InputAction::TurboA)] ==
@@ -92,18 +92,8 @@ int main() {
   check(defaults.controller[static_cast<std::size_t>(InputAction::R)] ==
             SDL_CONTROLLER_BUTTON_RIGHTSHOULDER,
         "pad R is the right shoulder");
-  check(defaults.keyboardPlayer2[static_cast<std::size_t>(InputAction::TurboA)] ==
-            SDLK_b,
-        "player 2 turbo A is B");
-  check(defaults.keyboardPlayer2[static_cast<std::size_t>(InputAction::X)] ==
-            SDLK_i,
-        "player 2 X is I");
-  // Player 2 must not collide with the keys player 1 uses for the same console
-  // buttons, otherwise one keypress drives both ports.
-  for (std::size_t index = 0; index < kInputActionCount; ++index) {
-    check(defaults.keyboard[index] != defaults.keyboardPlayer2[index],
-          "player 2 keys are distinct from player 1");
-  }
+  check(defaults.controllerPlayer2 == defaults.controller,
+        "both ports share the pad layout");
 
   check(std::string(launcher::config::inputActionName(InputAction::TurboA)) ==
             "TURBO A",
@@ -132,6 +122,31 @@ int main() {
   check(xboxPrompts.source.fromController() &&
             !xboxPrompts.source.fromKeyboard(),
         "a pad prompt set says it came from the pad");
+  // The shelf's options drawer sits on the pad's X, so the strip has to name
+  // whatever key the player bound there instead of a menu key of its own.
+  check(keyboardPrompts.options == "S",
+        "the keyboard names its own options key");
+  check(xboxPrompts.options == "X", "the pad names its own options button");
+  const auto nintendoPrompts = launcher::config::inputPrompts(
+      launcher::config::InputDeviceKind::Controller,
+      launcher::config::ControllerStyle::Nintendo);
+  check(nintendoPrompts.options == "Y",
+        "a Nintendo pad puts options on Y");
+
+  // Outside a game the keys standing in for the pad's buttons mean the same
+  // thing as the buttons themselves, or a keyboard player cannot reach the
+  // shelf's drawer at all.
+  const auto launcherKey = [&](SDL_Keycode key) {
+    return launcher::config::launcherMenuKey(defaults, key);
+  };
+  check(launcherKey(SDLK_x) == SDLK_RETURN, "X confirms like the pad's A");
+  check(launcherKey(SDLK_RETURN) == SDLK_RETURN, "enter still confirms");
+  check(launcherKey(SDLK_z) == SDLK_ESCAPE, "Z backs out like the pad's B");
+  check(launcherKey(SDLK_ESCAPE) == SDLK_ESCAPE, "escape still backs out");
+  check(launcherKey(SDLK_a) == SDLK_x, "Y opens the drawer with X");
+  check(launcherKey(SDLK_s) == SDLK_x, "X's key opens the drawer");
+  check(launcherKey(SDLK_UP) == SDLK_UP, "the d-pad keys stay arrows");
+  check(launcherKey(SDLK_m) == SDLK_m, "unbound keys reach the screen intact");
 
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.

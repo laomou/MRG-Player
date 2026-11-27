@@ -262,7 +262,7 @@ int main(int argc, char **argv) {
   // The footer names what enter does on the focused row, page by page.
   {
     const launcher::config::InputPrompts prompts{
-        "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+        "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".", "S",
         launcher::config::PromptSource::keyboard()};
     const auto english = launcher::i18n::Language::English;
     const auto general = settingsFooterHints(0, 0, {}, false, english, prompts);
@@ -346,7 +346,7 @@ int main(int argc, char **argv) {
   // A prompt set always names the device it was written for, so the legend
   // never guesses which keys the player has.
   const launcher::config::InputPrompts prompts{
-      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".", "S",
       launcher::config::PromptSource::keyboard()};
   // The settings screen keeps the categories and the page apart: the rail is
   // where the focus starts, the page is reached with right.
@@ -529,7 +529,7 @@ int main(int argc, char **argv) {
   managementEntry.filePath = "f1.nes";
   managementEntry.platform = launcher::game::GamePlatform::Nes;
   const launcher::config::InputPrompts managementPrompts{
-      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".", "S",
       launcher::config::PromptSource::keyboard()};
   drawGameManagementOverlay(
       managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,

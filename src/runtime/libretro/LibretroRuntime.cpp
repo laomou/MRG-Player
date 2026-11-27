@@ -426,14 +426,14 @@ void LibretroRuntime::handleEvent(const SDL_Event &event) {
   if (!active_ || paused_)
     return;
   if ((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) && event.key.repeat == 0) {
+    // Only the first port has a keyboard, so a key press never has to be split
+    // between two players.
     const bool pressed = event.type == SDL_KEYDOWN;
-    for (std::size_t player = 0; player < config::kPlayerCount; ++player) {
-      const auto &keys = config::keyboardBindings(bindings_, player);
-      for (std::size_t index = 0; index < config::kInputActionCount; ++index) {
-        if (event.key.keysym.sym == keys[index]) {
-          setAction(static_cast<int>(player), static_cast<config::InputAction>(index), pressed);
-          return;
-        }
+    const auto &keys = config::keyboardBindings(bindings_, 0);
+    for (std::size_t index = 0; index < config::kInputActionCount; ++index) {
+      if (event.key.keysym.sym == keys[index]) {
+        setAction(0, static_cast<config::InputAction>(index), pressed);
+        return;
       }
     }
   } else if (event.type == SDL_CONTROLLERBUTTONDOWN || event.type == SDL_CONTROLLERBUTTONUP) {
