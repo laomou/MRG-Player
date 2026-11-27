@@ -127,6 +127,8 @@ launcher reads the layout a stock card already uses and lets the folder name the
 `.nes` outside any of those folders still counts on its extension alone. The files a ROM set ships
 beside its games — `README.md`, `license.txt`, `CHANGELOG.md` and the like — are never imported,
 even when the extension says they could be: `.md` is both a Mega Drive ROM and a Markdown document.
+The card badges on the shelf wear the same short names, `FC`, `SFC`, `MD`, `GB` and `GBA`, so a
+game looks the same whether it came from `Roms/FC` or from a desktop tile that launched it.
 
 Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
@@ -305,11 +307,11 @@ Every platform runs through a libretro core that must already be on the machine;
 
 | Platform | Extensions | Cores, in the order they are tried |
 |---|---|---|
-| NES | `.nes` | `mesen_libretro`, `nestopia_libretro`, `fceumm_libretro`, `quicknes_libretro` |
-| Game Boy Advance | `.gba` | `mgba_libretro`, `gpsp_libretro`, `vbam_libretro`, `vba_next_libretro` |
-| Super NES | `.sfc`, `.smc` | `snes9x_libretro`, `bsnes_libretro`, `mesen-s_libretro` |
-| Game Boy / Color | `.gb`, `.gbc` | `gambatte_libretro`, `sameboy_libretro`, `gearboy_libretro` |
-| Mega Drive / Genesis | `.md`, `.gen` | `genesis_plus_gx_libretro`, `picodrive_libretro` |
+| NES (`FC`) | `.nes` | `mesen_libretro`, `nestopia_libretro`, `fceumm_libretro`, `quicknes_libretro` |
+| Game Boy Advance (`GBA`) | `.gba` | `mgba_libretro`, `gpsp_libretro`, `vbam_libretro`, `vba_next_libretro` |
+| Super NES (`SFC`) | `.sfc`, `.smc` | `snes9x_libretro`, `bsnes_libretro`, `mesen-s_libretro` |
+| Game Boy / Color (`GB`) | `.gb`, `.gbc` | `gambatte_libretro`, `sameboy_libretro`, `gearboy_libretro` |
+| Mega Drive / Genesis (`MD`) | `.md`, `.gen` | `genesis_plus_gx_libretro`, `picodrive_libretro` |
 
 **Settings → Cores** installs the preferred core for each platform. Each row names the core, shows how much space the installed library takes, and reports whether it is there. Enter on a row downloads that core's archive from the libretro buildbot and unpacks it into `cores/` under the data root; on a row that is already installed the same key re-downloads the current build, which is how a core is updated. Delete removes the core, its archive, and any copy unpacked from one, and asks for a second press first so a stray key never costs a download. R re-reads the disk. Every outcome is reported as a banner on the page. The download runs on a background thread, so the launcher keeps drawing. On Linux and macOS it uses `curl` with `wget` as a fallback; on Windows it uses WinHTTP, so a stock machine needs no extra tools. The buildbot only publishes rolling `latest/` directories, so an install fetches whatever that directory holds today; the SHA-256 of each archive is printed to stderr for reference rather than enforced. Set `MRG_CORES_BASE_URL` to a mirror that ends in `/` to fetch from somewhere else. If a buildbot directory is unreachable, the row's install fails with a message that says which step failed.
 

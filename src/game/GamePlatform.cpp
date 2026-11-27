@@ -19,11 +19,11 @@ constexpr PlatformDescriptor kUnknown{GamePlatform::Unknown, "unknown", "UNKNOWN
                                     ""};
 
 constexpr std::array<PlatformDescriptor, 5> kDescriptors{{
-    {GamePlatform::Nes, "nes", "NES", ".NES ROM", "nes", "FC"},
+    {GamePlatform::Nes, "nes", "FC (NES)", ".NES ROM", "nes", "FC"},
     {GamePlatform::Gba, "gba", "GAME BOY ADVANCE", ".GBA ROM", "gba", "GBA"},
-    {GamePlatform::Snes, "snes", "SUPER NES", ".SFC ROM", "snes", "SFC"},
+    {GamePlatform::Snes, "snes", "SFC (SNES)", ".SFC ROM", "snes", "SFC"},
     {GamePlatform::GameBoy, "gb", "GAME BOY", ".GB ROM", "gb", "GB"},
-    {GamePlatform::Genesis, "genesis", "MEGA DRIVE", ".MD ROM", "genesis", "MD"},
+    {GamePlatform::Genesis, "genesis", "MD (GENESIS)", ".MD ROM", "genesis", "MD"},
 }};
 
 struct ExtensionMap {
