@@ -85,7 +85,7 @@ enum class TextId {
   ImportFailed,
   PickerUnavailable,
   Options,
-  ManageGame,
+  GameOptions,
 
   RemoveFromLibrary,
   RemoveRomDescription,
@@ -213,7 +213,7 @@ enum class TextId {
   Unbound,
   // Footer legends. A hint is a key plus one word: the screen already says
   // what the action applies to, so the noun is left out.
-  HintManage,
+  HintOptions,
   HintInstall,
   HintRefresh,
   HintDetails,

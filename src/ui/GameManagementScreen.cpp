@@ -38,14 +38,33 @@ const ManagementLayout &managementLayout() {
     constexpr float kPanelWidth = 437.0f;
     const float width = static_cast<float>(kCanvasWidth);
     const float height = static_cast<float>(kCanvasHeight);
-    const Rect bounds{width - kMargin - kPanelWidth, 38.0f, kPanelWidth,
-                      height - 77.0f};
-    const PanelLayout panel =
-        panelLayout(bounds, bounds.inset(26, 29, 26, 16), 103, 21, 13);
+    // The drawer is exactly as tall as its six rows: it floats in the middle of
+    // the canvas instead of running the full height with a hole under the last
+    // action, where the footer legend used to live.
+    constexpr float kTopInset = 29.0f;
+    constexpr float kBottomInset = 24.0f;
+    constexpr float kHeaderHeight = 103.0f;
+    constexpr float kGap = 13.0f;
+    constexpr float kRowsTop = 15.0f;
+    constexpr float kRowHeight = 54.0f;
+    constexpr float kRowGap = 14.0f;
+    constexpr float kSectionGap = 14.0f;
+    const float rowsHeight = kManagementActionCount * kRowHeight +
+                             (kManagementActionCount - 1) * kRowGap +
+                             kSectionGap;
+    const float panelHeight = kTopInset + kHeaderHeight + 2 * kGap + kRowsTop +
+                              rowsHeight + kBottomInset;
+    const Rect bounds{width - kMargin - kPanelWidth, (height - panelHeight) / 2,
+                      kPanelWidth, panelHeight};
+    const PanelLayout panel = panelLayout(
+        bounds, bounds.inset(26, kTopInset, 26, kBottomInset), kHeaderHeight, 0,
+        kGap);
     ManagementLayout out;
     out.panel = panel;
-    out.actions = {{panel.content.x, panel.content.y + 15, panel.content.w, 54},
-                   kManagementActionCount, 14, Axis::Vertical, 4, 14};
+    out.actions = {{panel.content.x, panel.content.y + kRowsTop,
+                    panel.content.w, kRowHeight},
+                   kManagementActionCount, kRowGap, Axis::Vertical, 4,
+                   kSectionGap};
     out.confirm = {(width - 792) / 2, (height - 480) / 2, 792, 480};
     out.confirmButtons =
         equalColumns({out.confirm.x + 51, out.confirm.y + 356,
@@ -58,26 +77,16 @@ const ManagementLayout &managementLayout() {
   return layout;
 }
 
-void drawButtonGlyph(SDL_Renderer *renderer, int x, int y,
-                     const std::string &glyph, SDL_Color color,
-                     SDL_Color glyphColor) {
-  const int scale = textWidth(glyph, 2) <= 28 ? 2 : 1;
-  const int width = std::max(34, textWidth(glyph, scale) + 12);
-  rounded(renderer, x - width / 2, y - 17, width, 34, 17, color);
-  centeredText(renderer, x, y - (scale == 2 ? 13 : 9), glyph, scale,
-               glyphColor);
-}
-
 void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
               int selectedAction, bool saveDataPresent, i18n::Language language,
-              const config::InputPrompts &prompts, SDL_Color themeAccent) {
+              SDL_Color themeAccent) {
   const ManagementLayout &layout = managementLayout();
   const PanelLayout &panel = layout.panel;
   const int titleX = static_cast<int>(panel.bounds.x + 25);
   const int headerY = static_cast<int>(panel.header.y);
   drawPanel(renderer, panel.bounds, 28, {12, 21, 37, 232},
             panel.bounds.expanded(8, 0).translated(0, 8), {0, 0, 0, 42});
-  text(renderer, titleX, headerY, tr(TextId::ManageGame, language), 3,
+  text(renderer, titleX, headerY, tr(TextId::GameOptions, language), 3,
        {246, 248, 252, 255});
   text(renderer, titleX, headerY + 39,
        fitText(entry.title, static_cast<int>(panel.header.w), 2), 2,
@@ -110,8 +119,6 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
       tr(TextId::RemoveRomDescription, language),
       tr(saveDataPresent ? TextId::DeleteSaveDescription : TextId::NoSaveData,
          language)};
-  const std::array<std::string, kManagementActionCount> glyphs{
-      prompts.confirm, "*", "i", prompts.back, "-", "!"};
   for (int index = 0; index < kManagementActionCount; ++index) {
     const Rect bounds = layout.actions.item(index);
     const float y = bounds.y;
@@ -124,22 +131,20 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
                        : destructive ? SDL_Color{255, 108, 104, 12}
                                      : SDL_Color{255, 255, 255, 12},
                        selected);
-    drawButtonGlyph(renderer, static_cast<int>(panel.content.x + 30),
-                    static_cast<int>(y + 27), glyphs[index],
-                    selected ? SDL_Color{23, 23, 39, 255}
-                             : SDL_Color{255, 255, 255, 18},
-                    selected ? rowAccent : SDL_Color{205, 213, 230, 255});
-    text(renderer, static_cast<int>(panel.content.x + 60),
+    // The row is its title and nothing else: a key glyph in front of it only
+    // repeated what the action row at the bottom of the shelf already said, and
+    // its fixed width pushed the title sideways.
+    text(renderer, static_cast<int>(panel.content.x + 18),
          static_cast<int>(y + (descriptions[index].empty() ? 17 : 3)),
          tr(labels[index], language), 2,
          selected      ? SDL_Color{20, 24, 35, 255}
          : destructive ? rowAccent
                        : SDL_Color{241, 245, 251, 255});
     if (!descriptions[index].empty()) {
-      text(renderer, static_cast<int>(panel.content.x + 60),
+      text(renderer, static_cast<int>(panel.content.x + 18),
            static_cast<int>(y + 31),
            fitText(descriptions[index],
-                   static_cast<int>(panel.content.w - 73), 1),
+                   static_cast<int>(panel.content.w - 36), 1),
            1,
            selected ? SDL_Color{38, 48, 54, 255}
                     : SDL_Color{165, 181, 204, 255});
@@ -147,14 +152,8 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
   }
   fill(renderer, panel.content.x, layout.actions.item(4).y - 18,
        panel.content.w, 1, {255, 157, 150, 36});
-  // The legend belongs to the drawer, not to the shelf it covers.
-  fill(renderer, panel.footer.x, panel.footer.y - 16, panel.footer.w, 1,
-       {255, 255, 255, 30});
-  const std::vector<Hint> hints{
-      {tr(TextId::Back, language), prompts.back, false},
-      {tr(TextId::ConfirmControl, language), prompts.confirm, true}};
-  drawHintRow(renderer, panel.footer.right(), panel.footer.y, hints,
-              themeAccent);
+  // No key legend: the drawer has a CANCEL row of its own, so a strip under it
+  // would only name the same two keys a second time.
 }
 
 void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
@@ -290,12 +289,9 @@ void drawGameManagementOverlay(SDL_Renderer *renderer,
                                const library::GameEntry &entry,
                                int selectedAction, ManagementDialog dialog,
                                int confirmationChoice, bool saveDataPresent,
-                               i18n::Language language,
-                               const config::InputPrompts &prompts,
-                               SDL_Color accent) {
+                               i18n::Language language, SDL_Color accent) {
   fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {3, 7, 16, 65});
-  drawMenu(renderer, entry, selectedAction, saveDataPresent, language, prompts,
-           accent);
+  drawMenu(renderer, entry, selectedAction, saveDataPresent, language, accent);
   if (dialog == ManagementDialog::ConfirmRemoveRom ||
       dialog == ManagementDialog::ConfirmDeleteSave) {
     drawConfirmation(renderer, entry, dialog, confirmationChoice, language,

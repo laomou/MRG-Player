@@ -48,7 +48,7 @@ struct PauseVideoState {
 
 void drawPauseVideoPanel(SDL_Renderer *renderer, int row,
                          const PauseVideoState &video, i18n::Language language,
-                         const config::InputPrompts &prompts, SDL_Color accent);
+                         SDL_Color accent);
 int pauseVideoRowAt(float x, float y);
 
 // The option panel lists the settings the running core declares. Six fit on
@@ -58,9 +58,7 @@ inline constexpr int kPauseCoreOptionRows = 6;
 
 void drawPauseCoreOptionsPanel(SDL_Renderer *renderer, int cursor, int scroll,
                                const runtime::CoreOptionList &options,
-                               i18n::Language language,
-                               const config::InputPrompts &prompts,
-                               SDL_Color accent);
+                               i18n::Language language, SDL_Color accent);
 int pauseCoreOptionAt(float x, float y, int scroll);
 
 // Power cycling wipes unsaved progress, so it asks first. Choice 0 cancels

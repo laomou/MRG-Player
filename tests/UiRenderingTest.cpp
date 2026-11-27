@@ -294,8 +294,8 @@ int main(int argc, char **argv) {
   check(powerCycleChoiceAt(500, 470) == -1 &&
             powerCycleChoiceAt(640, 360) == -1,
         "Power-cycle footer and button gap must not confirm");
-  check(managementActionAt(1000, 260) == -1 &&
-            pauseActionAt(1000, 350) == -1 &&
+  check(managementActionAt(1000, 490) == -1 &&
+            pauseActionAt(1000, 310) == -1 &&
             confirmationChoiceAt(640, 500) == -1,
         "Overlay list and confirmation gaps do not activate controls");
   const SDL_Color teal = accentColor(0);
@@ -313,8 +313,10 @@ int main(int argc, char **argv) {
     check(managementActionAt(1000, 198 + action * 68 + (action >= 4 ? 14 : 0) +
                                         27) == action,
           "Management hit target must follow display order");
-  check(managementActionAt(1000, 470) == -1,
+  check(managementActionAt(1000, 490) == -1,
         "Danger section separator must not activate");
+  check(managementActionAt(1000, 690) == -1 && pauseActionAt(1000, 690) == -1,
+        "Neither drawer keeps a strip of controls under its last row");
   check(confirmationChoiceAt(450, 500) == 0, "Cancel target preserved");
   check(confirmationChoiceAt(820, 500) == 1, "Confirmation target preserved");
 
@@ -352,8 +354,11 @@ int main(int argc, char **argv) {
       "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
       launcher::config::PromptSource::keyboard()};
   check(homeActionAt(1200, 663, true, launcher::i18n::Language::English,
+                     prompts) == 0,
+        "The rightmost footer entry starts the game");
+  check(homeActionAt(1000, 663, true, launcher::i18n::Language::English,
                      prompts) == 1,
-        "The last footer entry is the rightmost button");
+        "The drawer entry sits to its left");
   check(homeActionAt(500, 663, true, launcher::i18n::Language::English,
                      prompts) == -1,
         "Empty footer space activates nothing");
@@ -542,7 +547,7 @@ int main(int argc, char **argv) {
       launcher::config::PromptSource::keyboard()};
   drawGameManagementOverlay(
       managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,
-      launcher::i18n::Language::English, managementPrompts, teal);
+      launcher::i18n::Language::English, teal);
   SDL_RenderPresent(managementRenderer);
   const auto *managementRow = reinterpret_cast<const Uint32 *>(
       static_cast<const Uint8 *>(managementSurface->pixels) +
@@ -555,7 +560,7 @@ int main(int argc, char **argv) {
         "The management selection follows the active theme accent");
   const auto *managementFocusRow = reinterpret_cast<const Uint32 *>(
       static_cast<const Uint8 *>(managementSurface->pixels) +
-      195 * managementSurface->pitch);
+      215 * managementSurface->pitch);
   SDL_GetRGBA(managementFocusRow[1000], managementSurface->format,
               &managementR, &managementG, &managementB, &managementA);
   check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
@@ -570,7 +575,7 @@ int main(int argc, char **argv) {
   SDL_RenderPresent(managementRenderer);
   const auto *pauseFocusRow = reinterpret_cast<const Uint32 *>(
       static_cast<const Uint8 *>(managementSurface->pixels) +
-      314 * managementSurface->pitch);
+      320 * managementSurface->pitch);
   SDL_GetRGBA(pauseFocusRow[1000], managementSurface->format, &managementR,
               &managementG, &managementB, &managementA);
   check(managementR == kFocusColor.r && managementG == kFocusColor.g &&
@@ -603,24 +608,23 @@ int main(int argc, char **argv) {
                                 launcher::i18n::Language::SimplifiedChinese}) {
       clearPreview();
       drawGameManagementOverlay(managementRenderer, managementEntry, 0,
-          ManagementDialog::Menu, 0, false, language, managementPrompts, accent);
-      check(pixelEquals(1160, 220, accent) && pixelEquals(1000, 195, kFocusColor),
+          ManagementDialog::Menu, 0, false, language, accent);
+      check(pixelEquals(1160, 220, accent) && pixelEquals(1000, 215, kFocusColor),
             "Management rows retain every theme accent and the system focus ring");
       clearPreview();
       drawGameManagementOverlay(managementRenderer, managementEntry, 4,
-          ManagementDialog::Menu, 0, false, language, managementPrompts, accent);
+          ManagementDialog::Menu, 0, false, language, accent);
       check(pixelEquals(1180, 510, {255, 157, 150, 255}),
             "Destructive selections retain semantic red across themes");
       clearPreview();
       drawGameManagementOverlay(managementRenderer, managementEntry, 0,
-          ManagementDialog::Info, 0, false, language, managementPrompts, accent);
+          ManagementDialog::Info, 0, false, language, accent);
       check(pixelEquals(850, 520, accent) && pixelEquals(640, 493, kFocusColor),
             "The Info Back button has the active accent and focus ring");
       for (int choice = 0; choice < 2; ++choice) {
         clearPreview();
         drawGameManagementOverlay(managementRenderer, managementEntry, 0,
-            ManagementDialog::ConfirmRemoveRom, choice, false, language,
-            managementPrompts, accent);
+            ManagementDialog::ConfirmRemoveRom, choice, false, language, accent);
         check(pixelEquals(350 + 360 * choice, 500, accent) &&
                    pixelEquals(450 + 370 * choice, 473, kFocusColor),
               "Both management choices use shared theme-aware buttons");
@@ -638,18 +642,18 @@ int main(int argc, char **argv) {
       clearPreview();
       drawPauseMenu(managementRenderer, "F-1 Race", 0, 0, pauseSlots, {}, 0,
                     language, managementPrompts, accent);
-      check(pixelEquals(1170, 335, accent) && pixelEquals(1000, 314, kFocusColor),
+      check(pixelEquals(1170, 335, accent) && pixelEquals(1000, 320, kFocusColor),
             "Pause actions retain theme accent and focus ring");
       clearPreview();
-      drawPauseVideoPanel(managementRenderer, 0, {}, language, managementPrompts, accent);
+      drawPauseVideoPanel(managementRenderer, 0, {}, language, accent);
       check(pixelEquals(1050, 288, accent),
             "Display rows retain theme accent");
-      check(pixelEquals(1000, 237, kFocusColor),
+      check(pixelEquals(1000, 242, kFocusColor),
             "Display rows retain the shared focus ring");
       clearPreview();
       drawPauseCoreOptionsPanel(managementRenderer, 0, 0, {option}, language,
-                                managementPrompts, accent);
-      check(pixelEquals(1050, 275, accent) && pixelEquals(1000, 237, kFocusColor),
+                                accent);
+      check(pixelEquals(1050, 275, accent) && pixelEquals(1000, 242, kFocusColor),
             "Core option rows retain theme accent and focus ring");
       launcher::AppSettings settings;
       settings.accent = theme;

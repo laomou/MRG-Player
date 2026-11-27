@@ -149,13 +149,9 @@ void testGameControls(const char *fontPath) {
                                 ControlHelpDevice::Brick}) {
         const auto model = gameControlHelp(GamePlatform::Gba, bindings, device,
                                           ControllerStyle::Xbox, language);
-        const auto prompts = config::inputPrompts(
-            device == ControlHelpDevice::Keyboard ? config::InputDeviceKind::KeyboardMouse
-                                                   : config::InputDeviceKind::Controller,
-            device == ControlHelpDevice::Brick ? ControllerStyle::Generic : ControllerStyle::Xbox);
         clear();
         const auto accent = accentColor(theme);
-        drawControlHelp(renderer, model, 99, language, prompts, accent);
+        drawControlHelp(renderer, model, 99, language, accent);
         auto p = pixel(static_cast<int>(layout.back.x + 12), static_cast<int>(layout.back.centerY()));
         check(p.r == accent.r && p.g == accent.g && p.b == accent.b,
               "Back follows every theme accent");
@@ -205,9 +201,7 @@ void testGameControls(const char *fontPath) {
     }
   }
   clear();
-  drawControlHelp(renderer, custom, 1, Language::English,
-                  config::inputPrompts(config::InputDeviceKind::KeyboardMouse, ControllerStyle::Xbox),
-                  accentColor(0));
+  drawControlHelp(renderer, custom, 1, Language::English, accentColor(0));
   snapshot("controls-custom-page2");
   // Clear cached text textures before their renderer is destroyed.
   shutdownTextRenderer();

@@ -2688,15 +2688,15 @@ int Application::run(int argc, char **argv) {
         const SDL_Color accent = ui::accentColor(settings.accent);
         if (pauseControlHelp) {
           ui::drawControlHelp(renderer, currentControlHelp(), controlHelpPage,
-                              currentLanguage(), prompts, accent);
+                              currentLanguage(), accent);
         } else if (pauseCoreOptionsPanel) {
           ui::drawPauseCoreOptionsPanel(renderer, pauseCoreOptionCursor,
                                         pauseCoreOptionScroll,
                                         activeRuntime->coreOptions(),
-                                        currentLanguage(), prompts, accent);
+                                        currentLanguage(), accent);
         } else if (pauseVideoPanel) {
           ui::drawPauseVideoPanel(renderer, pauseVideoRow, pauseVideo,
-                                  currentLanguage(), prompts, accent);
+                                  currentLanguage(), accent);
         } else {
           ui::drawPauseMenu(renderer, activeGameTitle, pauseAction, stateSlot,
                             stateSlots, pauseFeedback, pauseFeedbackUntil,
@@ -2723,12 +2723,12 @@ int Application::run(int argc, char **argv) {
                    settings.startupPage, currentLanguage(), gameLibrary,
                    prompts, homeFocus, homePill, homeAction, homeRow,
                    focusOpacity, ui::accentColor(settings.accent), &coverCache,
-                   /*showFooter=*/false);
+                   /*showFooter=*/false, /*showPills=*/false);
       ui::drawGameManagementOverlay(
           renderer,
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)],
           managementAction, managementDialog, confirmationChoice,
-          saveDataPresent, currentLanguage(), prompts,
+          saveDataPresent, currentLanguage(),
           ui::accentColor(settings.accent));
     }
 

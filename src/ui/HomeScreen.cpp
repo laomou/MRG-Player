@@ -284,10 +284,12 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
   if (hasGame) {
+    // The confirm sits on the right, where every other screen puts it; the
+    // drawer is the secondary action and takes the left slot.
+    hints.push_back(
+        {i18n::tr(i18n::TextId::HintOptions, language), "X", false});
     hints.push_back(
         {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
-    hints.push_back(
-        {i18n::tr(i18n::TextId::HintManage, language), "X", false});
   }
   return hints;
 }
@@ -300,7 +302,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
               float focusOpacity, SDL_Color accent, CoverSource *covers,
-              bool showFooter) {
+              bool showFooter, bool showPills) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -337,32 +339,34 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
       static_cast<int>(layout.headerY + layout.headerHeight * 0.5f);
   const int pillLabelY = static_cast<int>(layout.headerY) + 8;
   const int pillCountY = static_cast<int>(layout.headerY) + 15;
-  rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
-          libraryPill.h, 23, {4, 10, 26, 145});
-  circle(renderer, libraryPill.x + 26, pillCenterY, 12, style.accent);
-  text(renderer, static_cast<int>(libraryPill.x) + 19, pillLabelY, "+", 2,
-       {18, 18, 33, 255});
-  text(renderer, static_cast<int>(libraryPill.x) + 48, pillLabelY,
-       tr(TextId::Library, language), 2, {255, 255, 255, 255});
-  const std::string countLabel = std::to_string(libraryCount);
-  text(renderer,
-       static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
-                        static_cast<float>(textWidth(countLabel, 1))),
-       pillCountY, countLabel, 1, {191, 201, 220, 255});
-  rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
-          settingsPill.h, 23, {4, 10, 26, 175});
-  circle(renderer, settingsPill.x + 26, pillCenterY, 12, {255, 255, 255, 45});
-  gearIcon(renderer, settingsPill.x + 26.0f,
-           static_cast<float>(pillCenterY), 10.0f, style.accent);
-  text(renderer, static_cast<int>(settingsPill.x) + 47, pillLabelY,
-       tr(TextId::Settings, language), 2, {255, 255, 255, 255});
-  // The pills are buttons too, so they take the same ring when the direction
-  // keys are on them. The ring is drawn over the pills rather than under them,
-  // because they are translucent and would tint it.
-  if (focus == HomeFocus::Pills) {
-    const SDL_FRect pill = focusedPill == 0 ? libraryPill : settingsPill;
-    drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 23.0f,
-                  focusOpacity);
+  if (showPills) {
+    rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
+            libraryPill.h, 23, {4, 10, 26, 145});
+    circle(renderer, libraryPill.x + 26, pillCenterY, 12, style.accent);
+    text(renderer, static_cast<int>(libraryPill.x) + 19, pillLabelY, "+", 2,
+         {18, 18, 33, 255});
+    text(renderer, static_cast<int>(libraryPill.x) + 48, pillLabelY,
+         tr(TextId::Library, language), 2, {255, 255, 255, 255});
+    const std::string countLabel = std::to_string(libraryCount);
+    text(renderer,
+         static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
+                          static_cast<float>(textWidth(countLabel, 1))),
+         pillCountY, countLabel, 1, {191, 201, 220, 255});
+    rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
+            settingsPill.h, 23, {4, 10, 26, 175});
+    circle(renderer, settingsPill.x + 26, pillCenterY, 12, {255, 255, 255, 45});
+    gearIcon(renderer, settingsPill.x + 26.0f,
+             static_cast<float>(pillCenterY), 10.0f, style.accent);
+    text(renderer, static_cast<int>(settingsPill.x) + 47, pillLabelY,
+         tr(TextId::Settings, language), 2, {255, 255, 255, 255});
+    // The pills are buttons too, so they take the same ring when the direction
+    // keys are on them. The ring is drawn over the pills rather than under them,
+    // because they are translucent and would tint it.
+    if (focus == HomeFocus::Pills) {
+      const SDL_FRect pill = focusedPill == 0 ? libraryPill : settingsPill;
+      drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 23.0f,
+                    focusOpacity);
+    }
   }
 
   const TextId sectionTitle =
@@ -459,8 +463,11 @@ int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                                    footerHints(hasGame, language, prompts));
   for (std::size_t index = 0; index < layout.size(); ++index) {
     // Retain a little pointer padding around the small frames.
-    if (layout[index].expanded(4, 6).contains(x, y))
-      return static_cast<int>(index);
+    if (layout[index].expanded(4, 6).contains(x, y)) {
+      // Drawing order puts manage first; the action ids keep start at zero so
+      // the keyboard, the pad and the mouse all speak the same numbers.
+      return static_cast<int>(layout.size() - 1 - index);
+    }
   }
   return -1;
 }

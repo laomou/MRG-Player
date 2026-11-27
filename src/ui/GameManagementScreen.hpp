@@ -2,7 +2,6 @@
 
 #include <SDL.h>
 
-#include "config/InputBindings.hpp"
 #include "i18n/Localization.hpp"
 #include "library/GameLibrary.hpp"
 
@@ -16,9 +15,7 @@ void drawGameManagementOverlay(SDL_Renderer *renderer,
                                const library::GameEntry &entry,
                                int selectedAction, ManagementDialog dialog,
                                int confirmationChoice, bool saveDataPresent,
-                               i18n::Language language,
-                               const config::InputPrompts &prompts,
-                               SDL_Color accent);
+                               i18n::Language language, SDL_Color accent);
 int managementActionAt(float x, float y);
 int confirmationChoiceAt(float x, float y);
 bool managementInfoBackAt(float x, float y);

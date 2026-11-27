@@ -171,8 +171,7 @@ int controlHelpPageStep(const SDL_Event &event) {
 }
 
 void drawControlHelp(SDL_Renderer *renderer, const ControlHelp &help, int page,
-                     i18n::Language language,
-                     const config::InputPrompts &prompts, SDL_Color accent) {
+                     i18n::Language language, SDL_Color accent) {
   const auto layout = controlHelpLayout();
   const auto &panel = layout.panel;
   const float x = panel.x + 32;
@@ -215,9 +214,10 @@ void drawControlHelp(SDL_Renderer *renderer, const ControlHelp &help, int page,
   text(renderer, x, bottom - 99,
        fitText(tr(TextId::ControlHelpNote, language), static_cast<int>(panel.w - 64), 1),
        1, {174, 188, 208, 255});
-  drawButton(renderer, layout.back, 9,
-             std::string(tr(TextId::Back, language)) + "  " + prompts.back,
-             2, accent, {24, 24, 39, 255}, true);
+  // The button says BACK and nothing else: a button is its word, and the key
+  // glyph on it was the same legend the footer used to carry.
+  drawButton(renderer, layout.back, 9, tr(TextId::Back, language), 2, accent,
+             {24, 24, 39, 255}, true);
 }
 
 float gameEntryHintOpacity(Uint64 elapsedMs) {
