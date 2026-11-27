@@ -49,6 +49,10 @@ class CoverCache : public CoverSource {
   // Installs a finished download. Call once per frame, outside drawing.
   void poll(SDL_Renderer *renderer);
 
+  // Bumped whenever art appears, so a screen that only redraws on change knows
+  // there is something new to show.
+  [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
+
   [[nodiscard]] bool downloading() const noexcept { return job_ != nullptr && !job_->done.load(); }
 
  private:
@@ -83,6 +87,7 @@ class CoverCache : public CoverSource {
   std::set<std::string> attempted_;
   std::thread worker_;
   std::shared_ptr<DownloadJob> job_;
+  std::uint64_t revision_ = 0;
   // A card asks for its cover while it is being drawn, and a thread should not
   // be started in the middle of a frame, so the request waits here until the
   // next poll.

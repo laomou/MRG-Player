@@ -660,7 +660,7 @@ int main(int argc, char **argv) {
       settings.language = language == launcher::i18n::Language::English ? 0 : 1;
       for (int category : {0, 1, 3, 5}) {
         clearPreview();
-        drawSettings(managementRenderer, settings, category, 0, 0, false, {},
+        drawSettings(managementRenderer, settings, category, 0, false, {},
                      launcher::config::ControllerStyle::Xbox, {},
                      managementPrompts, false, 1);
         const int top = category == 0 ? 301 : (category == 1 ? 328 :

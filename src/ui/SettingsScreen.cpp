@@ -455,8 +455,7 @@ void changeSetting(AppSettings &settings, int category, int row,
 }
 
 void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
-                  int category, int row, float time,
-                  bool bindingCapture, std::string_view activeControllerName,
+                  int category, int row, bool bindingCapture, std::string_view activeControllerName,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
@@ -476,7 +475,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   const bool refreshRing = !railFocused && refreshFocused && !footerFocused;
   const bool railRing = railFocused && !footerFocused;
   const Language language = i18n::languageFromSetting(settings.language);
-  drawBackground(renderer, game, time);
+  drawBackground(renderer, game);
   fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 8, 20, 128});
 
   rounded(renderer, 58, 46, 4, 26, 2, game.accent);
