@@ -69,6 +69,30 @@ void clearTextCache() {
   gTextCache.clear();
   gTextRenderer = nullptr;
 }
+// A baked copy of the backdrop, keyed by everything that changes how it looks.
+// Rebuilt only when the size, the theme, the wallpaper, or the sun's rounded
+// position moves.
+struct Backdrop {
+  SDL_Texture *texture = nullptr;
+  SDL_Renderer *renderer = nullptr;
+  int width = 0;
+  int height = 0;
+  SDL_Color top{};
+  SDL_Color bottom{};
+  SDL_Color accent{};
+  SDL_Texture *wallpaper = nullptr;
+  int sunX = 0;
+  // Set when the backend refuses to render into a texture: paint directly
+  // instead of paying for a failed attempt every frame.
+  bool unwritable = false;
+};
+Backdrop gBackdrop;
+
+void releaseBackdrop() {
+  if (gBackdrop.texture != nullptr)
+    SDL_DestroyTexture(gBackdrop.texture);
+  gBackdrop = Backdrop{};
+}
 
 // Drops every rasterised font, so the next measurement opens one at the size
 // the new output scale asks for. Text is cached per string, so the cache goes
@@ -347,6 +371,7 @@ bool initializeTextRenderer(const std::string &fontPath) {
 
 void shutdownTextRenderer() {
   clearTextCache();
+  releaseBackdrop();
   closeFonts();
   gLatinFontPath.clear();
   gFontPath.clear();
@@ -860,8 +885,15 @@ void canvasRect(float &x, float &y, float &width, float &height) {
   height = deviceLength(kCanvasHeight);
 }
 
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
-                    SDL_Texture *wallpaper) {
+namespace {
+bool sameColor(SDL_Color a, SDL_Color b) {
+  return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+// Paints the whole backdrop into whatever target the renderer holds, sun
+// included.
+void paintBackdrop(SDL_Renderer *renderer, const Game &game, int sunX,
+                   SDL_Texture *wallpaper) {
   // Every band here is walked in device rows, so the gradient is smooth at any
   // window size instead of being stretched by the renderer.
   const float left = gOffsetX;
@@ -897,7 +929,6 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
     SDL_RenderDrawLineF(renderer, left, top + row + 0.5f, left + width,
                         top + row + 0.5f);
   }
-  const int sunX = 1008 + static_cast<int>(std::sin(time * 0.08f) * 18.0f);
   circle(renderer, sunX, 138, 72,
          {game.accent.r, game.accent.g, game.accent.b, 150});
   setColor(renderer, {15, 27, 57, 175});
@@ -947,6 +978,91 @@ void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
     fillDevice(renderer, left, y, width, scanHeight,
          {255, 255, 255, 4});
   }
+}
+
+bool backdropHolds(SDL_Renderer *renderer, int width, int height,
+                   const Game &game, SDL_Texture *wallpaper, int sunX) {
+  return gBackdrop.texture != nullptr && gBackdrop.renderer == renderer &&
+         gBackdrop.width == width && gBackdrop.height == height &&
+         sameColor(gBackdrop.top, game.top) &&
+         sameColor(gBackdrop.bottom, game.bottom) &&
+         sameColor(gBackdrop.accent, game.accent) &&
+         gBackdrop.wallpaper == wallpaper && gBackdrop.sunX == sunX;
+}
+
+// Bakes the backdrop once so a frame only has to blit it. Returns false when
+// the backend cannot render into a texture, which leaves the caller painting
+// the rows directly.
+bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
+                  const Game &game, int sunX, SDL_Texture *wallpaper) {
+  if (gBackdrop.renderer != renderer)
+    releaseBackdrop();
+  gBackdrop.renderer = renderer;
+  gBackdrop.width = width;
+  gBackdrop.height = height;
+  gBackdrop.top = game.top;
+  gBackdrop.bottom = game.bottom;
+  gBackdrop.accent = game.accent;
+  gBackdrop.wallpaper = wallpaper;
+  gBackdrop.sunX = sunX;
+  SDL_Texture *texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
+                        SDL_TEXTUREACCESS_TARGET, width, height);
+  if (texture == nullptr) {
+    gBackdrop.unwritable = true;
+    return false;
+  }
+  if (SDL_SetRenderTarget(renderer, texture) != 0) {
+    SDL_DestroyTexture(texture);
+    gBackdrop.unwritable = true;
+    return false;
+  }
+  // Painting into the texture borrows the frame's clip and blend state, so
+  // both are put back before anything is drawn on the screen.
+  SDL_Rect clip{0, 0, 0, 0};
+  const bool clipped = SDL_RenderIsClipEnabled(renderer) == SDL_TRUE;
+  if (clipped)
+    SDL_RenderGetClipRect(renderer, &clip);
+  SDL_RenderSetClipRect(renderer, nullptr);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+  SDL_RenderClear(renderer);
+  paintBackdrop(renderer, game, sunX, wallpaper);
+  SDL_SetRenderTarget(renderer, nullptr);
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  if (clipped)
+    SDL_RenderSetClipRect(renderer, &clip);
+  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
+  gBackdrop.texture = texture;
+  return true;
+}
+} // namespace
+
+// The backdrop is a couple of thousand one-row fills, and none of it changes
+// between frames: only the sun drifts, and it is already rounded to a pixel.
+// Baking it and repainting when that pixel moves turns the frame into a single
+// blit.
+void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+                    SDL_Texture *wallpaper) {
+  if (renderer == nullptr)
+    return;
+  const int sunX = 1008 + static_cast<int>(std::sin(time * 0.08f) * 18.0f);
+  const int width = gOutputWidth;
+  const int height = gOutputHeight;
+  if (gBackdrop.renderer != renderer) {
+    releaseBackdrop();
+    gBackdrop.renderer = renderer;
+  }
+  if (width > 0 && height > 0 && !gBackdrop.unwritable) {
+    const int focus = wallpaper != nullptr ? 0 : sunX;
+    if (!backdropHolds(renderer, width, height, game, wallpaper, focus))
+      bakeBackdrop(renderer, width, height, game, focus, wallpaper);
+    if (gBackdrop.texture != nullptr) {
+      SDL_RenderCopy(renderer, gBackdrop.texture, nullptr, nullptr);
+      return;
+    }
+  }
+  paintBackdrop(renderer, game, sunX, wallpaper);
 }
 
 namespace {
