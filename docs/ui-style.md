@@ -59,6 +59,28 @@
 4. 列表行（暂停菜单、管理抽屉、核心列表）自己不画键位图标；这些界面的条目里已经有 CANCEL / CONTINUE /
    RETURN HOME，或那一行本身就是可调的值，所以底部也不画键位条。
 
+## 4.1 屏幕上的键位由 PROMPT DEVICE 决定
+
+界面上的每一个键徽章画的都是**玩家手上那颗键**，不是写死的键盘键。改哪一套由设置页的
+`CONTROLLER → PROMPT DEVICE` 决定，三档：
+
+| 档位 | 显示什么 |
+|---|---|
+| AUTO（默认） | 跟随最后一次用过的输入设备：按手柄就显示手柄键，动键盘鼠标就显示 `ENTER` / `ESC`；手柄被拔掉时回落到键盘 |
+| KEYBOARD & MOUSE | 永远显示键盘键（`ENTER` / `ESC` / `LEFT/RIGHT` / `.`），插着手柄也不变 |
+| CONTROLLER | 永远显示手柄键（`A` / `B` / `LB` / `D-PAD` …） |
+
+注意三件事：
+
+1. **设置只改标签，不改谁能操作。** 键盘和手柄始终都能操作所有界面，AUTO 只是决定哪一套字写在按钮上。
+2. **手柄字母跟着 CONTROLLER STYLE 走**：`XBOX` 是 A/B/X/Y，`NINTENDO` 把 A↔B、X↔Y 换过来，
+   `PLAYSTATION` 写 CROSS / CIRCLE / SQUARE / TRIANGLE，`AUTO` 按识别出的手柄品牌选，`GENERIC` 用编号。
+3. **掌机（Brick）只有面板**：AUTO 从第一帧就解析成手柄，不会出现桌面键；就算在模拟器里按宿主键盘，
+   事件也被固件翻成面板按键，标签不会跳回键盘。掌机插了键盘想让标签写 `ENTER`，手动选 KEYBOARD & MOUSE 即可。
+
+游戏内的按键不归这条管：进游戏后按键直接交给核心的输入映射（见 README 的 Controls 一节），
+PROMPT DEVICE 只影响启动器自己的界面。
+
 ## 5. 代码位置
 
 | 东西 | 位置 |
@@ -67,6 +89,8 @@
 | 书架动作行 | `src/ui/HomeScreen.cpp`（`footerHints`、`homeActionAt`） |
 | 设置页脚 | `src/ui/SettingsScreen.cpp`（`settingsFooterHints`、`settingsFooterAt`） |
 | 焦点状态机 | `src/app/Application.cpp`（`HomeFocus`、`settingsNavigate`） |
+| 键位提示的解析 | `src/config/InputBindings.cpp`（`resolvePromptDevice`、`inputPrompts`、`controllerButtonPrompt`） |
+| 提示设备设置项 | `src/ui/SettingsScreen.cpp`（CONTROLLER 页的 PROMPT DEVICE 行） |
 | 暂停菜单 / DISPLAY / CORE OPTIONS 卡片 | src/ui/PauseMenuScreen.cpp（pauseLayout） |
 | 管理抽屉 | src/ui/GameManagementScreen.cpp（managementLayout） |
 | 对话框 | `src/ui/HomeScreen.cpp`（退出）、`src/ui/PauseMenuScreen.cpp`（断电）、`src/ui/GameManagementScreen.cpp`（移除/删档） |
