@@ -19,8 +19,10 @@ void check(bool condition, const char *message) {
 
 int main() {
   using launcher::library::CoverNames;
+  using launcher::library::coverFileName;
   using launcher::library::coverNameCandidates;
   using launcher::library::coverRepository;
+  using launcher::library::coverTargetPath;
   using launcher::library::coverUrls;
   using launcher::library::parseCoverNames;
   using launcher::library::urlEncode;
@@ -89,6 +91,23 @@ int main() {
   check(urlEncode("a/b") == "a%2Fb", "Slashes are percent-encoded");
   const std::string chinese = urlEncode("超级马里奥");
   check(chinese.rfind("%E8%B6%85", 0) == 0, "Chinese text is percent-encoded as UTF-8");
+
+  // The file name on the card has to survive FAT and Windows, because the stock
+  // launcher looks for the very same name.
+  check(coverFileName("F1赛车") == "F1赛车", "A plain title is kept as is");
+  check(coverFileName("a/b:c*?") == "a_b_c__", "Characters a card rejects become underscores");
+  check(coverFileName("name. ") == "name", "Trailing dots and spaces are dropped");
+  check(coverFileName("///") == "___", "A title with nothing usable still names a file");
+  check(coverTargetPath("/mnt/SDCARD/Imgs", launcher::game::GamePlatform::Nes, "F1赛车") ==
+            "/mnt/SDCARD/Imgs/FC/F1赛车.png",
+        "A cover lands in the system folder the stock launcher reads");
+  check(coverTargetPath("/mnt/SDCARD/Imgs/", launcher::game::GamePlatform::Genesis, "Sonic") ==
+            "/mnt/SDCARD/Imgs/MD/Sonic.png",
+        "A trailing separator does not double up");
+  check(coverTargetPath("/mnt/SDCARD/Imgs", launcher::game::GamePlatform::Unknown, "x").empty(),
+        "A platform without a card folder has no cover path");
+  check(coverTargetPath("", launcher::game::GamePlatform::Nes, "x").empty(),
+        "No image folder means nowhere to write");
 
   if (failures == 0)
     std::printf("cover name checks passed\n");

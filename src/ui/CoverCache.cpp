@@ -118,33 +118,32 @@ std::string writeTemplateIfMissing(const fs::path &path) {
 
 CoverCache::~CoverCache() { shutdown(); }
 
-void CoverCache::initialize(const std::string &directory,
-                            std::vector<std::string> cardRoots) {
+void CoverCache::initialize(std::string namesPath,
+                            std::vector<std::string> coverRoots) {
   shutdown();
-  directory_ = directory;
-  cardRoots_ = std::move(cardRoots);
-  const fs::path root = paths::fromUtf8(directory_);
+  namesPath_ = std::move(namesPath);
+  coverRoots_ = std::move(coverRoots);
+  // A killed session can leave a half-written download beside a ROM; it can
+  // never be displayed, so drop those before anything looks for art.
+  for (const std::string &root : coverRoots_) {
+    std::error_code code;
+    for (fs::recursive_directory_iterator it(paths::fromUtf8(root), code), end;
+         !code && it != end; it.increment(code)) {
+      if (it->path().extension() == ".part")
+        fs::remove(it->path(), code);
+    }
+  }
+  const fs::path namesFile = paths::fromUtf8(namesPath_);
   std::error_code code;
-  fs::create_directories(root, code);
-  if (code) {
-    std::fprintf(stderr, "covers: cannot create %s: %s\n", directory_.c_str(), code.message().c_str());
-    return;
-  }
-  // A killed session leaves half-written downloads behind; they can never be
-  // displayed, so drop them before anything looks at the directory.
-  for (fs::directory_iterator it(root, code), end; !code && it != end; it.increment(code)) {
-    if (it->path().extension() == ".part")
-      fs::remove(it->path(), code);
-  }
-  code.clear();
-  const fs::path namesPath = root / "names.json";
-  const std::string writeError = writeTemplateIfMissing(namesPath);
+  if (!namesFile.parent_path().empty())
+    fs::create_directories(namesFile.parent_path(), code);
+  const std::string writeError = writeTemplateIfMissing(namesFile);
   if (!writeError.empty())
     std::fprintf(stderr, "covers: %s\n", writeError.c_str());
 
-  std::ifstream input(namesPath, std::ios::binary);
+  std::ifstream input(namesFile, std::ios::binary);
   if (!input) {
-    std::fprintf(stderr, "covers: cannot read %s\n", paths::toUtf8(namesPath).c_str());
+    std::fprintf(stderr, "covers: cannot read %s\n", paths::toUtf8(namesFile).c_str());
     return;
   }
   const std::string text((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
@@ -170,28 +169,25 @@ void CoverCache::shutdown() {
     SDL_DestroyTexture(entry.second);
   wallpapers_.clear();
   attempted_.clear();
-  cardCovers_.clear();
-  cardRoots_.clear();
-  directory_.clear();
+  coverPaths_.clear();
+  coverRoots_.clear();
+  namesPath_.clear();
   names_.clear();
 }
 
-std::string CoverCache::pathFor(const std::string &id) const {
-  return paths::toUtf8(paths::fromUtf8(directory_) / (id + ".png"));
-}
-
-std::string CoverCache::cardCoverPath(const library::GameEntry &game) {
-  const auto known = cardCovers_.find(game.id);
-  if (known != cardCovers_.end())
+std::string CoverCache::existingCoverPath(const library::GameEntry &game) {
+  const auto known = coverPaths_.find(game.id);
+  if (known != coverPaths_.end())
     return known->second;
   std::string found;
   // The stock launcher keeps one folder per system, named the way it names the
   // folders under Roms/, with the art named after the game.
   const std::string system(game::platformDescriptor(game.platform).cardDirectory);
   if (!system.empty() && !game.title.empty()) {
-    for (const std::string &root : cardRoots_) {
+    const std::string name = library::coverFileName(game.title);
+    for (const std::string &root : coverRoots_) {
       for (const char *extension : {".png", ".jpg"}) {
-        const fs::path candidate = paths::fromUtf8(root) / system / (game.title + extension);
+        const fs::path candidate = paths::fromUtf8(root) / system / (name + extension);
         std::error_code code;
         if (fs::is_regular_file(candidate, code) && !code) {
           found = paths::toUtf8(candidate);
@@ -202,22 +198,31 @@ std::string CoverCache::cardCoverPath(const library::GameEntry &game) {
         break;
     }
   }
-  cardCovers_[game.id] = found;
+  coverPaths_[game.id] = found;
   return found;
+}
+
+std::string CoverCache::coverTarget(const library::GameEntry &game) const {
+  if (coverRoots_.empty())
+    return {};
+  const std::string system(game::platformDescriptor(game.platform).cardDirectory);
+  for (const std::string &root : coverRoots_) {
+    std::error_code code;
+    if (fs::is_directory(paths::fromUtf8(root) / system, code) && !code)
+      return library::coverTargetPath(root, game.platform, game.title);
+  }
+  return library::coverTargetPath(coverRoots_.front(), game.platform, game.title);
 }
 
 SDL_Texture *CoverCache::cover(SDL_Renderer *renderer, const library::GameEntry &game) {
   const auto cached = covers_.find(game.id);
   if (cached != covers_.end())
     return cached->second;
-  const std::string path = pathFor(game.id);
-  std::error_code code;
-  if (fs::is_regular_file(paths::fromUtf8(path), code))
+  // Art already on the card beats anything a download could bring, and it is
+  // the very file the stock launcher shows for the same ROM.
+  const std::string path = existingCoverPath(game);
+  if (!path.empty())
     return loadCover(renderer, game.id, path);
-  // Art that shipped with the game beats anything a download could bring.
-  const std::string card = cardCoverPath(game);
-  if (!card.empty())
-    return loadCover(renderer, game.id, card);
   // One download at a time. A card that asks while another download is running
   // stays unmarked on purpose: it gets its turn on a later frame instead of
   // being written off for the rest of the session.
@@ -233,13 +238,9 @@ SDL_Texture *CoverCache::wallpaper(SDL_Renderer *renderer, const library::GameEn
   const auto cached = wallpapers_.find(game.id);
   if (cached != wallpapers_.end())
     return cached->second;
-  const std::string path = pathFor(game.id);
-  std::error_code code;
-  if (fs::is_regular_file(paths::fromUtf8(path), code))
+  const std::string path = existingCoverPath(game);
+  if (!path.empty())
     return loadWallpaper(renderer, game.id, path);
-  const std::string card = cardCoverPath(game);
-  if (!card.empty())
-    return loadWallpaper(renderer, game.id, card);
   return nullptr;
 }
 
@@ -276,11 +277,17 @@ void CoverCache::startDownload(const library::GameEntry &game) {
     return;
   if (worker_.joinable())
     worker_.join();
+  const std::string target = coverTarget(game);
+  if (target.empty())
+    return;
   auto job = std::make_shared<DownloadJob>();
   job->id = game.id;
+  job->target = target;
   job_ = job;
-  const std::string target = pathFor(game.id);
   worker_ = std::thread([job, urls, target]() {
+    // The system folder may not exist yet on a card that never held art.
+    std::error_code made;
+    fs::create_directories(paths::fromUtf8(target).parent_path(), made);
     const std::string partial = target + ".part";
     bool ok = false;
     for (const std::string &url : urls) {
@@ -334,11 +341,15 @@ void CoverCache::poll(SDL_Renderer *renderer) {
     worker_.join();
   const bool ok = job_->ok;
   const std::string id = job_->id;
+  const std::string target = job_->target;
   job_.reset();
   if (!ok)
     return;
+  // The file is on the card now, so the next frame finds it like any other.
+  // A miss was remembered as an empty path and has to be forgotten.
+  coverPaths_.erase(id);
   if (covers_.find(id) == covers_.end())
-    (void)loadCover(renderer, id, pathFor(id));
+    (void)loadCover(renderer, id, target);
 }
 
 }  // namespace launcher::ui

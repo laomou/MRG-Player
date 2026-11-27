@@ -521,10 +521,11 @@ int Application::run(int argc, char **argv) {
       std::fprintf(stderr, "Imported %d game(s) from the ROM folders\n",
                    scanned.imported);
   }
-  // Box art lives next to the saves, beside a names.json the player can edit.
+  // Box art is one file on the card, Imgs/<system>/<title>.png, which is where
+  // the stock launcher looks too. cover-names.json holds the lookup names the
+  // player can edit.
   ui::CoverCache coverCache;
-  coverCache.initialize(config::dataSubdirectory("covers", ""),
-                        config::coverSearchDirectories());
+  coverCache.initialize(config::coverNamesPath(), config::coverDirectories());
   bool running = true;
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;

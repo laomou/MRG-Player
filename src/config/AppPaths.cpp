@@ -140,25 +140,29 @@ std::vector<std::string> romSearchDirectories() {
     return directories;
   }
 
-  // Desktop default: a roms/ folder beside the managed library is enough, and
-  // the same folder next to the executable covers a portable build.
+  // Desktop default mirrors a card: Roms/<system> folders with Imgs/<system>
+  // beside them, so a tree copied off a device opens the way it left it. The
+  // older lowercase roms/ is still read, so an existing setup keeps working.
   const std::string root = dataRoot();
-  if (!root.empty())
+  if (!root.empty()) {
+    add(paths::toUtf8(paths::fromUtf8(root) / "Roms"));
     add(paths::toUtf8(paths::fromUtf8(root) / "roms"));
-  add(executableDirectory() + "roms");
+  }
+  const std::string executable = executableDirectory();
+  add(executable + "Roms");
+  add(executable + "roms");
   return directories;
 }
 
-std::vector<std::string> coverSearchDirectories() {
+std::vector<std::string> coverDirectories() {
   std::vector<std::string> directories;
   for (const std::string &roms : romSearchDirectories()) {
     // Roms/ maps to the Imgs/ beside it, which is where the stock launcher
-    // keeps the box art of the games it shipped with.
+    // keeps the box art of the games it shipped with. The folder is not
+    // required to exist: a missing one is created when a cover is saved, so a
+    // fresh card and a full one behave the same way.
     const fs::path candidate = paths::fromUtf8(roms).parent_path() / "Imgs";
     if (candidate.empty())
-      continue;
-    std::error_code ec;
-    if (!fs::is_directory(candidate, ec) || ec)
       continue;
     const std::string normalized = paths::toUtf8(candidate);
     if (std::find(directories.begin(), directories.end(), normalized) ==
@@ -166,6 +170,27 @@ std::vector<std::string> coverSearchDirectories() {
       directories.push_back(normalized);
   }
   return directories;
+}
+
+std::string coverNamesPath() {
+  std::string migrationError;
+  (void)migrateLegacyData(migrationError);
+  const std::string root = dataRoot();
+  const fs::path base = root.empty() ? fs::path(".") : paths::fromUtf8(root);
+  const fs::path target = base / "cover-names.json";
+  std::error_code ec;
+  if (!fs::exists(target, ec)) {
+    // Covers used to live in <data>/covers, with names.json beside them. Move
+    // the mapping forward so a player's edits survive the change.
+    const fs::path legacy = base / "covers" / "names.json";
+    std::error_code legacyError;
+    if (fs::is_regular_file(legacy, legacyError)) {
+      std::error_code copyError;
+      fs::copy_file(legacy, target, fs::copy_options::overwrite_existing,
+                    copyError);
+    }
+  }
+  return paths::toUtf8(target);
 }
 
 std::string dataSubdirectory(std::string_view first, std::string_view second) {
