@@ -438,6 +438,13 @@ void LibretroRuntime::handleRawJoystickEvent(const SDL_Event &event) {
     if (axis)
       setControllerAxis(playerForController(event.jaxis.which), *axis,
                         event.jaxis.value);
+  } else if (event.type == SDL_JOYHATMOTION) {
+    const int player = playerForController(event.jhat.which);
+    const Uint8 value = event.jhat.value;
+    setAction(player, config::InputAction::Up, (value & SDL_HAT_UP) != 0);
+    setAction(player, config::InputAction::Down, (value & SDL_HAT_DOWN) != 0);
+    setAction(player, config::InputAction::Left, (value & SDL_HAT_LEFT) != 0);
+    setAction(player, config::InputAction::Right, (value & SDL_HAT_RIGHT) != 0);
   }
 }
 

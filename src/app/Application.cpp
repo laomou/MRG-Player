@@ -402,6 +402,35 @@ int Application::run(int argc, char **argv) {
                  SDL_JoystickNumAxes(brickJoystick));
   }
   input::BrickInputAdapter brickInput;
+  Uint8 brickHat = SDL_HAT_CENTERED;
+  const auto pushDpad = [&](const SDL_Event &hat) {
+    const Uint8 now = hat.jhat.value;
+    const Uint8 changed = static_cast<Uint8>(now ^ brickHat);
+    if (changed == 0)
+      return;
+    struct Direction {
+      Uint8 mask;
+      SDL_GameControllerButton button;
+    };
+    constexpr Direction directions[] = {
+        {SDL_HAT_UP, SDL_CONTROLLER_BUTTON_DPAD_UP},
+        {SDL_HAT_DOWN, SDL_CONTROLLER_BUTTON_DPAD_DOWN},
+        {SDL_HAT_LEFT, SDL_CONTROLLER_BUTTON_DPAD_LEFT},
+        {SDL_HAT_RIGHT, SDL_CONTROLLER_BUTTON_DPAD_RIGHT}};
+    for (const Direction &direction : directions) {
+      if ((changed & direction.mask) == 0)
+        continue;
+      const bool pressed = (now & direction.mask) != 0;
+      SDL_Event translated{};
+      translated.type =
+          pressed ? SDL_CONTROLLERBUTTONDOWN : SDL_CONTROLLERBUTTONUP;
+      translated.cbutton.which = hat.jhat.which;
+      translated.cbutton.button = static_cast<Uint8>(direction.button);
+      translated.cbutton.state = pressed ? SDL_PRESSED : SDL_RELEASED;
+      SDL_PushEvent(&translated);
+    }
+    brickHat = now;
+  };
 #endif
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
@@ -646,8 +675,15 @@ int Application::run(int argc, char **argv) {
   Uint64 toastUntil = 0;
   std::string toastMessage;
   Uint64 lastAxisMove = 0;
+#if defined(MRG_PLATFORM_BRICK)
+  // The panel is the only input the handheld ships with, so the first screen
+  // has to advertise its buttons before the player has touched anything.
+  config::InputDeviceKind lastInputDevice =
+      config::InputDeviceKind::Controller;
+#else
   config::InputDeviceKind lastInputDevice =
       config::InputDeviceKind::KeyboardMouse;
+#endif
   const Uint64 start = SDL_GetPerformanceCounter();
   const double frequency = static_cast<double>(SDL_GetPerformanceFrequency());
 
@@ -703,6 +739,11 @@ int Application::run(int argc, char **argv) {
     bool controllerConnected = controller != nullptr;
 #if defined(MRG_PLATFORM_BRICK)
     controllerConnected = controllerConnected || brickJoystick != nullptr;
+    // "Auto" means the panel on a handheld: there is no desk keyboard to
+    // switch to, so a host keyboard under an emulator cannot take over the
+    // labels either. Picking Keyboard & Mouse by hand still wins.
+    if (settings.promptDevice == config::PromptDeviceMode::Auto)
+      return config::InputDeviceKind::Controller;
 #endif
     return config::resolvePromptDevice(
         settings.promptDevice, lastInputDevice, controllerConnected);
@@ -1726,10 +1767,19 @@ int Application::run(int argc, char **argv) {
           ((event.type == SDL_JOYBUTTONDOWN ||
             event.type == SDL_JOYBUTTONUP)
                ? event.jbutton.which == SDL_JoystickInstanceID(brickJoystick)
-               : (event.type == SDL_JOYAXISMOTION &&
-                  event.jaxis.which == SDL_JoystickInstanceID(brickJoystick)));
+               : ((event.type == SDL_JOYAXISMOTION &&
+                   event.jaxis.which == SDL_JoystickInstanceID(brickJoystick)) ||
+                  (event.type == SDL_JOYHATMOTION &&
+                   event.jhat.which == SDL_JoystickInstanceID(brickJoystick))));
       if (fromBrick)
         lastInputDevice = config::InputDeviceKind::Controller;
+      // The panel reports its d-pad as a hat, which SDL never turns into
+      // buttons on a raw joystick. Menus get the four directions as the
+      // controller buttons they already understand.
+      if (fromBrick && event.type == SDL_JOYHATMOTION && screen != Screen::Game) {
+        pushDpad(event);
+        continue;
+      }
       if (fromBrick && (screen != Screen::Game || quitConfirm)) {
         const input::BrickUiTranslation translated =
             brickInput.translateForUi(event);
