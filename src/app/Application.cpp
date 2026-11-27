@@ -1797,6 +1797,17 @@ int Application::run(int argc, char **argv) {
   // once here as well.
   refreshCoreRows();
 
+  // A frame of the display the window opened on. Menus pace themselves by
+  // it because SDL only blocks inside present when the driver honours the
+  // vsync hint, and the software and KMSDRM paths do not: without this a
+  // still shelf would spin a core at a thousand frames a second.
+  Uint32 menuFrameMs = 16;
+  if (SDL_DisplayMode mode{};
+      SDL_GetWindowDisplayMode(window, &mode) == 0 && mode.refresh_rate > 0)
+    menuFrameMs = std::max<Uint32>(
+        1, 1000U / static_cast<Uint32>(mode.refresh_rate));
+  Uint64 nextMenuFrame = 0;
+
   while (running) {
     if (coreInstallDone.exchange(false)) {
       if (coreInstallThread != nullptr) {
@@ -3048,8 +3059,19 @@ int Application::run(int argc, char **argv) {
       running = false;
     else
 #endif
-    if (screen == Screen::Game || screen == Screen::Pause)
+    if (screen == Screen::Game) {
+      // The runtime owns the game frame clock; this only yields the CPU.
       SDL_Delay(1);
+    } else {
+      // A stall -- a core loading, a screenshot -- restarts the cadence
+      // instead of bursting through the frames that were missed.
+      const Uint64 now = SDL_GetTicks64();
+      if (nextMenuFrame == 0 || now + 100 < nextMenuFrame)
+        nextMenuFrame = now;
+      if (nextMenuFrame > now)
+        SDL_Delay(static_cast<Uint32>(nextMenuFrame - now));
+      nextMenuFrame += menuFrameMs;
+    }
   }
 
   if (coreInstallThread != nullptr) {
