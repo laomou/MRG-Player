@@ -98,6 +98,15 @@ std::string formatCoreSize(std::uintmax_t bytes) {
   return buffer;
 }
 
+// The Brick's own pad is claimed as a raw joystick (openBrickJoystick) so the
+// UI can map by the letters printed on the shell. Keeping it out of the
+// controller list stops SDL from opening it a second time, where the same
+// presses would arrive under SDL's positional names instead.
+SDL_JoystickID gBrickPadInstance = 0;
+// SDL hands the first joystick instance id 0, which is also what an unset
+// id looks like, so the flag says whether the panel has been claimed.
+bool gBrickPadClaimed = false;
+
 struct ControllerCandidate {
   int deviceIndex = -1;
   SDL_JoystickID instanceId = -1;
@@ -116,6 +125,9 @@ std::vector<ControllerCandidate> availableControllers() {
   std::vector<ControllerCandidate> result;
   for (int index = 0; index < SDL_NumJoysticks(); ++index) {
     if (!SDL_IsGameController(index))
+      continue;
+    if (gBrickPadClaimed &&
+        SDL_JoystickGetDeviceInstanceID(index) == gBrickPadInstance)
       continue;
     const char *name = SDL_GameControllerNameForIndex(index);
     result.push_back({index, SDL_JoystickGetDeviceInstanceID(index),
@@ -137,21 +149,45 @@ SDL_GameController *openPreferredController(std::string_view preferredGuid) {
 }
 
 #if defined(MRG_PLATFORM_BRICK)
+// 15 buttons is A, B, X, Y, L1, R1, Select, Start, Menu, L3, R3, two volume
+// keys and two spares; 6 axes is the analog stick pair plus both triggers.
+constexpr int kBrickPanelButtons = 15;
+constexpr int kBrickPanelAxes = 6;
+
+// The stock firmware reports the panel as a plain gamepad carrying the ids of
+// an Xbox 360 pad (vendor 045e, product 028e), so SDL names its buttons by
+// where they sit: the one printed A is announced as B. Claiming the pad as a
+// raw joystick keeps the letters the adapter maps (see BrickInput.hpp) in
+// charge of the UI and of gameplay alike.
+//
+// The panel is the one device that also exposes the volume keys, which is what
+// tells it apart from a real pad plugged into the port.
 SDL_Joystick *openBrickJoystick() {
+  int fallback = -1;
   for (int index = 0; index < SDL_NumJoysticks(); ++index) {
-    if (SDL_IsGameController(index))
-      continue;
     SDL_Joystick *joystick = SDL_JoystickOpen(index);
     if (joystick == nullptr)
       continue;
     const char *name = SDL_JoystickName(joystick);
-    std::fprintf(stderr, "Brick raw joystick: %s, %d buttons, %d axes\n",
-                 name != nullptr ? name : "unknown",
-                 SDL_JoystickNumButtons(joystick),
-                 SDL_JoystickNumAxes(joystick));
-    return joystick;
+    const int buttons = SDL_JoystickNumButtons(joystick);
+    const int axes = SDL_JoystickNumAxes(joystick);
+    std::fprintf(stderr, "joystick %d: %s, %d buttons, %d axes\n", index,
+                 name != nullptr ? name : "unknown", buttons, axes);
+    if (buttons >= kBrickPanelButtons && axes >= kBrickPanelAxes) {
+      if (fallback >= 0) {
+        SDL_Joystick *spare = SDL_JoystickOpen(fallback);
+        if (spare != nullptr)
+          SDL_JoystickClose(spare);
+      }
+      return joystick;
+    }
+    SDL_JoystickClose(joystick);
+    if (fallback < 0 && !SDL_IsGameController(index))
+      fallback = index;
   }
-  return nullptr;
+  if (fallback < 0)
+    return nullptr;
+  return SDL_JoystickOpen(fallback);
 }
 #endif
 
@@ -353,13 +389,23 @@ int Application::run(int argc, char **argv) {
   }
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
+#if defined(MRG_PLATFORM_BRICK)
+  SDL_Joystick *brickJoystick = openBrickJoystick();
+  if (brickJoystick != nullptr) {
+    gBrickPadInstance = SDL_JoystickInstanceID(brickJoystick);
+    gBrickPadClaimed = true;
+    SDL_JoystickEventState(SDL_ENABLE);
+    const char *name = SDL_JoystickName(brickJoystick);
+    std::fprintf(stderr, "Brick raw joystick: %s, %d buttons, %d axes\n",
+                 name != nullptr ? name : "unknown",
+                 SDL_JoystickNumButtons(brickJoystick),
+                 SDL_JoystickNumAxes(brickJoystick));
+  }
+  input::BrickInputAdapter brickInput;
+#endif
   SDL_GameController *controller =
       openPreferredController(settings.preferredControllerGuid);
   SDL_GameController *controller2 = nullptr;
-#if defined(MRG_PLATFORM_BRICK)
-  SDL_Joystick *brickJoystick = openBrickJoystick();
-  input::BrickInputAdapter brickInput;
-#endif
   auto instanceIdOf = [](SDL_GameController *pad) -> SDL_JoystickID {
     return pad != nullptr
                ? SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(pad))
@@ -624,9 +670,9 @@ int Application::run(int argc, char **argv) {
   auto activeControllerName = [&]() -> std::string {
 #if defined(MRG_PLATFORM_BRICK)
     if (brickJoystick != nullptr) {
-      const char *rawName = SDL_JoystickName(brickJoystick);
-      std::string combined =
-          "P1 " + std::string(rawName != nullptr ? rawName : "Brick controls");
+      // The firmware gives the panel the ids of an Xbox 360 pad, so SDL names
+      // it that way; the shell says TRIMUI Player1, and so does this line.
+      std::string combined = "P1 TRIMUI Player1";
       const std::string second = controllerLabel(controller);
       if (!second.empty())
         combined += "   P2 " + second;
@@ -1736,6 +1782,10 @@ int Application::run(int argc, char **argv) {
         continue;
       }
       if (event.type == SDL_CONTROLLERDEVICEADDED) {
+        if (gBrickPadClaimed &&
+            SDL_JoystickGetDeviceInstanceID(event.cdevice.which) ==
+                gBrickPadInstance)
+          continue;
         if (SDL_IsGameController(event.cdevice.which)) {
           const std::string addedGuid = controllerGuidAt(event.cdevice.which);
           const bool preferredReturned =
