@@ -163,22 +163,17 @@ void drawPauseMenu(
       TextId::ResumeGame,   TextId::SaveState,    TextId::LoadState,
       TextId::ConsoleReset, TextId::PowerCycle,   TextId::Display,
       TextId::CoreOptions,  TextId::ControlHelp,  TextId::ReturnHome};
-  const std::array<const char *, kPauseActionCount> glyphs{
-      ">", "S", "L", "R", "P", "D", "O", "?", "<"};
+  // No key glyphs here. Nothing in this menu is a keyboard shortcut -- every
+  // row is picked with the d-pad and confirmed -- and the handheld build has no
+  // keyboard at all, so the circle letters only promised keys that are not
+  // there. The footer keeps the two prompts that do exist on the device.
   for (int action = 0; action < kPauseActionCount; ++action) {
     const Rect bounds = layout.actions.item(action);
     const bool selected = action == selectedAction;
-    const int glyphX = static_cast<int>(panel.content.x + 29);
     drawFocusablePlate(renderer, bounds.x, bounds.y, bounds.w, bounds.h, 16,
                        selected ? accent : SDL_Color{255, 255, 255, 16},
                        selected);
-    circle(renderer, glyphX, static_cast<int>(bounds.centerY()), 11,
-           selected ? SDL_Color{25, 25, 41, 255}
-                    : SDL_Color{255, 255, 255, 26});
-    centeredGlyph(renderer, glyphX, static_cast<int>(bounds.centerY()), glyphs[action], 2,
-                  selected ? accent
-                           : SDL_Color{210, 218, 232, 255});
-    text(renderer, static_cast<int>(panel.content.x + 57),
+    text(renderer, static_cast<int>(panel.content.x + 20),
          textCenteredY(tr(labels[action], language),
                        static_cast<int>(bounds.centerY()), 2),
          tr(labels[action], language), 2,

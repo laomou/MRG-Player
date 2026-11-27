@@ -56,9 +56,23 @@ constexpr int kColumnGutter = 13;
 constexpr std::size_t kBindingsPerColumn = 7;
 static_assert(config::kInputActionCount == 2 * kBindingsPerColumn);
 
-// The general page carries five rows now, so its rows are slightly shorter
-// than the ones on the other pages.
+// The general page carries five lines -- language, startup page, remembered
+// selection, rewind and runahead -- so its rows are slightly shorter than the
+// ones on the other pages. Rewind is the one line a pad cannot use: it flips a
+// shortcut only a held keyboard key starts, so the page drops it there and the
+// line under it moves up into its slot.
 constexpr int kGeneralRowCount = 5;
+constexpr int kRewindSetting = 3;
+
+constexpr int generalRowCount(bool keyboardPrompts) {
+  return keyboardPrompts ? kGeneralRowCount : kGeneralRowCount - 1;
+}
+
+// Row on the page -> the general setting it edits, which is the same thing
+// except on a page without the rewind line.
+constexpr int generalSettingAt(int row, bool keyboardPrompts) {
+  return !keyboardPrompts && row >= kRewindSetting ? row + 1 : row;
+}
 constexpr int kGeneralRowY = kContentTop + 64;
 constexpr int kGeneralRowStep = 67;
 constexpr int kGeneralRowHeight = 61;
@@ -253,9 +267,9 @@ CoreRowColumns coreRowColumns(const std::string &status) {
 
 int settingCategoryCount() { return kCategoryCount; }
 
-int settingRowCount(int category) {
+int settingRowCount(int category, bool keyboardPrompts) {
   if (category == 0)
-    return kGeneralRowCount;
+    return generalRowCount(keyboardPrompts);
   if (category == 1)
     return 4;
   if (category == 2)
@@ -267,7 +281,7 @@ int settingRowCount(int category) {
   return 1;
 }
 
-FocusGrid settingsControls(int category) {
+FocusGrid settingsControls(int category, bool keyboardPrompts) {
   ControlList rail;
   std::vector<Control> categories;
   categories.reserve(static_cast<std::size_t>(kCategoryCount));
@@ -306,7 +320,7 @@ FocusGrid settingsControls(int category) {
   }
 
   std::vector<Control> rows;
-  const int rowCount = settingRowCount(category);
+  const int rowCount = settingRowCount(category, keyboardPrompts);
   rows.reserve(static_cast<std::size_t>(rowCount) + 1);
   // The refresh button sits above the first platform, so it is the first entry
   // of the column rather than a row index with a special meaning.
@@ -329,8 +343,10 @@ int controllerPageRowAt(int x, int y) {
   return -1;
 }
 
-int generalPageRowAt(int x, int y) {
-  return kGeneralRows.hit(x, y);
+int generalPageRowAt(float x, float y, bool keyboardPrompts) {
+  LinearLayout rows = kGeneralRows;
+  rows.count = generalRowCount(keyboardPrompts);
+  return rows.hit(x, y);
 }
 
 int settingsCategoryAt(float x, float y) {
@@ -340,11 +356,11 @@ int settingsCategoryAt(float x, float y) {
   return -1;
 }
 
-int settingsRowAt(int category, float x, float y) {
+int settingsRowAt(int category, float x, float y, bool keyboardPrompts) {
   if (category < 0 || category >= kCategoryCount)
     return -1;
   if (category == 0)
-    return kGeneralRows.hit(x, y);
+    return generalPageRowAt(x, y, keyboardPrompts);
   if (category == 3) {
     for (int row = 0; row < kFixedRowCount + static_cast<int>(config::kInputActionCount) + 1; ++row)
       if (controllerRowBounds(row).contains(x, y))
@@ -363,18 +379,25 @@ bool coreRefreshAt(float x, float y) {
 }
 
 void changeSetting(AppSettings &settings, int category, int row,
-                   int direction) {
+                   int direction, bool keyboardPrompts) {
   if (category == 0) {
-    if (row == 0)
+    switch (generalSettingAt(row, keyboardPrompts)) {
+    case 0:
       settings.language = (settings.language + direction + 2) % 2;
-    else if (row == 1)
+      break;
+    case 1:
       settings.startupPage = (settings.startupPage + direction + 2) % 2;
-    else if (row == 2)
+      break;
+    case 2:
       settings.rememberSelection = !settings.rememberSelection;
-    else if (row == 3)
+      break;
+    case kRewindSetting:
       settings.rewind = !settings.rewind;
-    else
+      break;
+    default:
       settings.runahead = (settings.runahead + direction + 4) % 4;
+      break;
+    }
   } else if (category == 1) {
     if (row == 0)
       settings.fullscreen = !settings.fullscreen;
@@ -501,16 +524,21 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
          tr(settings.rewind ? TextId::On : TextId::Off, language)},
         {TextId::Runahead, runahead},
     }};
-    constexpr std::array<TextId, kGeneralRowCount> descriptions{
+    const std::array<TextId, kGeneralRowCount> descriptions{
         TextId::LanguageDescription, TextId::StartupDescription,
         TextId::RememberDescription, TextId::RewindDescription,
         TextId::RunaheadDescription};
-    for (int index = 0; index < kGeneralRowCount; ++index) {
+    // A pad has no key to hold, so the rewind line is left out rather than
+    // shown as a switch that turns nothing on.
+    const bool keyboardPrompts = prompts.source.fromKeyboard();
+    const int rowCount = generalRowCount(keyboardPrompts);
+    for (int index = 0; index < rowCount; ++index) {
+      const int setting = generalSettingAt(index, keyboardPrompts);
       drawSettingRow(renderer, kGeneralRows.item(index),
                      row == index, contentFocused && row == index,
-                     tr(rows[index].first, language),
-                     tr(descriptions[index], language), rows[index].second,
-                     game.accent, focusOpacity);
+                     tr(rows[setting].first, language),
+                     tr(descriptions[setting], language),
+                     rows[setting].second, game.accent, focusOpacity);
     }
   } else if (category == 1) {
     drawSettingRow(
@@ -603,11 +631,13 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         std::to_string(settings.input.analogDeadZone), game.accent,
         focusOpacity);
     // The reset hint sits on the heading line: with fourteen bindings on the
-    // page the list needs the room under it.
-    drawHintRow(renderer, static_cast<float>(kTrackX + kTrackWidth),
-                static_cast<float>(kContentDescriptionY),
-                {{tr(TextId::ResetBindingsHint, language), "R", false}},
-                game.accent);
+    // page the list needs the room under it. R is a keyboard key and only the
+    // keyboard answers to it, so a pad with no such key gets no hint at all.
+    if (prompts.source.fromKeyboard())
+      drawHintRow(renderer, static_cast<float>(kTrackX + kTrackWidth),
+                  static_cast<float>(kContentDescriptionY),
+                  {{tr(TextId::ResetBindingsHint, language), "R", false}},
+                  game.accent);
   } else if (category == 5) {
     // The refresh button shares the heading line with the page title, so the
     // table below starts on a clean row. A hairline rim keeps it readable as a
