@@ -1349,12 +1349,16 @@ void roundedBand(SDL_Renderer *renderer, float x, float y, float width,
   thickness = std::clamp(deviceLength(thickness), 1.0f,
                          std::min(boxWidth, boxHeight) * 0.5f);
   const float inner = std::max(0.0f, radius - thickness);
+  // Rows land on the same whole-pixel grid rounded() draws plates on, so a ring
+  // keeps the same gap above and below instead of drifting half a row low and
+  // ending up flush with the control's bottom edge.
+  const int firstRow = static_cast<int>(std::lround(top));
   const int rows = std::max(1, static_cast<int>(std::lround(boxHeight)));
   for (int row = 0; row < rows; ++row) {
     const float distance =
         std::min(static_cast<float>(row) + 0.5f,
                  boxHeight - static_cast<float>(row) - 0.5f);
-    const float line = top + row;
+    const float line = static_cast<float>(firstRow + row);
     const float outerY = std::max(0.0f, radius - distance);
     const float outerInset =
         radius - std::sqrt(std::max(0.0f, radius * radius - outerY * outerY));
