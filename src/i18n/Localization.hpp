@@ -41,7 +41,6 @@ enum class TextId {
   RememberDescription,
   Rewind,
   RewindDescription,
-  RewindPadDescription,
   Runahead,
   RunaheadDescription,
   FrameOne,

@@ -126,6 +126,12 @@ int main() {
       launcher::config::ControllerStyle::Xbox);
   check(xboxPrompts.confirm == "A",
         "controller actions use the shared confirm button");
+  check(keyboardPrompts.source.fromKeyboard() &&
+            !keyboardPrompts.source.fromController(),
+        "a keyboard prompt set says it came from the keyboard");
+  check(xboxPrompts.source.fromController() &&
+            !xboxPrompts.source.fromKeyboard(),
+        "a pad prompt set says it came from the pad");
 
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.

@@ -18,7 +18,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Slot preview cards with instant-state thumbnails, save time, and the play time at capture
 - 4× fast-forward while Tab or the controller's right shoulder button is held, with a configurable audio policy (silent, or audible without backlog)
 - Half-speed slow motion and single-frame stepping from the pause menu
-- Rewind: holding Backspace or pushing in the left stick steps the machine back through a rolling window of the core's own snapshots
+- Rewind: holding Backspace steps the machine back through a rolling window of the core's own snapshots; every pad button is a console input, so a handheld leaves the setting out
 - Optional runahead (0-3 frames) that runs the core past the picture on screen to hide the core's own input lag
 - Display options: square, 4:3, or 8:7 aspect ratio, integer scaling, and 0-16 px overscan crop, globally or per game
 - One accent colour for the whole launcher — teal by default, five more in **Settings → Theme** — so the interface never borrows a game's palette
@@ -249,7 +249,7 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 | Open pause menu | Escape | Escape | Guide |
 | Fast-forward (hold) | Tab | Tab | Right shoulder |
 | Slow motion (hold) | Left Shift | Left Shift | Left shoulder |
-| Rewind (hold) | Backspace | Backspace | Left stick button |
+| Rewind (hold) | Backspace | Backspace | — |
 | Step one frame (paused) | . (period) | . (period) | Right shoulder |
 | Mute / unmute | M | M | — |
 | Screenshot | F12 | F12 | — |
@@ -282,7 +282,7 @@ Open **Pause → Controls** with normal navigation and confirm. The drawer shows
 
 ### Latency options
 
-**Settings → General** carries the two playback options that trade memory and CPU for feel. **Rewind** (on by default) keeps a rolling window of the core's own snapshots while a game runs: one snapshot every other frame, capped at roughly ten seconds or 32 MiB, whichever comes first. Hold **Backspace** or push in the left stick to step back through it; the first press skips the newest snapshot because it describes the frame already on screen, and each further press moves two frames back. Rewinding pauses the frame clock, drops its audio instead of queuing it, and stops when the window runs out. The window starts empty and is discarded on console reset, power cycle, state load, or when runahead is turned on.
+**Settings → General** carries the two playback options that trade memory and CPU for feel. **Rewind** (on by default) keeps a rolling window of the core's own snapshots while a game runs: one snapshot every other frame, capped at roughly ten seconds or 32 MiB, whichever comes first. Hold **Backspace** to step back through it; the first press skips the newest snapshot because it describes the frame already on screen, and each further press moves two frames back. Rewinding pauses the frame clock, drops its audio instead of queuing it, and stops when the window runs out. The window starts empty and is discarded on console reset, power cycle, state load, or when runahead is turned on. Every pad button is a console input, so there is nothing left to hold on a handheld: the line is hidden while the prompts come from a pad and comes back once a keyboard takes over.
 
 **Runahead** (off by default, 0-3 frames) hides the core's own input lag by running it past the picture that is shown. Each frame runs the core once with audio and video muted, remembers that machine, runs the remaining hidden frames, then produces the frame that is displayed and finally rolls the machine back to the remembered point, so the next input lands earlier in the core than the frame it produced. The cost is one serialization per frame plus the extra emulation, and some cores do not leave their audio clean after a load, so an audible click can appear; that is why the setting is off by default. Both settings are stored in `settings.ini` and applied to a running game immediately.
 

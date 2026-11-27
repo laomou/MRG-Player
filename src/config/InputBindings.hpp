@@ -90,6 +90,39 @@ controllerBindings(InputBindings &bindings, std::size_t player) noexcept;
 [[nodiscard]] const std::array<SDL_GameControllerButton, kInputActionCount> &
 controllerBindings(const InputBindings &bindings, std::size_t player) noexcept;
 
+// Which device the prompt strings speak for. A couple of shortcuts answer to a
+// keyboard key and nothing else -- resetting the bindings, and holding the
+// rewind key -- so the screens that would write those keys down have to know
+// who is holding the device.
+//
+// The wrapper earns its keep by having no default constructor: a prompt set that
+// forgets to name its device does not compile, where a plain "bool keyboard =
+// false" member is quietly perfect at birth and would advertise keys the player
+// cannot press.
+class PromptSource {
+public:
+  [[nodiscard]] static constexpr PromptSource keyboard() noexcept {
+    return PromptSource(true);
+  }
+  [[nodiscard]] static constexpr PromptSource controller() noexcept {
+    return PromptSource(false);
+  }
+  PromptSource() = delete;
+
+  [[nodiscard]] constexpr bool fromKeyboard() const noexcept {
+    return fromKeyboard_;
+  }
+  [[nodiscard]] constexpr bool fromController() const noexcept {
+    return !fromKeyboard_;
+  }
+
+private:
+  constexpr explicit PromptSource(bool fromKeyboard) noexcept
+      : fromKeyboard_(fromKeyboard) {}
+
+  bool fromKeyboard_;
+};
+
 struct InputPrompts {
   std::string confirm;
   std::string back;
@@ -97,11 +130,7 @@ struct InputPrompts {
   std::string change;
   std::string horizontal;
   std::string frameStep;
-  // True only while the keyboard owns the prompts. A couple of shortcuts
-  // answer to a keyboard key and nothing else -- resetting the bindings, and
-  // holding the rewind key -- so the settings page has to know whether it may
-  // write those keys down at all.
-  bool keyboard = false;
+  PromptSource source;
 };
 
 InputBindings defaultInputBindings();

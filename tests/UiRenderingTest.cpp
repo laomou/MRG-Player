@@ -122,17 +122,17 @@ int main(int argc, char **argv) {
   for (const int category : {0, 1, 2, 3, 4, 6, 7})
     check(unreachable(
               [category](float x, float y) {
-                return settingsRowAt(category, x, y);
+                return settingsRowAt(category, x, y, true);
               },
-              settingRowCount(category)) == 0,
+              settingRowCount(category, true)) == 0,
           "Every settings row answers a click on any canvas");
   check(unreachable(
-            [](float x, float y) { return settingsRowAt(5, x, y); },
-            settingRowCount(5)) == 0,
+            [](float x, float y) { return settingsRowAt(5, x, y, true); },
+            settingRowCount(5, true)) == 0,
         "Every core line answers a click on any canvas");
   check(unreachable(
-            [](float x, float y) { return settingsRowAt(3, x, y); },
-            settingRowCount(3)) == 0,
+            [](float x, float y) { return settingsRowAt(3, x, y, true); },
+            settingRowCount(3, true)) == 0,
         "Every controller row answers a click on any canvas");
   testGameControls(argv[1]);
   if (kCanvasWidth != 1280 || kCanvasHeight != 720) {
@@ -169,13 +169,33 @@ int main(int argc, char **argv) {
         "Gameplay area must not activate display rows");
   check(pauseActionAt(500, 450) == -1,
         "Gameplay area must not activate actions");
-  for (int row = 0; row < settingRowCount(0); ++row)
-    check(generalPageRowAt(1000, 301 + row * 67 + 20) == row,
+  for (int row = 0; row < settingRowCount(0, true); ++row)
+    check(generalPageRowAt(1000, 301 + row * 67 + 20, true) == row,
           "General row hit target");
-  check(generalPageRowAt(1000, 301 + settingRowCount(0) * 67) == -1,
+  check(generalPageRowAt(1000, 301 + settingRowCount(0, true) * 67, true) == -1,
         "General hit testing must stop after the last row");
-  check(generalPageRowAt(300, 420) == -1,
+  check(generalPageRowAt(300, 420, true) == -1,
         "The settings sidebar must not activate general rows");
+  // With the prompts on a pad the page leaves the rewind line out, so the line
+  // under it moves up and the slot the rewind line had answers nothing.
+  check(settingRowCount(0, false) == 4,
+        "A pad sees four lines on the general page");
+  for (int row = 0; row < settingRowCount(0, false); ++row)
+    check(generalPageRowAt(1000, 301 + row * 67 + 20, false) == row,
+          "General rows answer a click on their painted lines");
+  check(generalPageRowAt(1000, 301 + 4 * 67 + 20, false) == -1,
+        "The slot the rewind line leaves behind activates nothing");
+  {
+    launcher::AppSettings padSettings;
+    padSettings.rewind = true;
+    padSettings.runahead = 0;
+    changeSetting(padSettings, 0, 3, 1, false);
+    check(padSettings.rewind && padSettings.runahead == 1,
+          "On a pad the last general line still edits runahead");
+    changeSetting(padSettings, 0, 3, 1, true);
+    check(!padSettings.rewind,
+          "The keyboard still toggles rewind on that line");
+  }
   // Every clickable control on the settings screen answers a click: the
   // category rail and the rows of each page.
   check(settingsCategoryAt(160, 281 + 2 * 41 + 10) == 2,
@@ -186,39 +206,39 @@ int main(int argc, char **argv) {
         "The last entry on the rail is about");
   check(settingsCategoryAt(500, 340) == -1,
         "The settings body must not activate categories");
-  check(settingsRowAt(1, 1000, 328 + 3 * 85 + 10) == 3,
+  check(settingsRowAt(1, 1000, 328 + 3 * 85 + 10, true) == 3,
         "Every display row is clickable, not just the first");
-  check(settingsRowAt(1, 1000, 328 + 3 * 85 + 80) == -1,
+  check(settingsRowAt(1, 1000, 328 + 3 * 85 + 80, true) == -1,
         "The gap under the last display row activates nothing");
-  check(settingsRowAt(2, 1000, 328 + 85 + 10) == 1,
+  check(settingsRowAt(2, 1000, 328 + 85 + 10, true) == 1,
         "Audio rows map to their own index");
   // The controller page keeps two binding columns on a 27 pixel pitch: the line
   // decides the action, the half of the track decides which of the two pads it
   // belongs to, and the dead zone closes the list under both columns.
-  check(settingsRowAt(3, 650, 298 + 4 * 27 + 10) == 4,
+  check(settingsRowAt(3, 650, 298 + 4 * 27 + 10, true) == 4,
         "The left binding column maps to its own action");
-  check(settingsRowAt(3, 1000, 298 + 4 * 27 + 10) == 11,
+  check(settingsRowAt(3, 1000, 298 + 4 * 27 + 10, true) == 11,
         "The right binding column maps to its own action");
-  check(settingsRowAt(3, 650, 298 + 10) == 0,
+  check(settingsRowAt(3, 650, 298 + 10, true) == 0,
         "The controller page starts with its own device rows");
-  check(settingsRowAt(3, 650, 298 + 11 * 27 + 10) == 18,
+  check(settingsRowAt(3, 650, 298 + 11 * 27 + 10, true) == 18,
         "The dead zone closes the controller list");
-  check(settingsRowAt(3, 650, 298 + 11 * 27 + 25) == -1,
+  check(settingsRowAt(3, 650, 298 + 11 * 27 + 25, true) == -1,
         "The gap under the last controller line activates nothing");
-  check(settingsRowAt(4, 300, 340) == -1,
+  check(settingsRowAt(4, 300, 340, true) == -1,
         "Outside the row track activates nothing");
-  check(settingsRowAt(6, 1000, 340) == 0, "The theme row is clickable");
-  check(settingsRowAt(7, 1000, 340) == 0, "The about row is clickable");
+  check(settingsRowAt(6, 1000, 340, true) == 0, "The theme row is clickable");
+  check(settingsRowAt(7, 1000, 340, true) == 0, "The about row is clickable");
   for (int category : {1, 2, 4, 6, 7}) {
-    check(settingsRowAt(category, 1000, 327.9f) == -1 &&
-              settingsRowAt(category, 1000, 328) == 0 &&
-              settingsRowAt(category, 1000, 401.9f) == 0 &&
-              settingsRowAt(category, 1000, 402) == -1,
+    check(settingsRowAt(category, 1000, 327.9f, true) == -1 &&
+              settingsRowAt(category, 1000, 328, true) == 0 &&
+              settingsRowAt(category, 1000, 401.9f, true) == 0 &&
+              settingsRowAt(category, 1000, 402, true) == -1,
           "Settings targets must match painted row edges, not stale coordinates");
   }
-  check(settingsRowAt(3, 776, 415) == -1 &&
+  check(settingsRowAt(3, 776, 415, true) == -1 &&
             controllerPageRowAt(776, 415) == -1 &&
-            settingsRowAt(3, 650, 323) == -1,
+            settingsRowAt(3, 650, 323, true) == -1,
         "Neither the binding gutter nor fixed-row gaps activate a setting");
   check(settingsCategoryAt(160, 321) == -1,
         "Category spacing must not activate a neighbouring row");
@@ -287,7 +307,11 @@ int main(int argc, char **argv) {
         "A long library stops with the last card flush against the right edge");
   check(homeCardAt(1200, 400, 10, 2.0f) >= 7,
         "Scrolling the row moves the cards under the pointer");
-  launcher::config::InputPrompts prompts;
+  // A prompt set always names the device it was written for, so the footer
+  // never guesses which keys the player has.
+  const launcher::config::InputPrompts prompts{
+      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+      launcher::config::PromptSource::keyboard()};
   check(homeActionAt(1200, 663, true, launcher::i18n::Language::English,
                      prompts) == 1,
         "The last footer entry is the rightmost button");
@@ -298,15 +322,15 @@ int main(int argc, char **argv) {
   // where the focus starts, the page is reached with right.
   check(settingsCategoryAt(160, 281 + 2 * 41 + 10) == 2,
         "The category rail hit target follows the list");
-  check(settingsRowAt(1, 1000, 328 + 2 * 85 + 20) == 2,
+  check(settingsRowAt(1, 1000, 328 + 2 * 85 + 20, true) == 2,
         "The display page rows are all clickable");
   // The core page gives every platform its own line, and the refresh button
   // sits on the heading line instead of inside one, so both answer a hit test.
-  check(settingsRowAt(5, 1000, 317 + 2 * 45 + 20) == 2,
+  check(settingsRowAt(5, 1000, 317 + 2 * 45 + 20, true) == 2,
         "The core list maps a click to its platform");
-  check(settingsRowAt(5, 1000, 317 + 38 + 4) == -1,
+  check(settingsRowAt(5, 1000, 317 + 38 + 4, true) == -1,
         "The gap between core rows activates nothing");
-  check(settingsRowAt(5, 1000, 240) == -1,
+  check(settingsRowAt(5, 1000, 240, true) == -1,
         "The core heading line is not a row");
   check(coreRefreshAt(1120, 245) && !coreRefreshAt(1120, 317),
         "The refresh button is its own target");
@@ -345,7 +369,7 @@ int main(int argc, char **argv) {
   // and the core page's refresh button is the first entry of the page column,
   // so up from the first platform reaches it without a special case.
   {
-    FocusGrid grid = settingsControls(5);
+    FocusGrid grid = settingsControls(5, true);
     check(grid.listCount() == 2, "The settings page has a rail and a page");
     check(grid.listIndex() == 0, "The rail owns the keys first");
     check(grid.focusedId() == 0, "The rail starts on the first category");
@@ -367,12 +391,12 @@ int main(int argc, char **argv) {
           "The category rail wraps upwards");
     check(grid.moveVertical(1) && grid.focusedId() == 0,
           "The category rail wraps downwards");
-    check(settingsControls(0).list(1).indexOfId(kSettingsRefreshControlId) ==
+    check(settingsControls(0, true).list(1).indexOfId(kSettingsRefreshControlId) ==
               -1,
           "Only the core page carries the refresh button");
-    check(settingsControls(0).list(1).focusedId() == 0,
+    check(settingsControls(0, true).list(1).focusedId() == 0,
           "Other pages start on their first row");
-    FocusGrid core = settingsControls(5);
+    FocusGrid core = settingsControls(5, true);
     (void)core.focusList(1);
     core.list(1).focusIndex(core.list(1).count() - 1);
     check(core.focusedId() == 4, "The last core row is the last entry");
@@ -385,7 +409,7 @@ int main(int argc, char **argv) {
   {
     // The controller page draws its bindings in two lanes, so the right key has
     // to reach the other half of a binding instead of doing nothing.
-    FocusGrid grid = settingsControls(3);
+    FocusGrid grid = settingsControls(3, true);
     check(grid.listCount() == 3,
           "The controller page is a rail and two lanes of rows");
     check(grid.focusList(1) && grid.focusedId() == 0,
@@ -408,7 +432,7 @@ int main(int argc, char **argv) {
     grid.list(1).focusIndex(grid.list(1).indexOfId(18));
     check(!grid.moveHorizontal(1),
           "The dead zone row has no second half either");
-    check(!settingsControls(3).list(2).focusRow(0),
+    check(!settingsControls(3, true).list(2).focusRow(0),
           "The right lane only holds binding lines");
     // The lanes end on a line that spans the whole page, so the down key has to
     // leave the lane instead of stopping on the last binding.
@@ -475,7 +499,8 @@ int main(int argc, char **argv) {
   managementEntry.filePath = "f1.nes";
   managementEntry.platform = launcher::game::GamePlatform::Nes;
   const launcher::config::InputPrompts managementPrompts{
-      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", "."};
+      "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+      launcher::config::PromptSource::keyboard()};
   drawGameManagementOverlay(
       managementRenderer, managementEntry, 0, ManagementDialog::Menu, 0, false,
       launcher::i18n::Language::English, managementPrompts, teal);

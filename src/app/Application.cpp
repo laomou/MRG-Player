@@ -655,6 +655,11 @@ int Application::run(int argc, char **argv) {
   auto currentPrompts = [&] {
     return config::inputPrompts(currentPromptDevice(), resolvedControllerStyle());
   };
+  // The settings page drops the shortcuts a key owns once the prompts come
+  // from a pad: rewind and the binding reset answer to keys a pad never sends.
+  auto keyboardPrompts = [&] {
+    return currentPrompts().source.fromKeyboard();
+  };
   // Cycling assigns the pad for the port currently being edited, skipping the
   // pad that already belongs to the other player.
   auto cycleController = [&](int direction) {
@@ -695,7 +700,8 @@ int Application::run(int argc, char **argv) {
     if (settingCategory == 3 && settingRow == 2)
       cycleController(direction);
     else
-      ui::changeSetting(settings, settingCategory, settingRow, direction);
+      ui::changeSetting(settings, settingCategory, settingRow, direction,
+                        keyboardPrompts());
     if (settingCategory == 1) {
       SDL_SetWindowFullscreen(
           window, settings.fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -1022,7 +1028,8 @@ int Application::run(int argc, char **argv) {
   // keyboard and the pad both drive this one implementation, so the button
   // needs no special case and the two devices cannot drift apart.
   auto currentSettingsControls = [&] {
-    ui::FocusGrid grid = ui::settingsControls(settingCategory);
+    ui::FocusGrid grid =
+        ui::settingsControls(settingCategory, keyboardPrompts());
     grid.list(0).focusIndex(settingCategory);
     // Ids, not indices: the core page's refresh button occupies the first slot,
     // so the platform rows sit one place further down, and the controller page
@@ -2305,7 +2312,7 @@ int Application::run(int argc, char **argv) {
           refreshCoreRows();
         } else {
           const int clickedRow =
-              ui::settingsRowAt(settingCategory, x, y);
+              ui::settingsRowAt(settingCategory, x, y, keyboardPrompts());
           if (clickedRow >= 0) {
             settingRow = clickedRow;
             coreRefreshFocused = false;
