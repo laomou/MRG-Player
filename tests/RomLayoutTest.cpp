@@ -36,6 +36,12 @@ bool names(const std::vector<std::string> &paths, const std::string &name) {
                      [&name](const std::string &path) { return launcher::paths::fromUtf8(path).filename() == name; });
 }
 
+// The scanner hands back the platform's own separators, which are backslashes
+// on Windows, so compare the two ends as paths rather than as text.
+bool samePath(const std::string &actual, const fs::path &expected) {
+  return launcher::paths::fromUtf8(actual).lexically_normal() == expected.lexically_normal();
+}
+
 } // namespace
 
 int main() {
@@ -108,27 +114,28 @@ int main() {
   ok &= check(writeFile(roms / "Loose.sfc"), "write Roms/Loose.sfc");
   ok &= check(writeFile(roms / "notes.md"), "write Roms/notes.md");
   ok &= check(writeFile(roms / "README.md"), "write Roms/README.md");
-  const std::string filedNes = fileLooseRom(card + "/Loose.nes");
-  ok &= check(filedNes == card + "/FC/Loose.nes", "Roms/Loose.nes moves into Roms/FC");
+  ok &= check(writeFile(roms / "MyStuff" / "Nested2.nes"), "write Roms/MyStuff/Nested2.nes");
+  ok &= check(samePath(fileLooseRom(card + "/Loose.nes"), roms / "FC" / "Loose.nes"),
+              "Roms/Loose.nes moves into Roms/FC");
   ok &= check(fs::exists(roms / "FC" / "Loose.nes"), "the filed game is in Roms/FC");
   ok &= check(!fs::exists(roms / "Loose.nes"), "the loose copy is gone");
-  ok &= check(fileLooseRom(card + "/Loose.sfc") == card + "/SFC/Loose.sfc",
+  ok &= check(samePath(fileLooseRom(card + "/Loose.sfc"), roms / "SFC" / "Loose.sfc"),
               "Roms/Loose.sfc moves into Roms/SFC");
   // `.md` is both a Mega Drive ROM and a Markdown document, so a file with any
   // other name follows its extension, exactly as the import would have read it.
-  ok &= check(fileLooseRom(card + "/notes.md") == card + "/MD/notes.md",
+  ok &= check(samePath(fileLooseRom(card + "/notes.md"), roms / "MD" / "notes.md"),
               "an ambiguous .md follows the extension the import uses");
-  ok &= check(fileLooseRom(card + "/README.md") == card + "/README.md",
+  ok &= check(samePath(fileLooseRom(card + "/README.md"), roms / "README.md"),
               "a readme at the top of Roms/ is documentation and stays put");
-  ok &= check(fileLooseRom(card + "/FC/Contra.nes") == card + "/FC/Contra.nes",
+  ok &= check(samePath(fileLooseRom(card + "/FC/Contra.nes"), roms / "FC" / "Contra.nes"),
               "a game already in a system folder stays put");
-  ok &= check(fileLooseRom(card + "/MyStuff/Nested2.nes") == card + "/MyStuff/Nested2.nes",
+  ok &= check(samePath(fileLooseRom(card + "/MyStuff/Nested2.nes"), roms / "MyStuff" / "Nested2.nes"),
               "only the top of Roms/ is tidied, not a folder of the player's own");
   // A name that already exists in the target is never overwritten: the loose
   // copy is left for a human instead of one ROM quietly replacing another.
   ok &= check(writeFile(roms / "Sonic.gen"), "write Roms/Sonic.gen");
   ok &= check(writeFile(roms / "MD" / "Sonic.gen", 128), "write Roms/MD/Sonic.gen");
-  ok &= check(fileLooseRom(card + "/Sonic.gen") == card + "/Sonic.gen",
+  ok &= check(samePath(fileLooseRom(card + "/Sonic.gen"), roms / "Sonic.gen"),
               "an occupied target leaves the loose game where it is");
 
   std::error_code code;
