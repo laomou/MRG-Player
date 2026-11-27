@@ -172,11 +172,12 @@ inline constexpr float kActionGap = 22.0f;
 // for a legend.
 std::vector<Rect> actionLayout(float rightX, float y,
                                const std::vector<Hint> &actions);
-void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action,
-                bool focused, float focusOpacity, SDL_Color accent);
+// One entry of the strip: a filled key badge and the word it acts on. The word
+// carries no plate and no outline, because the strip is read at a glance and a
+// frame around every word would draw a second row of boxes under the content.
+void drawAction(SDL_Renderer *renderer, float x, float y, const Hint &action);
 void drawActionRow(SDL_Renderer *renderer, float rightX, float y,
-                   const std::vector<Hint> &actions, int focused,
-                   float focusOpacity, SDL_Color accent);
+                   const std::vector<Hint> &actions);
 
 // The focus ring never takes the accent of the game or the section on
 // screen: it answers "where do the keys go", which is a property of the

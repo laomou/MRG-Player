@@ -83,7 +83,7 @@ constexpr Entry kText[]{
      "多平台 SDL2 游戏播放器 + LIBRETRO 核心"},
     {"CATEGORY", "分类"},
     {"CHANGE", "更改"},
-    {"CONFIRM", "确认"},
+    {"CONFIRM", "确定"},
     {"MANAGED LIBRARY ROM", "已保存到游戏库"},
     {"ROM IMPORTED", "ROM 已导入"},
     {"ROM ALREADY IN LIBRARY", "ROM 已在游戏库中"},

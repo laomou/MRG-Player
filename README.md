@@ -240,9 +240,9 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 
 ### Key hints
 
-The strip along the bottom of a screen is a row of buttons, not a legend. Down from the last row of content steps into it, left and right choose between its two entries, and enter runs the highlighted one — the same walk as every other control, with the mouse able to click it too. Each entry is one key plus one short word; the key is drawn once and never changes colour, and the focus ring goes round the word, because that is the button. The word drops the noun the screen already shows, so the shelf reads `X OPTIONS` (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
+The strip along the bottom of a screen is a button row that never takes focus. The direction keys stay on the content — cards, rows, the category rail — and the strip is always drawn idle, with no focus ring anywhere on it. The pointer can still click either entry and runs it on the spot, which is the only way to press one. Each entry is one key plus one short word; the key is drawn as a filled badge, the word is plain text with no plate or outline around it, so the bottom of the screen never grows a second row of boxes. The word drops the noun the screen already shows, so the shelf reads `X OPTIONS` next to `ENTER CONFIRM` (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
 
-Two entries is the rule: the left one backs out, the right one acts on what is focused. A shelf with nothing selected has no action row at all, since there is nothing to act on.
+Two entries is the rule: the left one opens the drawer or backs out, the right one acts on what is focused. A shelf with nothing selected has no strip at all, since there is nothing to act on.
 
 Dialogs are the one place with no key hints: they are just two buttons, cancel on the left and the confirming verb on the right, both focusable and clickable. Caption text never takes focus anywhere — it is the label of the control above it.
 

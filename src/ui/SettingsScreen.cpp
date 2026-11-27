@@ -459,8 +459,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused, bool footerFocused,
-                  int footerAction) {
+                  float focusOpacity, bool refreshFocused) {
   // The background no longer borrows a game's palette: one accent for every
   // screen, so the picture never changes colour when the library does.
   Game game{};
@@ -468,12 +467,12 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   game.bottom = {9, 17, 36, 255};
   game.accent = accentColor(settings.accent);
   // Only one control carries the ring: the rail while the page is being
-  // chosen, a row once the keys have moved into the page, the footer's button
-  // once they have left it. The core page's refresh button is a control of its
-  // own, so while it owns the keys no row draws a ring.
-  const bool contentFocused = !railFocused && !refreshFocused && !footerFocused;
-  const bool refreshRing = !railFocused && refreshFocused && !footerFocused;
-  const bool railRing = railFocused && !footerFocused;
+  // chosen, a row once the keys have moved into the page. The core page's
+  // refresh button is a control of its own, so while it owns the keys no row
+  // draws a ring. The legend under the page never carries one.
+  const bool contentFocused = !railFocused && !refreshFocused;
+  const bool refreshRing = !railFocused && refreshFocused;
+  const bool railRing = railFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game);
   fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 8, 20, 128});
@@ -739,15 +738,15 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    game.accent, focusOpacity);
   }
 
-  // One row of buttons, anchored bottom right: back on the left like the cancel
-  // button of every dialog, and whatever this page does with the focused row on
-  // the right. The core page spends its action key on the selected platform
+  // The legend under the page, anchored bottom right: back on the left like the
+  // cancel button of every dialog, and whatever this page does with the focused
+  // row on the right. It names the keys without taking focus, so it is always
+  // drawn idle. The core page spends its action key on the selected platform
   // instead of editing a value, so the labels are built per page.
   drawActionRow(renderer, static_cast<float>(kFooterX),
                 static_cast<float>(kFooterY),
                 settingsFooterHints(category, row, cores, refreshFocused,
-                                    language, prompts),
-                footerFocused ? footerAction : -1, focusOpacity, game.accent);
+                                    language, prompts));
 }
 
 std::vector<Hint> settingsFooterHints(int category, int row,
@@ -772,6 +771,7 @@ std::vector<Hint> settingsFooterHints(int category, int row,
   }
   return footer;
 }
+
 
 int settingsFooterAt(float x, float y, const std::vector<Hint> &hints) {
   const auto layout = actionLayout(static_cast<float>(kFooterX),

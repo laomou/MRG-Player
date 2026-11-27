@@ -11,24 +11,24 @@
 
 namespace launcher::ui {
 
-// Which part of the home screen the direction keys drive. The pills and the
-// shelf are content; the action row is the two things the screen can do with
-// the selected game, and it is walked to like the other two.
-enum class HomeFocus { Cards, Pills, Actions };
+// Which part of the home screen the direction keys drive: the pills or the
+// shelf. The strip along the bottom only names the keys, so the keys never
+// stop on it.
+enum class HomeFocus { Cards, Pills };
 
 void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset,
+              int focusedPill, float rowOffset,
               float focusOpacity, SDL_Color accent,
               CoverSource *covers = nullptr, bool showFooter = true,
               bool showPills = true);
 void moveSelection(int &selectedGame, int direction, int count);
 
-// The action row has two entries -- start the game, manage it -- and no entry
-// at all while the shelf has no selection, so the direction keys never walk
-// into a row of buttons that cannot act.
-inline constexpr int kHomeActionCount = 2;
+// The strip names the two things the pointer can do with the selected card --
+// start it on the right, open its drawer on the left. The entries are buttons
+// for the mouse, but they never take focus: the keys stay on the cards, so the
+// strip is always drawn idle.
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
                                i18n::Language language,
                                const config::InputPrompts &prompts);

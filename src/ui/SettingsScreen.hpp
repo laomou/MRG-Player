@@ -62,15 +62,16 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts);
 // button rather than a row, so it answers a hit test of its own.
 bool coreRefreshAt(float x, float y);
 
-// The footer is the same pair of buttons as the shelf's: back on the left, and
-// whatever this page does with the focused row on the right. The labels differ
-// per page, so the row is built once and used by both the renderer and the hit
-// test.
+// The legend under the page: back on the left, and whatever this page does
+// with the focused row on the right. The labels differ per page, so the row is
+// built here instead of at every call site. It is a legend, not a control: the
+// pointer and the direction keys only ever touch the rail and the rows.
 [[nodiscard]] std::vector<Hint> settingsFooterHints(
     int category, int row, const std::vector<CoreRow> &cores,
     bool refreshFocused, i18n::Language language,
     const config::InputPrompts &prompts);
-// Which entry of that row a point lands on, or -1. 0 is back, 1 the action.
+// Which entry of that strip a point lands on, or -1. 0 is back, 1 the action.
+// The strip answers the pointer without ever holding the keys.
 [[nodiscard]] int settingsFooterAt(float x, float y,
                                    const std::vector<Hint> &hints);
 void changeSetting(AppSettings &settings, int category, int row, int direction,
@@ -80,7 +81,6 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused = false,
-                  bool footerFocused = false, int footerAction = 1);
+                  float focusOpacity, bool refreshFocused = false);
 
 } // namespace launcher::ui

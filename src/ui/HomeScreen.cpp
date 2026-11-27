@@ -275,19 +275,21 @@ ConfirmLayout quitLayout() {
                        158, 80, 96, 16);
 }
 
-// The two things this screen can do with the selected game, written as the
-// buttons they are: start it, or open its drawer. One word each, because the
-// shelf above already says which game it is.
+// The keys the shelf answers to, written as a legend rather than a row of
+// buttons: the cards stay the only thing the direction keys act on, so the
+// strip never takes focus and the pointer never has to aim at a word. One word
+// per key, because the shelf above already says which game it is.
 std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
   if (hasGame) {
-    // The confirm sits on the right, where every other screen puts it; the
-    // drawer is the secondary action and takes the left slot.
+    // Confirming is the primary action, so it sits on the right where every
+    // other screen puts it; the drawer is secondary and takes the left slot.
     hints.push_back(
         {i18n::tr(i18n::TextId::HintOptions, language), "X", false});
     hints.push_back(
-        {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
+        {i18n::tr(i18n::TextId::ConfirmControl, language), prompts.confirm,
+         true});
   }
   return hints;
 }
@@ -297,7 +299,7 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
 void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset,
+              int focusedPill, float rowOffset,
               float focusOpacity, SDL_Color accent, CoverSource *covers,
               bool showFooter, bool showPills) {
   using i18n::TextId;
@@ -431,17 +433,15 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
                  {232, 236, 244, 255});
   }
 
-  // The shelf is the only screen with a footer of its own; the management
-  // drawer covers it, so the caller can turn it off and let the drawer draw
-  // its own legend in the space it actually owns.
+  // The shelf is the only screen with a legend of its own; the management
+  // drawer covers it, so the caller can turn it off. Nothing here takes focus,
+  // so the row is always drawn idle.
   if (showFooter) {
     fill(renderer, layout.rowLeft, layout.dividerY,
          layout.rowRight - layout.rowLeft, 1, {255, 255, 255, 24});
-    const std::vector<Hint> actions =
+    const std::vector<Hint> hints =
         footerHints(selectedEntry != nullptr, language, prompts);
-    drawActionRow(renderer, layout.footerRight, layout.footerY, actions,
-                  focus == HomeFocus::Actions ? focusedAction : -1,
-                  focusOpacity, style.accent);
+    drawActionRow(renderer, layout.footerRight, layout.footerY, hints);
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
@@ -453,21 +453,6 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
   }
 }
 
-int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
-                 const config::InputPrompts &prompts) {
-  const HomeLayout home = homeLayout();
-  const auto layout = actionLayout(home.footerRight, home.footerY,
-                                   footerHints(hasGame, language, prompts));
-  for (std::size_t index = 0; index < layout.size(); ++index) {
-    // Retain a little pointer padding around the small frames.
-    if (layout[index].expanded(4, 6).contains(x, y)) {
-      // Drawing order puts manage first; the action ids keep start at zero so
-      // the keyboard, the pad and the mouse all speak the same numbers.
-      return static_cast<int>(layout.size() - 1 - index);
-    }
-  }
-  return -1;
-}
 
 int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
   const HomeLayout layout = homeLayout();
@@ -480,6 +465,22 @@ int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
   const SDL_FRect settingsPill = pillRect(layout, true, language, count);
   if (x >= settingsPill.x && x <= settingsPill.x + settingsPill.w)
     return 1;
+  return -1;
+}
+
+int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
+                 const config::InputPrompts &prompts) {
+  const HomeLayout home = homeLayout();
+  const auto layout = actionLayout(home.footerRight, home.footerY,
+                                   footerHints(hasGame, language, prompts));
+  for (std::size_t index = 0; index < layout.size(); ++index) {
+    // Retain a little pointer padding around the small frames.
+    if (layout[index].expanded(4, 6).contains(x, y)) {
+      // Drawing order puts the drawer first; the ids keep start at zero so the
+      // mouse and the pad speak the same numbers.
+      return static_cast<int>(layout.size() - 1 - index);
+    }
+  }
   return -1;
 }
 
