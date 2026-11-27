@@ -101,6 +101,36 @@ int main() {
   ok &= check(!names(found, "LICENSE"), "the scan skips Roms/GB/LICENSE");
   ok &= check(names(found, "Unknown.nes"), "the scan finds a game outside a system folder");
 
+  // A game dropped straight into Roms/ is filed under the folder a card would
+  // use for it, so the tree a scan leaves behind reads like a card's.
+  using launcher::library::fileLooseRom;
+  ok &= check(writeFile(roms / "Loose.nes"), "write Roms/Loose.nes");
+  ok &= check(writeFile(roms / "Loose.sfc"), "write Roms/Loose.sfc");
+  ok &= check(writeFile(roms / "notes.md"), "write Roms/notes.md");
+  ok &= check(writeFile(roms / "README.md"), "write Roms/README.md");
+  const std::string filedNes = fileLooseRom(card + "/Loose.nes");
+  ok &= check(filedNes == card + "/FC/Loose.nes", "Roms/Loose.nes moves into Roms/FC");
+  ok &= check(fs::exists(roms / "FC" / "Loose.nes"), "the filed game is in Roms/FC");
+  ok &= check(!fs::exists(roms / "Loose.nes"), "the loose copy is gone");
+  ok &= check(fileLooseRom(card + "/Loose.sfc") == card + "/SFC/Loose.sfc",
+              "Roms/Loose.sfc moves into Roms/SFC");
+  // `.md` is both a Mega Drive ROM and a Markdown document, so a file with any
+  // other name follows its extension, exactly as the import would have read it.
+  ok &= check(fileLooseRom(card + "/notes.md") == card + "/MD/notes.md",
+              "an ambiguous .md follows the extension the import uses");
+  ok &= check(fileLooseRom(card + "/README.md") == card + "/README.md",
+              "a readme at the top of Roms/ is documentation and stays put");
+  ok &= check(fileLooseRom(card + "/FC/Contra.nes") == card + "/FC/Contra.nes",
+              "a game already in a system folder stays put");
+  ok &= check(fileLooseRom(card + "/MyStuff/Nested2.nes") == card + "/MyStuff/Nested2.nes",
+              "only the top of Roms/ is tidied, not a folder of the player's own");
+  // A name that already exists in the target is never overwritten: the loose
+  // copy is left for a human instead of one ROM quietly replacing another.
+  ok &= check(writeFile(roms / "Sonic.gen"), "write Roms/Sonic.gen");
+  ok &= check(writeFile(roms / "MD" / "Sonic.gen", 128), "write Roms/MD/Sonic.gen");
+  ok &= check(fileLooseRom(card + "/Sonic.gen") == card + "/Sonic.gen",
+              "an occupied target leaves the loose game where it is");
+
   std::error_code code;
   fs::remove_all(root, code);
   if (!ok)

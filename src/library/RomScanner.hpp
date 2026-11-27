@@ -24,6 +24,13 @@ struct RomScanSummary {
 // cannot stall the launcher.
 [[nodiscard]] std::vector<std::string> findGames(const std::vector<std::string> &directories);
 
+// Files a game dropped at the top of a Roms/ tree into the folder the card uses
+// for its platform (Roms/FC, Roms/SFC, Roms/MD, Roms/GB, Roms/GBA) and returns
+// where it ended up. A file already in a system folder, a folder of the player's
+// own, an unknown format, or a name that already exists in the target is left
+// alone and returned unchanged.
+[[nodiscard]] std::string fileLooseRom(const std::string &path);
+
 // Imports every game found under the folders. Files the library already holds
 // are counted rather than copied twice, because the import deduplicates by
 // content hash.

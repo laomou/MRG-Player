@@ -1,6 +1,7 @@
 #include "library/RomScanner.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <filesystem>
 
@@ -18,11 +19,23 @@ namespace fs = std::filesystem;
 constexpr int kMaxDepth = 4;
 constexpr std::size_t kMaxFiles = 2000;
 
+std::string lowercase(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return value;
+}
+
 bool isGameFile(const fs::path &path) {
   // The system folder decides when there is one, so a .bin inside Roms/MD is a
   // game while a README.md next to it is not.
   return game::detectPlatform(paths::toUtf8(path)) !=
          game::GamePlatform::Unknown;
+}
+
+// The tidy-up below only touches the top of a ROM tree, never a folder a player
+// made inside it: Roms/Save States/ is left exactly where it is.
+bool isRomsRoot(const fs::path &directory) {
+  return lowercase(paths::toUtf8(directory.filename())) == "roms";
 }
 
 } // namespace
@@ -65,11 +78,37 @@ std::vector<std::string> findGames(const std::vector<std::string> &directories) 
   return games;
 }
 
+std::string fileLooseRom(const std::string &path) {
+  const fs::path source = paths::fromUtf8(path);
+  if (!isRomsRoot(source.parent_path()))
+    return path;
+  const std::string system(
+      game::platformDescriptor(game::detectPlatform(path)).cardDirectory);
+  if (system.empty())
+    return path;
+  const fs::path destination = source.parent_path() / system / source.filename();
+  std::error_code ec;
+  // A file that is already named in the target folder wins: filing must never
+  // cost a ROM, so the loose copy stays where it is for a human to look at.
+  if (fs::exists(destination, ec))
+    return path;
+  fs::create_directories(destination.parent_path(), ec);
+  if (ec)
+    return path;
+  fs::rename(source, destination, ec);
+  if (ec)
+    return path;
+  return paths::toUtf8(destination);
+}
+
 RomScanSummary importGames(const std::vector<std::string> &directories, GameLibrary &library) {
   RomScanSummary summary;
   for (const std::string &path : findGames(directories)) {
     ++summary.found;
-    switch (library.importGame(path)) {
+    // The tree a scan leaves behind is the tree a card has: a game dropped at
+    // the top of Roms/ moves into its system folder before it is imported, so
+    // the same folder reads the same way on a card and on a desktop.
+    switch (library.importGame(fileLooseRom(path))) {
     case ImportStatus::Imported:
       ++summary.imported;
       break;
