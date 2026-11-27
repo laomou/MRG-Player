@@ -85,7 +85,8 @@
    事件也被固件翻成面板按键，标签不会跳回键盘。掌机插了键盘想让标签写 `ENTER`，手动选 KEYBOARD & MOUSE 即可。
 
 游戏内的按键不归这条管：进游戏后按键直接交给核心的输入映射（见 README 的 Controls 一节），
-PROMPT DEVICE 只影响启动器自己的界面。
+PROMPT DEVICE 只影响启动器自己的界面。键盘与手柄各自的输入路径、以及这块反复坏掉的原因，
+见 [input.md](input.md)。
 
 ## 5. 代码位置
 
