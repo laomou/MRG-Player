@@ -255,6 +255,7 @@ SDL_Texture *CoverCache::loadCover(SDL_Renderer *renderer, const std::string &id
   }
   SDL_Texture *texture = createCoverTexture(renderer, image, true);
   covers_[id] = texture;
+  ++revision_;
   return texture;
 }
 

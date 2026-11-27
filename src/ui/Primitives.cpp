@@ -1226,15 +1226,15 @@ bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
 }
 } // namespace
 
-// The backdrop is a couple of thousand one-row fills, and none of it changes
-// between frames: only the sun drifts, and it is already rounded to a pixel.
-// Baking it and repainting when that pixel moves turns the frame into a single
-// blit.
-void drawBackground(SDL_Renderer *renderer, const Game &game, float time,
+// The backdrop is a couple of thousand one-row fills and it never moves, so it
+// is baked once and every frame after that is a single blit. Nothing here
+// follows the clock: a still picture costs nothing to hold on screen and lets
+// the loop stop drawing entirely while the shelf sits untouched.
+void drawBackground(SDL_Renderer *renderer, const Game &game,
                     SDL_Texture *wallpaper) {
   if (renderer == nullptr)
     return;
-  const int sunX = 1008 + static_cast<int>(std::sin(time * 0.08f) * 18.0f);
+  const int sunX = 1008;
   const int width = gOutputWidth;
   const int height = gOutputHeight;
   if (gBackdrop.renderer != renderer) {

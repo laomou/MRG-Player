@@ -294,8 +294,7 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
 
 } // namespace
 
-void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
-              Uint64 toastUntil, std::string_view toastMessage, int startupPage,
+void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
               int focusedPill, int focusedAction, float rowOffset,
@@ -322,7 +321,7 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
           ? covers->wallpaper(renderer, *selectedEntry)
           : nullptr;
   const HomeLayout layout = homeLayout();
-  drawBackground(renderer, style, time, wallpaper);
+  drawBackground(renderer, style, wallpaper);
   rounded(renderer, layout.brandX, layout.brandY, 4, 26, 2, style.accent);
   text(renderer, static_cast<int>(layout.brandX) + 16,
        static_cast<int>(layout.brandTitleY), "MRG PLAYER", 3,
