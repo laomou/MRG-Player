@@ -57,6 +57,18 @@ void gradientRounded(SDL_Renderer *renderer, float x, float y, float width,
 void fadeBottomRounded(SDL_Renderer *renderer, float x, float y, float width,
                        float height, float radius, SDL_Color color,
                        Uint8 strength, float exponent);
+// The shelf redraws the same cards every frame, so each of their layers is
+// baked once into a texture and copied afterwards. The rasterised result is
+// identical: the layers keep the per-pixel alpha the direct draw produced.
+void drawCardPanel(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color top, SDL_Color bottom,
+                   Uint8 alpha);
+void drawCardSlot(SDL_Renderer *renderer, float x, float y, float width,
+                  float height, float radius, SDL_Color outer,
+                  SDL_Color inner);
+void drawCardScrim(SDL_Renderer *renderer, float x, float y, float width,
+                   float height, float radius, SDL_Color color, Uint8 strength,
+                   float exponent);
 
 // Draws a texture into a canvas-space rectangle; the game picture, box art and
 // save thumbnails all go through here so they follow the same transform.
