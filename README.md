@@ -136,6 +136,12 @@ even when the extension says they could be: `.md` is both a Mega Drive ROM and a
 The card badges on the shelf wear the same short names, `FC`, `SFC`, `MD`, `GB` and `GBA`, so a
 game looks the same whether it came from `Roms/FC` or from a desktop tile that launched it.
 
+A game dropped straight into the top of `Roms/` is filed into its system folder the first time a
+scan sees it, so `Roms/F1赛车.nes` becomes `Roms/FC/F1赛车.nes` and the card reads the same on
+every machine. Only the top of the tree is tidied: a folder you made yourself (`Roms/My Stuff/`),
+a game already inside a system folder, documentation such as `Roms/README.md`, and a name that
+already exists in the target folder are all left exactly where they are.
+
 Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
 ### Box art
