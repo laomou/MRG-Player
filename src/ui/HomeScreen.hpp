@@ -11,22 +11,22 @@
 
 namespace launcher::ui {
 
-// Which part of the home screen the direction keys drive. The card row is the
-// default; down moves onto the footer, the way a console lets you walk off the
-// shelf and onto its buttons.
-enum class HomeFocus { Cards, Pills, Actions };
+// Which part of the home screen the direction keys drive. The footer is a
+// legend rather than a stop on the way: the keys it names act on their own, so
+// the ring only ever sits on the shelf or on the pills.
+enum class HomeFocus { Cards, Pills };
 
 void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity, SDL_Color accent,
+              int focusedPill, float rowOffset, float focusOpacity,
+              SDL_Color accent,
               CoverSource *covers = nullptr, bool showFooter = true);
 void moveSelection(int &selectedGame, int direction, int count);
 
-// Two actions when a game is selected, none when the library is empty.
-[[nodiscard]] int homeActionCount(bool hasGame);
+// The footer keeps two hit targets when a game is selected, none when the
+// library is empty, so a pointer can click the legend the keys describe.
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
                                i18n::Language language,
                                const config::InputPrompts &prompts);

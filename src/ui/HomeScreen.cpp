@@ -262,27 +262,30 @@ void drawCard(SDL_Renderer *renderer, const HomeLayout &layout, float column,
 
 // The quit confirmation is centred on the canvas so it covers the shelf no
 // matter which part of it has focus. It narrows with the canvas instead of
-// running off it, and the buttons follow from the same bounds.
+// running off it, and the buttons follow from the same bounds. The body gets a
+// real box of its own: the buttons start low enough that the sentence never
+// runs into them.
 ConfirmLayout quitLayout() {
   const float width =
       std::min(608.0f, static_cast<float>(kCanvasWidth) - 96.0f);
-  constexpr float height = 232.0f;
+  constexpr float height = 272.0f;
   return confirmLayout({(static_cast<float>(kCanvasWidth) - width) * 0.5f,
                         (static_cast<float>(kCanvasHeight) - height) * 0.5f,
                         width, height},
-                       122, 80, 96, 16);
+                       158, 80, 96, 16);
 }
 
-// Only the two actions live in the footer; leaving the launcher is done by
-// closing the window, the way a console has no "quit" entry on its home row.
+// The footer names the two keys that act on the selected game instead of being
+// a place the direction keys walk to: Enter starts it, X manages it. Writing
+// the same key twice said neither of them was really a shortcut.
 std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
   if (hasGame) {
     hints.push_back(
         {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
-    hints.push_back({i18n::tr(i18n::TextId::ManageGame, language),
-                     prompts.confirm, false});
+    hints.push_back(
+        {i18n::tr(i18n::TextId::ManageGame, language), "X", false});
   }
   return hints;
 }
@@ -293,9 +296,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
               Uint64 toastUntil, std::string_view toastMessage, int startupPage,
               i18n::Language language, const library::GameLibrary &gameLibrary,
               const config::InputPrompts &prompts, HomeFocus focus,
-              int focusedPill, int focusedAction, float rowOffset,
-              float focusOpacity, SDL_Color accent, CoverSource *covers,
-              bool showFooter) {
+              int focusedPill, float rowOffset, float focusOpacity,
+              SDL_Color accent, CoverSource *covers, bool showFooter) {
   using i18n::TextId;
   using i18n::tr;
   const int slotCount = static_cast<int>(gameLibrary.slotCount());
@@ -433,12 +435,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
          layout.rowRight - layout.rowLeft, 1, {255, 255, 255, 24});
     const std::vector<Hint> footer =
         footerHints(selectedEntry != nullptr, language, prompts);
-    const int focused =
-        focus == HomeFocus::Actions && !footer.empty()
-            ? std::clamp(focusedAction, 0, static_cast<int>(footer.size()) - 1)
-            : -1;
     drawHintRow(renderer, layout.footerRight, layout.footerY, footer,
-                style.accent, focused, focusOpacity);
+                style.accent);
   }
 
   if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
@@ -449,9 +447,6 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, float time,
                  std::string(toastMessage), 2, style.accent);
   }
 }
-
-// Nothing to act on when the library is empty, so the footer is empty too.
-int homeActionCount(bool hasGame) { return hasGame ? 2 : 0; }
 
 int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                  const config::InputPrompts &prompts) {
