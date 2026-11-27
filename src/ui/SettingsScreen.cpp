@@ -447,7 +447,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused) {
+                  float focusOpacity, bool refreshFocused, bool footerFocused,
+                  int footerAction) {
   // The background no longer borrows a game's palette: one accent for every
   // screen, so the picture never changes colour when the library does.
   Game game{};
@@ -455,11 +456,12 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
   game.bottom = {9, 17, 36, 255};
   game.accent = accentColor(settings.accent);
   // Only one control carries the ring: the rail while the page is being
-  // chosen, a row once the keys have moved into the page. The core page's
-  // refresh button is a control of its own, so while it owns the keys no row
-  // draws a ring.
-  const bool contentFocused = !railFocused && !refreshFocused;
-  const bool refreshRing = !railFocused && refreshFocused;
+  // chosen, a row once the keys have moved into the page, the footer's button
+  // once they have left it. The core page's refresh button is a control of its
+  // own, so while it owns the keys no row draws a ring.
+  const bool contentFocused = !railFocused && !refreshFocused && !footerFocused;
+  const bool refreshRing = !railFocused && refreshFocused && !footerFocused;
+  const bool railRing = railFocused && !footerFocused;
   const Language language = i18n::languageFromSetting(settings.language);
   drawBackground(renderer, game, time);
   fill(renderer, 0, 0, kCanvasWidth, kCanvasHeight, {2, 8, 20, 128});
@@ -489,7 +491,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     drawSelectionPlate(renderer, bounds, 14, {0, 0, 0, 0},
                        {game.accent.r, game.accent.g, game.accent.b,
                         accentWashAlpha(game.accent)},
-                       i == category, i == category && railFocused, focusOpacity);
+                       i == category, i == category && railRing, focusOpacity);
     const std::string label = tr(categoryText(i), language);
     text(renderer, 93, textCenteredY(label, y + 19, 2), label, 2,
          i == category ? SDL_Color{255, 255, 255, 255}
@@ -717,28 +719,48 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    game.accent, focusOpacity);
   }
 
-  // One legend, anchored bottom right: only the two keys that act here. The
-  // direction keys are never written down, the way a console never labels them.
-  // Back sits on the left like the cancel button of every dialog, so the
-  // action that acts stays on the right.
-  // The core page spends its action key on the selected platform instead of
-  // editing a value, so the legend is built per page.
-  std::vector<Hint> footer{{tr(TextId::Back, language), prompts.back, false}};
+  // One row of buttons, anchored bottom right: back on the left like the cancel
+  // button of every dialog, and whatever this page does with the focused row on
+  // the right. The core page spends its action key on the selected platform
+  // instead of editing a value, so the labels are built per page.
+  drawActionRow(renderer, static_cast<float>(kFooterX),
+                static_cast<float>(kFooterY),
+                settingsFooterHints(category, row, cores, refreshFocused,
+                                    language, prompts),
+                footerFocused ? footerAction : -1, focusOpacity, game.accent);
+}
+
+std::vector<Hint> settingsFooterHints(int category, int row,
+                                      const std::vector<CoreRow> &cores,
+                                      bool refreshFocused, Language language,
+                                      const config::InputPrompts &prompts) {
+  std::vector<Hint> footer{
+      {i18n::tr(i18n::TextId::Back, language), prompts.back, false}};
   if (category == 5) {
     const bool installedRow =
         row >= 0 && row < static_cast<int>(cores.size()) &&
         cores[static_cast<std::size_t>(row)].installed;
-    const TextId action =
+    const i18n::TextId action =
         refreshFocused
-            ? TextId::RefreshCores
-            : (installedRow ? TextId::CoreDetails : TextId::InstallCore);
-    footer.push_back({tr(action, language), prompts.confirm, true});
+            ? i18n::TextId::HintRefresh
+            : (installedRow ? i18n::TextId::HintDetails
+                            : i18n::TextId::HintInstall);
+    footer.push_back({i18n::tr(action, language), prompts.confirm, true});
   } else {
     footer.push_back(
-        {tr(TextId::ChangeControl, language), prompts.change, true});
+        {i18n::tr(i18n::TextId::ChangeControl, language), prompts.confirm, true});
   }
-  drawHintRow(renderer, static_cast<float>(kFooterX),
-              static_cast<float>(kFooterY), footer, game.accent);
+  return footer;
+}
+
+int settingsFooterAt(float x, float y, const std::vector<Hint> &hints) {
+  const auto layout = actionLayout(static_cast<float>(kFooterX),
+                                   static_cast<float>(kFooterY), hints);
+  for (std::size_t index = 0; index < layout.size(); ++index) {
+    if (layout[index].expanded(4, 6).contains(x, y))
+      return static_cast<int>(index);
+  }
+  return -1;
 }
 
 } // namespace launcher::ui

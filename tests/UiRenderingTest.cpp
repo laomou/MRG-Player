@@ -242,17 +242,56 @@ int main(int argc, char **argv) {
         "Neither the binding gutter nor fixed-row gaps activate a setting");
   check(settingsCategoryAt(160, 321) == -1,
         "Category spacing must not activate a neighbouring row");
+  // The action row that closes the settings page: the drawing pass and the hit
+  // test share one layout, so a click lands on the button that was painted.
+  {
+    const std::vector<Hint> footer{{"BACK", "ESC", false},
+                                   {"CHANGE", "ENTER", true}};
+    const auto row = actionLayout(static_cast<float>(kCanvasWidth - 58),
+                                 static_cast<float>(kCanvasHeight - 51), footer);
+    check(row.size() == 2 &&
+              row[1].right() == static_cast<float>(kCanvasWidth - 58) &&
+              row[0].right() < row[1].x &&
+              row[0].y == row[1].y && row[0].h == row[1].h,
+          "Action buttons are packed leftwards from the right anchor");
+    check(settingsFooterAt(row[0].centerX(), row[0].centerY(), footer) == 0 &&
+              settingsFooterAt(row[1].centerX(), row[1].centerY(), footer) == 1,
+          "A click on a footer button lands on that button");
+    check(settingsFooterAt(4, 4, footer) == -1 &&
+              settingsFooterAt(row[1].centerX(), row[1].bottom() + 20, footer) ==
+                  -1,
+          "The action row answers nothing outside its buttons");
+    check(settingsFooterAt(640, 360, {}) == -1,
+          "An empty action row answers no clicks");
+  }
+  // The footer names what enter does on the focused row, page by page.
+  {
+    const launcher::config::InputPrompts prompts{
+        "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
+        launcher::config::PromptSource::keyboard()};
+    const auto english = launcher::i18n::Language::English;
+    const auto general = settingsFooterHints(0, 0, {}, false, english, prompts);
+    check(general.size() == 2 && general[0].label == "BACK" &&
+              general[0].key == "ESC" && !general[0].accent &&
+              general[1].label == "CHANGE" && general[1].key == "ENTER" &&
+              general[1].accent,
+          "A settings page closes on back and acts with change");
+    const auto refresh =
+        settingsFooterHints(5, 0, {}, true, english, prompts);
+    check(refresh.size() == 2 && refresh[1].label == "REFRESH",
+          "The core page spends the action key on the refresh button");
+  }
   check(managementInfoBackAt(640, 520) &&
             !managementInfoBackAt(640, 495.9f) &&
             !managementInfoBackAt(640, 550) &&
             !managementInfoBackAt(100, 100),
         "Info returns only when its actual Back button is clicked");
-  check(quitConfirmChoiceAt(500, 410) == 0 &&
-            quitConfirmChoiceAt(780, 410) == 1 &&
-            quitConfirmChoiceAt(640, 410) == -1 &&
-            quitConfirmChoiceAt(500, 450) == -1,
+  check(quitConfirmChoiceAt(500, 426) == 0 &&
+            quitConfirmChoiceAt(780, 426) == 1 &&
+            quitConfirmChoiceAt(640, 426) == -1 &&
+            quitConfirmChoiceAt(500, 470) == -1,
         "Quit dialog paint and hit rectangles agree, including gaps");
-  check(powerCycleChoiceAt(500, 450) == -1 &&
+  check(powerCycleChoiceAt(500, 470) == -1 &&
             powerCycleChoiceAt(640, 360) == -1,
         "Power-cycle footer and button gap must not confirm");
   check(managementActionAt(1000, 260) == -1 &&
@@ -586,14 +625,14 @@ int main(int argc, char **argv) {
                    pixelEquals(450 + 370 * choice, 473, kFocusColor),
               "Both management choices use shared theme-aware buttons");
         clearPreview();
-        drawQuitConfirm(managementRenderer, choice, language, managementPrompts, accent);
-        check(pixelEquals(445 + 270 * choice, 410, accent) &&
-                   pixelEquals(500 + 280 * choice, 379, kFocusColor),
+        drawQuitConfirm(managementRenderer, choice, language, accent);
+        check(pixelEquals(445 + 270 * choice, 426, accent) &&
+                   pixelEquals(500 + 280 * choice, 395, kFocusColor),
               "Quit confirmation choices keep their accent and ring");
         clearPreview();
-        drawPowerCycleConfirm(managementRenderer, choice, language, managementPrompts, accent);
-        check(pixelEquals(430 + 245 * choice, 400, accent) &&
-                   pixelEquals(500 + 260 * choice, 373, kFocusColor),
+        drawPowerCycleConfirm(managementRenderer, choice, language, accent);
+        check(pixelEquals(430 + 245 * choice, 416, accent) &&
+                   pixelEquals(500 + 260 * choice, 389, kFocusColor),
               "Power-cycle choices use the same button and focus geometry");
       }
       clearPreview();

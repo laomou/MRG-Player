@@ -455,6 +455,8 @@ int Application::run(int argc, char **argv) {
   int selectedGame = settings.rememberSelection ? settings.selectedGame : 0;
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
+  // Which entry of the action row has the keys: start the game, or manage it.
+  int homeAction = 0;
   float homeRow = 0.0f;
   bool homeRowSettled = false;
   // Which half of the settings screen the direction keys drive: the category
@@ -473,15 +475,22 @@ int Application::run(int argc, char **argv) {
   // The core page's refresh button is reached by pressing up from the first
   // row; while it holds the keys the rows draw no focus ring.
   bool coreRefreshFocused = false;
+  // The settings footer is walked to like the rows: back on the left, and on the
+  // right the action this page offers for the focused row. Down from the last
+  // row steps into it.
+  bool settingsFooterFocus = false;
+  int settingsFooterAction = 1;
   bool rewindHeld = false;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
   const Uint64 smokeSettingsStart = SDL_GetTicks64();
   bool smokeSettingsGeneral = false;
+  bool smokeSettingsFooter = false;
   bool smokeSettingsDisplay = false;
   bool smokeSettingsAudio = false;
   bool smokeSettingsController = false;
   bool smokeHomePills = false;
   bool smokeHomeActions = false;
+  bool smokeHomeRow = false;
   bool smokeHomeQuit = false;
   bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
@@ -805,6 +814,8 @@ int Application::run(int argc, char **argv) {
     refreshCoreRows();
     coreRefreshFocused = false;
     settingsRailFocus = true;
+    settingsFooterFocus = false;
+    settingsFooterAction = 1;
     screen = Screen::Settings;
   };
   auto pauseSessionClock = [&] {
@@ -1073,38 +1084,10 @@ int Application::run(int argc, char **argv) {
     }
   };
   enum class SettingsNav { Up, Down, Left, Right, Confirm, Cancel };
-  auto settingsNavigate = [&](SettingsNav nav) {
-    ui::FocusGrid grid = currentSettingsControls();
-    if (nav == SettingsNav::Cancel) {
-      bindingCapture = false;
-      if (grid.listIndex() == 0) {
-        screen = Screen::Home;
-        return;
-      }
-      (void)grid.focusList(0);
-      adoptSettingsControls(grid);
-      return;
-    }
-    if (nav == SettingsNav::Left || nav == SettingsNav::Right) {
-      (void)grid.moveHorizontal(nav == SettingsNav::Left ? -1 : 1);
-      adoptSettingsControls(grid);
-      return;
-    }
-    if (nav == SettingsNav::Up || nav == SettingsNav::Down) {
-      const int direction = nav == SettingsNav::Up ? -1 : 1;
-      if (grid.listIndex() == 0)
-        (void)grid.list(0).move(direction);
-      else
-        (void)grid.moveVertical(direction);
-      adoptSettingsControls(grid);
-      return;
-    }
-    if (grid.listIndex() == 0) {
-      (void)grid.focusList(1);
-      adoptSettingsControls(grid);
-      return;
-    }
-    if (grid.list(1).focusedId() == ui::kSettingsRefreshControlId) {
+  // What enter does on the focused row -- or on the footer's action button,
+  // which names exactly this. One implementation, so the two cannot drift.
+  auto activateSettingsRow = [&] {
+    if (coreRefreshFocused) {
       refreshCoreRows();
       return;
     }
@@ -1118,6 +1101,75 @@ int Application::run(int argc, char **argv) {
       return;
     }
     applySetting(1);
+  };
+  auto settingsFooter = [&] {
+    return ui::settingsFooterHints(settingCategory, settingRow, coreRows,
+                                   coreRefreshFocused, currentLanguage(),
+                                   currentPrompts());
+  };
+  auto settingsNavigate = [&](SettingsNav nav) {
+    ui::FocusGrid grid = currentSettingsControls();
+    if (nav == SettingsNav::Cancel) {
+      bindingCapture = false;
+      if (settingsFooterFocus) {
+        // Back from the footer returns to the row it was opened from.
+        settingsFooterFocus = false;
+        return;
+      }
+      if (grid.listIndex() == 0) {
+        screen = Screen::Home;
+        return;
+      }
+      (void)grid.focusList(0);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (settingsFooterFocus) {
+      if (nav == SettingsNav::Left || nav == SettingsNav::Right) {
+        settingsFooterAction = 1 - settingsFooterAction;
+        return;
+      }
+      if (nav == SettingsNav::Down)
+        return;
+      if (nav == SettingsNav::Up) {
+        settingsFooterFocus = false;
+        return;
+      }
+      // Enter on the footer does what the button says.
+      if (settingsFooterAction == 0)
+        screen = Screen::Home;
+      else
+        activateSettingsRow();
+      return;
+    }
+    if (nav == SettingsNav::Left || nav == SettingsNav::Right) {
+      (void)grid.moveHorizontal(nav == SettingsNav::Left ? -1 : 1);
+      adoptSettingsControls(grid);
+      return;
+    }
+    if (nav == SettingsNav::Up || nav == SettingsNav::Down) {
+      const int direction = nav == SettingsNav::Up ? -1 : 1;
+      if (grid.listIndex() == 0) {
+        (void)grid.list(0).move(direction);
+        adoptSettingsControls(grid);
+        return;
+      }
+      if (grid.moveVertical(direction)) {
+        adoptSettingsControls(grid);
+        return;
+      }
+      // The page has run out of rows: down steps into the footer, the way the
+      // shelf hands the keys to its own action row.
+      if (nav == SettingsNav::Down)
+        settingsFooterFocus = true;
+      return;
+    }
+    if (grid.listIndex() == 0) {
+      (void)grid.focusList(1);
+      adoptSettingsControls(grid);
+      return;
+    }
+    activateSettingsRow();
   };
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
@@ -1382,6 +1434,15 @@ int Application::run(int argc, char **argv) {
     refreshSaveStatus();
     screen = Screen::Management;
     return true;
+  };
+  // The action row is a pair of buttons, so the pointer and the keys both go
+  // through one place: 0 starts the selected game, 1 opens its drawer.
+  auto activateHomeAction = [&](int action) {
+    homeAction = std::clamp(action, 0, ui::kHomeActionCount - 1);
+    if (homeAction == 0)
+      (void)startSelected();
+    else
+      (void)openManagement(ui::ManagementDialog::Menu);
   };
   auto executeManagementAction = [&] {
     switch (managementAction) {
@@ -2149,16 +2210,29 @@ int Application::run(int argc, char **argv) {
           break;
         const SDL_Keycode key = event.key.keysym.sym;
         if (screen == Screen::Home) {
-          if (homeFocus == ui::HomeFocus::Pills &&
-              (key == SDLK_LEFT || key == SDLK_RIGHT)) {
+          if ((key == SDLK_LEFT || key == SDLK_RIGHT) &&
+              homeFocus == ui::HomeFocus::Pills) {
             homePill = 1 - homePill;
+          } else if ((key == SDLK_LEFT || key == SDLK_RIGHT) &&
+                     homeFocus == ui::HomeFocus::Actions) {
+            // The row runs left to right, so the keys that walked down into it
+            // keep walking it the same way.
+            homeAction = 1 - homeAction;
           } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
                      homeFocus == ui::HomeFocus::Pills) {
             if (homePill == 0)
               chooseAndImportGame();
             else
               openSettings();
+          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
+                     homeFocus == ui::HomeFocus::Actions) {
+            activateHomeAction(homeAction);
           } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Pills) {
+            homeFocus = ui::HomeFocus::Cards;
+          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards &&
+                     selectedEntryAvailable()) {
+            homeFocus = ui::HomeFocus::Actions;
+          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Actions) {
             homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
             homeFocus = ui::HomeFocus::Pills;
@@ -2260,10 +2334,9 @@ int Application::run(int argc, char **argv) {
               chooseAndImportGame();
             } else if (clickedPill == 1) {
               openSettings();
-            } else if (clickedAction == 0) {
-              (void)startSelected();
-            } else if (clickedAction == 1) {
-              (void)openManagement(ui::ManagementDialog::Menu);
+            } else if (clickedAction >= 0) {
+              homeFocus = ui::HomeFocus::Actions;
+              activateHomeAction(clickedAction);
             } else if (clickedCard >= 0) {
               homeFocus = ui::HomeFocus::Cards;
               const bool alreadySelected = clickedCard == selectedGame;
@@ -2296,12 +2369,22 @@ int Application::run(int argc, char **argv) {
               confirmManagementAction();
             }
           }
+        } else if (ui::settingsFooterAt(x, y, settingsFooter()) >= 0) {
+          // Clicking a footer button parks the keys on it, so a following enter
+          // repeats the action instead of editing the highlighted row.
+          settingsFooterAction = ui::settingsFooterAt(x, y, settingsFooter());
+          settingsFooterFocus = true;
+          if (settingsFooterAction == 0)
+            screen = Screen::Home;
+          else
+            activateSettingsRow();
         } else if (ui::settingsCategoryAt(x, y) >= 0) {
           const int clickedCategory = ui::settingsCategoryAt(x, y);
           settingCategory = clickedCategory;
           settingRow = 0;
           coreRefreshFocused = false;
           settingsRailFocus = false;
+          settingsFooterFocus = false;
           if (clickedCategory == 5)
             refreshCoreRows();
         } else if (settingCategory == 5 && ui::coreRefreshAt(x, y)) {
@@ -2309,6 +2392,7 @@ int Application::run(int argc, char **argv) {
           // repeats the refresh instead of opening the platform below.
           coreRefreshFocused = true;
           settingsRailFocus = false;
+          settingsFooterFocus = false;
           refreshCoreRows();
         } else {
           const int clickedRow =
@@ -2317,6 +2401,7 @@ int Application::run(int argc, char **argv) {
             settingRow = clickedRow;
             coreRefreshFocused = false;
             settingsRailFocus = false;
+            settingsFooterFocus = false;
             if (settingCategory == 3 && settingRow >= 4 &&
                 settingRow < 4 + static_cast<int>(config::kInputActionCount)) {
               bindingCapture = true;
@@ -2359,6 +2444,8 @@ int Application::run(int argc, char **argv) {
               event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
           if ((left || right) && homeFocus == ui::HomeFocus::Pills) {
             homePill = 1 - homePill;
+          } else if ((left || right) && homeFocus == ui::HomeFocus::Actions) {
+            homeAction = 1 - homeAction;
           } else if (left) {
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
@@ -2368,15 +2455,22 @@ int Application::run(int argc, char **argv) {
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
             if (homeFocus == ui::HomeFocus::Cards)
               homeFocus = ui::HomeFocus::Pills;
+            else if (homeFocus == ui::HomeFocus::Actions)
+              homeFocus = ui::HomeFocus::Cards;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
             if (homeFocus == ui::HomeFocus::Pills)
               homeFocus = ui::HomeFocus::Cards;
+            else if (homeFocus == ui::HomeFocus::Cards &&
+                     selectedEntryAvailable())
+              homeFocus = ui::HomeFocus::Actions;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             if (homeFocus == ui::HomeFocus::Pills) {
               if (homePill == 0)
                 chooseAndImportGame();
               else
                 openSettings();
+            } else if (homeFocus == ui::HomeFocus::Actions) {
+              activateHomeAction(homeAction);
             } else {
               (void)startSelected();
             }
@@ -2503,12 +2597,13 @@ int Application::run(int argc, char **argv) {
     // the focus, and moving to a different one restarts the fade.
     char focusBuffer[80];
     std::snprintf(focusBuffer, sizeof(focusBuffer),
-                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
                   static_cast<int>(screen), static_cast<int>(homeFocus),
-                  homePill, selectedGame, settingCategory, settingRow,
-                  settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
+                  homePill, homeAction, selectedGame, settingCategory,
+                  settingRow, settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
                   pauseAction, pauseCoreOptionCursor,
-                  coreRefreshFocused ? 1 : 0);
+                  coreRefreshFocused ? 1 : 0, settingsFooterFocus ? 1 : 0,
+                  settingsFooterAction);
     if (focusKey != focusBuffer) {
       if (focusKey.empty()) {
         focusOpacity = 1.0f;
@@ -2609,23 +2704,25 @@ int Application::run(int argc, char **argv) {
         }
         if (pauseConfirmingPower)
           ui::drawPowerCycleConfirm(renderer, pausePowerChoice,
-                                    currentLanguage(), prompts, accent);
+                                    currentLanguage(), accent);
       }
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeRow, focusOpacity,
-                   ui::accentColor(settings.accent), &coverCache);
+                   prompts, homeFocus, homePill, homeAction, homeRow,
+                   focusOpacity, ui::accentColor(settings.accent),
+                   &coverCache);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
-                       settingsRailFocus, focusOpacity, coreRefreshFocused);
+                       settingsRailFocus, focusOpacity, coreRefreshFocused,
+                       settingsFooterFocus, settingsFooterAction);
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeRow, focusOpacity,
-                   ui::accentColor(settings.accent), &coverCache,
+                   prompts, homeFocus, homePill, homeAction, homeRow,
+                   focusOpacity, ui::accentColor(settings.accent), &coverCache,
                    /*showFooter=*/false);
       ui::drawGameManagementOverlay(
           renderer,
@@ -2636,7 +2733,7 @@ int Application::run(int argc, char **argv) {
     }
 
     if (quitConfirm) {
-      ui::drawQuitConfirm(renderer, quitChoice, currentLanguage(), prompts,
+      ui::drawQuitConfirm(renderer, quitChoice, currentLanguage(),
                           ui::accentColor(settings.accent));
     }
 
@@ -2670,10 +2767,15 @@ int Application::run(int argc, char **argv) {
         homeFocus = ui::HomeFocus::Pills;
         homePill = 1;
       } else if (!smokeHomeActions) {
-        // The footer is a legend rather than a row of buttons now, so the
-        // second shot shows the only overlay the shelf can raise.
+        // The third shot is the footer as a row of buttons: the badge keeps its
+        // fill while the frame under the keys takes the accent.
         captureFrame(renderer, "home-pills-screenshot.bmp");
         smokeHomeActions = true;
+        homeFocus = ui::HomeFocus::Actions;
+        homeAction = 1;
+      } else if (!smokeHomeRow) {
+        captureFrame(renderer, "home-actions-screenshot.bmp");
+        smokeHomeRow = true;
         quitConfirm = true;
         quitChoice = 0;
       } else if (!smokeHomeQuit) {
@@ -2693,9 +2795,14 @@ int Application::run(int argc, char **argv) {
       if (!smokeSettingsGeneral && elapsed >= 600) {
         captureFrame(renderer, "settings-screenshot.bmp");
         smokeSettingsGeneral = true;
-        settingCategory = 1;
-        settingRow = 1;
-      } else if (smokeSettingsGeneral && !smokeSettingsDisplay &&
+        settingsFooterFocus = true;
+        settingsFooterAction = 1;
+      } else if (smokeSettingsGeneral && !smokeSettingsFooter &&
+                 elapsed >= 900) {
+        captureFrame(renderer, "settings-footer-screenshot.bmp");
+        smokeSettingsFooter = true;
+        settingsFooterFocus = false;
+      } else if (smokeSettingsFooter && !smokeSettingsDisplay &&
                  elapsed >= 1200) {
         captureFrame(renderer, "settings-display-screenshot.bmp");
         smokeSettingsDisplay = true;
