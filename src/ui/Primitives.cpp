@@ -394,6 +394,21 @@ TTF_Font *fontForScale(int scale, bool latin = false) {
 // code point in the run. The CJK face carries the ideographs but none of the
 // arrows or the middle dot, which the Latin face has; asking the face instead
 // of guessing from the byte range keeps those from turning into tofu boxes.
+// SDL_ttf 2.0.18 replaced the 16-bit glyph query with a 32-bit one, and the
+// Brick sysroot still ships 2.0.13, where a code point past the BMP cannot be
+// asked about at all.
+#if SDL_TTF_MAJOR_VERSION > 2 || SDL_TTF_MINOR_VERSION > 0 || \
+    SDL_TTF_PATCHLEVEL >= 18
+bool faceHasCodePoint(TTF_Font *font, Uint32 code) {
+  return TTF_GlyphIsProvided32(font, code) != 0;
+}
+#else
+bool faceHasCodePoint(TTF_Font *font, Uint32 code) {
+  return code <= 0xFFFFU &&
+         TTF_GlyphIsProvided(font, static_cast<Uint16>(code)) != 0;
+}
+#endif
+
 bool faceCovers(TTF_Font *font, const std::string &value) {
   if (font == nullptr)
     return false;
@@ -413,7 +428,7 @@ bool faceCovers(TTF_Font *font, const std::string &value) {
     }
     for (std::size_t extra = 1; extra < length && i + extra < value.size(); ++extra)
       code = (code << 6) | (static_cast<unsigned char>(value[i + extra]) & 0x3FU);
-    if (TTF_GlyphIsProvided32(font, code) == 0)
+    if (!faceHasCodePoint(font, code))
       return false;
     i += length;
   }
