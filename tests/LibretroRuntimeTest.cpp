@@ -273,6 +273,19 @@ int main(int, char **) {
   expect(runtime->load(game, renderer, 80), "load failed: " + error);
   expect(runtime->error().empty(), "load left an error message");
   expect(std::string(runtime->name()) == "Stub GBA 1.0", "the core name is reported");
+  // The frame goes to the driver as the core made it, so the format the core
+  // announces decides the texture format.
+  using launcher::runtime::libretro::LibretroRuntime;
+  expect(LibretroRuntime::sdlPixelFormatFor(RETRO_PIXEL_FORMAT_XRGB8888) ==
+             SDL_PIXELFORMAT_XRGB8888,
+         "XRGB8888 frames are not uploaded as XRGB8888");
+  expect(LibretroRuntime::sdlPixelFormatFor(RETRO_PIXEL_FORMAT_RGB565) ==
+             SDL_PIXELFORMAT_RGB565,
+         "RGB565 frames are not uploaded as RGB565");
+  expect(
+      LibretroRuntime::sdlPixelFormatFor(RETRO_PIXEL_FORMAT_0RGB1555) ==
+          SDL_PIXELFORMAT_RGB555,
+      "0RGB1555 frames are not uploaded as RGB555");
   expect(runtime->platform() == launcher::game::GamePlatform::Gba, "the platform is reported");
 
   for (int frame = 0; frame < 3; ++frame)
@@ -803,6 +816,31 @@ int main(int, char **) {
       if (outcome.ok)
         expect(fs::is_regular_file(fs::path(outcome.message)), "the installed core is not on disk");
     }
+  }
+
+  // Packed frames: a core that hands over sixteen bit pixels must reach the
+  // screen as well, without the runtime converting them first.
+  for (const char *stubFormat : {"rgb565", "rgb1555"}) {
+    setTestEnvironment("MRG_STUB_PIXEL_FORMAT", stubFormat);
+    std::unique_ptr<launcher::runtime::IGameRuntime> packed =
+        registry.create(launcher::game::GamePlatform::Gba);
+    expect(packed != nullptr, "a runtime for a packed frame can be created");
+    if (packed != nullptr) {
+      expect(packed->load(game, renderer, 80),
+             std::string("the packed load failed: ") + stubFormat + " " +
+                 std::string(packed->error()));
+      packed->stepFrame();
+      packed->render(renderer);
+      std::uint32_t pixel = 0;
+      const SDL_Rect centre{160, 120, 1, 1};
+      expect(SDL_RenderReadPixels(renderer, &centre, SDL_PIXELFORMAT_ARGB8888,
+                                  &pixel, sizeof(pixel)) == 0,
+             "cannot read a packed frame");
+      expect((pixel & 0x00FFFFFFU) != 0,
+             std::string("a packed frame did not reach the screen: ") + stubFormat);
+      packed->stop();
+    }
+    clearTestEnvironment("MRG_STUB_PIXEL_FORMAT");
   }
 
   if (renderer != nullptr)
