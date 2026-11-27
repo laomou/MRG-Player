@@ -86,7 +86,7 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
   const int headerY = static_cast<int>(panel.header.y);
   drawPanel(renderer, panel.bounds, 28, {12, 21, 37, 232},
             panel.bounds.expanded(8, 0).translated(0, 8), {0, 0, 0, 42});
-  text(renderer, titleX, headerY, tr(TextId::ManageGame, language), 3,
+  text(renderer, titleX, headerY, tr(TextId::GameOptions, language), 3,
        {246, 248, 252, 255});
   text(renderer, titleX, headerY + 39,
        fitText(entry.title, static_cast<int>(panel.header.w), 2), 2,

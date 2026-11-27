@@ -237,7 +237,7 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 
 ### Key hints
 
-The strip along the bottom of a screen is a row of buttons, not a legend. Down from the last row of content steps into it, left and right choose between its two entries, and enter runs the highlighted one — the same walk as every other control, with the mouse able to click it too. Each entry is one key plus one short word; the key is drawn once and never changes colour, and the focus ring goes round the word, because that is the button. The word drops the noun the screen already shows, so the shelf reads `X MANAGE` (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
+The strip along the bottom of a screen is a row of buttons, not a legend. Down from the last row of content steps into it, left and right choose between its two entries, and enter runs the highlighted one — the same walk as every other control, with the mouse able to click it too. Each entry is one key plus one short word; the key is drawn once and never changes colour, and the focus ring goes round the word, because that is the button. The word drops the noun the screen already shows, so the shelf reads `X OPTIONS` (the selected card is the game) and the core page reads `ENTER INSTALL` / `ENTER DETAILS` / `ENTER REFRESH` (the focused row is the core).
 
 Two entries is the rule: the left one backs out, the right one acts on what is focused. A shelf with nothing selected has no action row at all, since there is nothing to act on.
 

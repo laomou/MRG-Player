@@ -354,8 +354,11 @@ int main(int argc, char **argv) {
       "ENTER", "ESC", "TAB", "ENTER", "LEFT/RIGHT", ".",
       launcher::config::PromptSource::keyboard()};
   check(homeActionAt(1200, 663, true, launcher::i18n::Language::English,
+                     prompts) == 0,
+        "The rightmost footer entry starts the game");
+  check(homeActionAt(1000, 663, true, launcher::i18n::Language::English,
                      prompts) == 1,
-        "The last footer entry is the rightmost button");
+        "The drawer entry sits to its left");
   check(homeActionAt(500, 663, true, launcher::i18n::Language::English,
                      prompts) == -1,
         "Empty footer space activates nothing");

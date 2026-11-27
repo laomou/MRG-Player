@@ -91,7 +91,7 @@ constexpr Entry kText[]{
     {"FILE PICKER UNAVAILABLE - DRAG A GAME FILE",
      "文件选择器不可用，请拖入游戏文件"},
     {"OPTIONS", "选项"},
-    {"MANAGE GAME", "管理游戏"},
+    {"GAME OPTIONS", "游戏选项"},
     {"REMOVE FROM LIBRARY", "从游戏库移除"},
     {"DELETE THE MANAGED ROM; KEEP SAVE DATA", "删除托管 ROM，保留保存数据"},
     {"DELETE SAVE DATA", "删除保存数据"},
@@ -219,7 +219,7 @@ constexpr Entry kText[]{
     {"PAUSE MENU", "暂停菜单"},
     {"See the game for in-game actions.", "具体游戏动作以游戏内说明为准。"},
     {"UNBOUND", "未绑定"},
-    {"MANAGE", "管理"},
+    {"OPTIONS", "选项"},
     {"INSTALL", "安装"},
     {"REFRESH", "刷新"},
     {"DETAILS", "详情"}};

@@ -284,10 +284,12 @@ std::vector<Hint> footerHints(bool hasGame, i18n::Language language,
                               const config::InputPrompts &prompts) {
   std::vector<Hint> hints;
   if (hasGame) {
+    // The confirm sits on the right, where every other screen puts it; the
+    // drawer is the secondary action and takes the left slot.
+    hints.push_back(
+        {i18n::tr(i18n::TextId::HintOptions, language), "X", false});
     hints.push_back(
         {i18n::tr(i18n::TextId::Start, language), prompts.confirm, true});
-    hints.push_back(
-        {i18n::tr(i18n::TextId::HintManage, language), "X", false});
   }
   return hints;
 }
@@ -461,8 +463,11 @@ int homeActionAt(float x, float y, bool hasGame, i18n::Language language,
                                    footerHints(hasGame, language, prompts));
   for (std::size_t index = 0; index < layout.size(); ++index) {
     // Retain a little pointer padding around the small frames.
-    if (layout[index].expanded(4, 6).contains(x, y))
-      return static_cast<int>(index);
+    if (layout[index].expanded(4, 6).contains(x, y)) {
+      // Drawing order puts manage first; the action ids keep start at zero so
+      // the keyboard, the pad and the mouse all speak the same numbers.
+      return static_cast<int>(layout.size() - 1 - index);
+    }
   }
   return -1;
 }
