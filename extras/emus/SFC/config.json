@@ -1,0 +1,19 @@
+{
+  "label": "SFC",
+  "icon": "",
+  "icontop": "icon.png",
+  "themecolor": "FF0000",
+  "launch": "launch.sh",
+  "rompath": "../../Roms/SFC",
+  "imgpath": "../../Imgs/SFC",
+  "useswap": 0,
+  "shortname": 0,
+  "hidebios": 0,
+  "extlist": "smc|fig|sfc|gd3|gd7|dx2|bsx|swc|zip",
+  "launchlist": [
+    {
+      "name": "MRG Player",
+      "launch": "launch.sh"
+    }
+  ]
+}
