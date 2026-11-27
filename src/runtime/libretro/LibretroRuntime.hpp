@@ -150,6 +150,11 @@ private:
   std::vector<std::uint32_t> frame_;
   std::vector<std::uint8_t> stateBuffer_;
   std::vector<std::uint8_t> runaheadBuffer_;
+  // Reused audio scratch space: the core hands over a batch sixty times a
+  // second, and allocating fresh vectors for every one of them is pure
+  // allocator churn on the audio path.
+  std::vector<std::int16_t> audioScaled_;
+  std::vector<std::uint8_t> audioConverted_;
   std::deque<Snapshot> rewind_;
   std::size_t rewindBytes_ = 0;
   CoreOptionList options_;
