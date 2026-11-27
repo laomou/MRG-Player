@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
@@ -159,6 +160,23 @@ void retro_run(void) {
   if (!loaded)
     return;
   observeOptions();
+  // A core may retime itself mid-game. The test asks for that through the
+  // environment so the runtime's retiming path is covered without a core that
+  // happens to switch between PAL and NTSC.
+  if (frameCounter == 2) {
+    const char *retime = std::getenv("MRG_STUB_RETIME_FPS");
+    if (retime != nullptr && environment != nullptr) {
+      retro_system_av_info info = {};
+      info.geometry.base_width = kWidth;
+      info.geometry.base_height = kHeight;
+      info.geometry.max_width = kWidth;
+      info.geometry.max_height = kHeight;
+      info.geometry.aspect_ratio = static_cast<float>(kWidth) / static_cast<float>(kHeight);
+      info.timing.fps = std::atof(retime);
+      info.timing.sample_rate = 48000.0;
+      environment(RETRO_ENVIRONMENT_SET_SYSTEM_AV_INFO, &info);
+    }
+  }
   if (inputPoll != nullptr)
     inputPoll();
   lastInput = 0;

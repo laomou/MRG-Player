@@ -12,6 +12,7 @@
 
 #include "config/InputBindings.hpp"
 #include "game/GamePlatform.hpp"
+#include "runtime/FrameClock.hpp"
 #include "runtime/IGameRuntime.hpp"
 #include "runtime/VideoOptions.hpp"
 #include "runtime/libretro/LibretroCore.hpp"
@@ -57,6 +58,10 @@ public:
   StateStatus loadState(int slot, std::string &error) override;
   [[nodiscard]] bool statePresent(int slot) const noexcept override;
   [[nodiscard]] StateInfo stateInfo(int slot) const override;
+  // Counter ticks between two frames of the core's own clock, after any
+  // retiming the core asked for. Used by the tests to prove that a
+  // SET_SYSTEM_AV_INFO really moved the pacing.
+  [[nodiscard]] std::uint64_t framePeriod() const noexcept { return clock_.period(); }
 
   [[nodiscard]] const CoreOptionList &coreOptions() const noexcept override {
     return options_;
@@ -90,8 +95,12 @@ private:
   std::size_t onAudio(const std::int16_t *data, std::size_t frames);
   std::int16_t onInput(unsigned port, unsigned device, unsigned index, unsigned id);
 
+  // Applies a frame rate or sample rate the core announced while it was
+  // running. Called between frames, never from inside a core callback.
+  void settleCoreTiming(Uint64 now);
   void openAudio();
   void closeAudio();
+  void updateAudioGain() noexcept { audioGain_ = volume_ * 32768 / 100; }
   void queueAudio(const std::int16_t *data, std::size_t frames);
   void discardAudio();
   void runFrame();
@@ -178,6 +187,10 @@ private:
   int sampleRate_ = 44100;
   int deviceRate_ = 44100;
   int volume_ = 100;
+  // Q15 gain for the volume pass: one multiply and a shift per sample
+  // instead of a division, which at 44.1 kHz stereo is 88200 divides a
+  // second on the audio path.
+  int audioGain_ = 32768;
   bool muted_ = false;
   bool fastForward_ = false;
   bool fastForwardAudio_ = false;
@@ -192,8 +205,14 @@ private:
   int runaheadFrames_ = 0;
   std::uint64_t frameCount_ = 0;
   Uint32 fastForwardFrames_ = 0;
-  Uint64 framePeriod_ = 0;
-  Uint64 nextFrame_ = 0;
+  // Frames the core owes, capped per update so a stall cannot be repaid in
+  // one burst.
+  FrameClock clock_;
+  // A core may retime itself from inside retro_run(); the pacing and the
+  // audio device must not be touched there, so the change is recorded and
+  // applied by the next update(), between frames.
+  bool retimePending_ = false;
+  bool audioRatePending_ = false;
 };
 
 } // namespace launcher::runtime::libretro

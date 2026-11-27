@@ -231,6 +231,7 @@ endif()
 # Games the built-in NES runtime does not cover play through installed libretro
 # cores, which are discovered and dlopen-ed at runtime.
 add_library(runtime-libretro STATIC
+  src/runtime/FrameClock.cpp
   src/runtime/libretro/CoreArchive.cpp
   src/runtime/libretro/CoreDiscovery.cpp
   src/runtime/libretro/CoreInstaller.cpp
@@ -349,6 +350,13 @@ if(BUILD_TESTING)
   target_compile_features(launch-options-test PRIVATE cxx_std_17)
   target_compile_options(launch-options-test PRIVATE ${MRG_WARNING_FLAGS})
   add_test(NAME launch-options COMMAND launch-options-test)
+
+  add_executable(frame-clock-test tests/FrameClockTest.cpp
+    src/runtime/FrameClock.cpp)
+  target_include_directories(frame-clock-test PRIVATE src)
+  target_compile_features(frame-clock-test PRIVATE cxx_std_17)
+  target_compile_options(frame-clock-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME frame-clock COMMAND frame-clock-test)
 
   add_executable(sha256-test tests/Sha256Test.cpp src/util/Sha256.cpp
     src/util/Utf8Path.cpp)
