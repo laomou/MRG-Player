@@ -224,7 +224,7 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 
 | Action | Keyboard | Controller |
 |---|---|---|
-| Move between the pills, the shelf, and the footer | Up / Down | D-pad up / down |
+| Move between the pills and the shelf | Up / Down | D-pad up / down |
 | Browse carousel | Left / Right | D-pad / left stick |
 | Page the shelf by a screenful | Page Up / Page Down | L / R |
 | Import game | Click **+ Game Library** or drag a file; without a file dialog the ROM folders are rescanned | Focus the library pill, A |
@@ -232,7 +232,7 @@ stock `Emus/<SYS>` package, both tiles appear, so delete the one you replaced.
 | Open management | M / X / right-click | X |
 | Remove confirmation | Delete | Management menu |
 | Open settings | Click **? Settings** | Focus the settings pill, A |
-| Quit the launcher | Esc, then confirm | B, then confirm |
+| Quit the launcher | Esc, then confirm | B on a handheld; B, then confirm on a desktop |
 | Fullscreen | F11 | — |
 
 ### Controls

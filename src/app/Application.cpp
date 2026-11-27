@@ -455,7 +455,6 @@ int Application::run(int argc, char **argv) {
   int selectedGame = settings.rememberSelection ? settings.selectedGame : 0;
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
-  int homeAction = 0;
   float homeRow = 0.0f;
   bool homeRowSettled = false;
   // Which half of the settings screen the direction keys drive: the category
@@ -1377,20 +1376,6 @@ int Application::run(int argc, char **argv) {
     screen = Screen::Management;
     return true;
   };
-  // Runs the footer entry the direction keys are pointing at, so the same
-  // action is reachable from the row and from its button.
-  auto activateHomeAction = [&] {
-    // An empty library has no footer entry, so there is nothing to run; quitting
-    // stays on the Escape key and the top-right control.
-    if (!selectedEntryAvailable())
-      return;
-    if (homeAction == 0)
-      (void)startSelected();
-    else if (homeAction == 1)
-      (void)openManagement(ui::ManagementDialog::Menu);
-    else
-      running = false;
-  };
   auto executeManagementAction = [&] {
     switch (managementAction) {
     case 0:
@@ -2157,18 +2142,8 @@ int Application::run(int argc, char **argv) {
           break;
         const SDL_Keycode key = event.key.keysym.sym;
         if (screen == Screen::Home) {
-          if (homeFocus == ui::HomeFocus::Actions &&
+          if (homeFocus == ui::HomeFocus::Pills &&
               (key == SDLK_LEFT || key == SDLK_RIGHT)) {
-            const int count = ui::homeActionCount(selectedEntryAvailable());
-            if (count > 0) {
-              const int step = key == SDLK_LEFT ? count - 1 : 1;
-              homeAction = (homeAction + step) % count;
-            }
-          } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
-                     homeFocus == ui::HomeFocus::Actions) {
-            activateHomeAction();
-          } else if (homeFocus == ui::HomeFocus::Pills &&
-                     (key == SDLK_LEFT || key == SDLK_RIGHT)) {
             homePill = 1 - homePill;
           } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
                      homeFocus == ui::HomeFocus::Pills) {
@@ -2180,12 +2155,6 @@ int Application::run(int argc, char **argv) {
             homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
             homeFocus = ui::HomeFocus::Pills;
-          } else if (key == SDLK_DOWN && homeFocus == ui::HomeFocus::Cards &&
-                     ui::homeActionCount(selectedEntryAvailable()) > 0) {
-            homeFocus = ui::HomeFocus::Actions;
-            homeAction = 0;
-          } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Actions) {
-            homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_LEFT)
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
@@ -2201,6 +2170,9 @@ int Application::run(int argc, char **argv) {
                 std::clamp(selectedGame + direction * 7, 0, count - 1);
           } else if (key == SDLK_DELETE)
             (void)openManagement(ui::ManagementDialog::ConfirmRemoveRom);
+          else if ((key == SDLK_x || key == SDLK_m) &&
+                   selectedEntryAvailable())
+            (void)openManagement(ui::ManagementDialog::Menu);
           else if (key == SDLK_RETURN || key == SDLK_SPACE)
             (void)startSelected();
           else if (key == SDLK_ESCAPE) {
@@ -2281,10 +2253,10 @@ int Application::run(int argc, char **argv) {
               chooseAndImportGame();
             } else if (clickedPill == 1) {
               openSettings();
-            } else if (clickedAction >= 0) {
-              homeFocus = ui::HomeFocus::Actions;
-              homeAction = clickedAction;
-              activateHomeAction();
+            } else if (clickedAction == 0) {
+              (void)startSelected();
+            } else if (clickedAction == 1) {
+              (void)openManagement(ui::ManagementDialog::Menu);
             } else if (clickedCard >= 0) {
               homeFocus = ui::HomeFocus::Cards;
               const bool alreadySelected = clickedCard == selectedGame;
@@ -2380,12 +2352,6 @@ int Application::run(int argc, char **argv) {
               event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
           if ((left || right) && homeFocus == ui::HomeFocus::Pills) {
             homePill = 1 - homePill;
-          } else if ((left || right) && homeFocus == ui::HomeFocus::Actions) {
-            const int count = ui::homeActionCount(selectedEntryAvailable());
-            if (count > 0) {
-              const int step = left ? count - 1 : 1;
-              homeAction = (homeAction + step) % count;
-            }
           } else if (left) {
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
@@ -2395,31 +2361,33 @@ int Application::run(int argc, char **argv) {
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
             if (homeFocus == ui::HomeFocus::Cards)
               homeFocus = ui::HomeFocus::Pills;
-            else if (homeFocus == ui::HomeFocus::Actions)
-              homeFocus = ui::HomeFocus::Cards;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
-            if (homeFocus == ui::HomeFocus::Pills) {
+            if (homeFocus == ui::HomeFocus::Pills)
               homeFocus = ui::HomeFocus::Cards;
-            } else if (homeFocus == ui::HomeFocus::Cards &&
-                       ui::homeActionCount(selectedEntryAvailable()) > 0) {
-              homeFocus = ui::HomeFocus::Actions;
-              homeAction = 0;
-            }
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             if (homeFocus == ui::HomeFocus::Pills) {
               if (homePill == 0)
                 chooseAndImportGame();
               else
                 openSettings();
-            } else if (homeFocus == ui::HomeFocus::Actions) {
-              activateHomeAction();
             } else {
               (void)startSelected();
             }
+          } else if ((event.cbutton.button == SDL_CONTROLLER_BUTTON_X ||
+                      event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) &&
+                     selectedEntryAvailable()) {
+            (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                      event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
+#if defined(MRG_PLATFORM_BRICK)
+            // B is the only way off the shelf on a handheld, and the stock
+            // desktop closes an app with it: nothing here can be lost, so the
+            // launcher leaves the way every other pak does.
+            running = false;
+#else
             quitConfirm = true;
             quitChoice = 0;
+#endif
           } else if (event.cbutton.button ==
                          SDL_CONTROLLER_BUTTON_LEFTSHOULDER ||
                      event.cbutton.button ==
@@ -2528,10 +2496,10 @@ int Application::run(int argc, char **argv) {
     // the focus, and moving to a different one restarts the fade.
     char focusBuffer[80];
     std::snprintf(focusBuffer, sizeof(focusBuffer),
-                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
                   static_cast<int>(screen), static_cast<int>(homeFocus),
-                  homePill, homeAction, selectedGame, settingCategory,
-                  settingRow, settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
+                  homePill, selectedGame, settingCategory, settingRow,
+                  settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0,
                   pauseAction, pauseCoreOptionCursor,
                   coreRefreshFocused ? 1 : 0);
     if (focusKey != focusBuffer) {
@@ -2639,8 +2607,8 @@ int Application::run(int argc, char **argv) {
     } else if (screen == Screen::Home) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity, ui::accentColor(settings.accent), &coverCache);
+                   prompts, homeFocus, homePill, homeRow, focusOpacity,
+                   ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow, time,
                        bindingCapture, activeControllerName(),
@@ -2649,8 +2617,8 @@ int Application::run(int argc, char **argv) {
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, time, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,
-                   prompts, homeFocus, homePill, homeAction, homeRow,
-                   focusOpacity, ui::accentColor(settings.accent), &coverCache,
+                   prompts, homeFocus, homePill, homeRow, focusOpacity,
+                   ui::accentColor(settings.accent), &coverCache,
                    /*showFooter=*/false);
       ui::drawGameManagementOverlay(
           renderer,
@@ -2695,15 +2663,16 @@ int Application::run(int argc, char **argv) {
         homeFocus = ui::HomeFocus::Pills;
         homePill = 1;
       } else if (!smokeHomeActions) {
+        // The footer is a legend rather than a row of buttons now, so the
+        // second shot shows the only overlay the shelf can raise.
         captureFrame(renderer, "home-pills-screenshot.bmp");
         smokeHomeActions = true;
-        homeFocus = ui::HomeFocus::Actions;
-        homeAction = 1;
-      } else if (!smokeHomeQuit) {
-        captureFrame(renderer, "home-actions-screenshot.bmp");
-        smokeHomeQuit = true;
         quitConfirm = true;
         quitChoice = 0;
+      } else if (!smokeHomeQuit) {
+        // A capture reads the frame that was just presented, so the dialog
+        // needs one full frame on screen before the shot is taken.
+        smokeHomeQuit = true;
       } else {
         captureFrame(renderer, "home-quit-screenshot.bmp");
         quitConfirm = false;

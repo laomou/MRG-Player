@@ -101,7 +101,7 @@ constexpr Entry kText[]{
     {"VIEW THE MANAGED FILE AND SAVE STATUS", "查看托管文件和存档状态"},
     {"CANCEL", "取消"},
     {"QUIT MRG PLAYER?", "退出 MRG PLAYER？"},
-    {"THE GAME LIBRARY AND YOUR SAVES STAY AS THEY ARE", "游戏库和存档都会保留"},
+    {"YOUR LIBRARY AND SAVES STAY ON THE CARD", "游戏库和存档都会保留"},
     {"MANAGED ROM", "托管 ROM"},
     {"SAVE DATA", "保存数据"},
     {"AVAILABLE", "存在"},

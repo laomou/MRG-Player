@@ -227,10 +227,10 @@ int main(int argc, char **argv) {
             !managementInfoBackAt(640, 550) &&
             !managementInfoBackAt(100, 100),
         "Info returns only when its actual Back button is clicked");
-  check(quitConfirmChoiceAt(500, 390) == 0 &&
-            quitConfirmChoiceAt(780, 390) == 1 &&
-            quitConfirmChoiceAt(640, 390) == -1 &&
-            quitConfirmChoiceAt(500, 430) == -1,
+  check(quitConfirmChoiceAt(500, 410) == 0 &&
+            quitConfirmChoiceAt(780, 410) == 1 &&
+            quitConfirmChoiceAt(640, 410) == -1 &&
+            quitConfirmChoiceAt(500, 450) == -1,
         "Quit dialog paint and hit rectangles agree, including gaps");
   check(powerCycleChoiceAt(500, 450) == -1 &&
             powerCycleChoiceAt(640, 360) == -1,
@@ -294,8 +294,6 @@ int main(int argc, char **argv) {
   check(homeActionAt(500, 663, true, launcher::i18n::Language::English,
                      prompts) == -1,
         "Empty footer space activates nothing");
-  check(homeActionCount(true) == 2 && homeActionCount(false) == 0,
-        "Only a real game offers start and manage");
   // The settings screen keeps the categories and the page apart: the rail is
   // where the focus starts, the page is reached with right.
   check(settingsCategoryAt(160, 281 + 2 * 41 + 10) == 2,
@@ -564,8 +562,8 @@ int main(int argc, char **argv) {
               "Both management choices use shared theme-aware buttons");
         clearPreview();
         drawQuitConfirm(managementRenderer, choice, language, managementPrompts, accent);
-        check(pixelEquals(445 + 270 * choice, 390, accent) &&
-                   pixelEquals(500 + 280 * choice, 363, kFocusColor),
+        check(pixelEquals(445 + 270 * choice, 410, accent) &&
+                   pixelEquals(500 + 280 * choice, 379, kFocusColor),
               "Quit confirmation choices keep their accent and ring");
         clearPreview();
         drawPowerCycleConfirm(managementRenderer, choice, language, managementPrompts, accent);
