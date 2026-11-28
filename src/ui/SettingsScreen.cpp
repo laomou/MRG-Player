@@ -783,8 +783,10 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
               entry.installed
                   ? SDL_Color{game.accent.r, game.accent.g, game.accent.b, 70}
                   : SDL_Color{26, 40, 60, 180});
+      // The pill is centred on the row, so the label has to be too; it used to
+      // sit five pixels low and read as if the pill were off its row.
       text(renderer, static_cast<int>(columns.status.x) + 13,
-           textCenteredY(entry.status, y + 24, 1), entry.status, 1,
+           textCenteredY(entry.status, centerY, 1), entry.status, 1,
            entry.installed ? game.accent
                            : SDL_Color{150, 168, 188, 255});
     }
