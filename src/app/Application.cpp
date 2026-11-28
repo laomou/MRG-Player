@@ -48,7 +48,7 @@
 namespace launcher {
 namespace {
 
-enum class Screen { Home, Settings, Management, Game, Pause };
+enum class Screen { Home, Settings, Management, Game, Pause, More };
 
 // The device profile compiles the downloader out (CMake: MRG_ENABLE_CORE_DOWNLOAD).
 #if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
@@ -536,6 +536,10 @@ int Application::run(int argc, char **argv) {
   bool startupRomFailed = false;
   Screen screen = options.smokeSettings ? Screen::Settings : Screen::Home;
   int selectedGame = settings.rememberSelection ? settings.selectedGame : 0;
+  // The cover wall behind the "more" tile: the order is a page of its own, so
+  // the cursor is an index into it rather than into the shelf.
+  std::vector<std::size_t> moreOrder;
+  int moreCursor = 0;
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
   float homeRow = 0.0f;
@@ -549,12 +553,12 @@ int Application::run(int argc, char **argv) {
   std::string focusKey;
   float focusOpacity = 1.0f;
   Uint64 focusSince = 0;
-  // The remembered number is an index into entries(), not into the padded grid.
-  // Clamping to slotCount() would park the ring on an empty slot whenever the
-  // library is shorter than it was last time, which hides the title, the play
-  // time and the whole footer.
-  const int entryCount = static_cast<int>(gameLibrary.entries().size());
-  selectedGame = entryCount > 0 ? std::clamp(selectedGame, 0, entryCount - 1) : 0;
+  // The remembered number is a position on the shelf, and the shelf runs one
+  // past the games: slotCount() is the MORE GAMES tile. Empty positions draw
+  // no footer of their own, so landing there is harmless; what is worth
+  // clamping is falling past the tile when the library shrank.
+  const int shelfCount = static_cast<int>(gameLibrary.slotCount());
+  selectedGame = std::clamp(selectedGame, 0, shelfCount);
   int settingCategory = 0;
   int settingRow = 0;
   // The core page's refresh button is reached by pressing up from the first
@@ -569,6 +573,8 @@ int Application::run(int argc, char **argv) {
   bool smokeSettingsController = false;
   bool smokeSettingsLibrary = false;
   bool smokeHomePills = false;
+  bool smokeHomeMore = false;
+  bool smokeHomeMoreCaptured = false;
   bool smokeHomeQuit = false;
   bool smokeHomeDone = false;
   bool smokeSettingsCores = false;
@@ -1010,7 +1016,19 @@ int Application::run(int argc, char **argv) {
                  std::string(activeRuntime->name()).c_str());
     return true;
   };
+  // The shelf ends on a tile, not on a game: confirming there opens the cover
+  // wall instead of starting a ROM. The wall is ordered by when a game was
+  // last played, so its cursor needs the order it was built from.
+  auto enterMoreGames = [&] {
+    moreOrder = ui::recentOrder(gameLibrary);
+    moreCursor = 0;
+    screen = Screen::More;
+  };
   auto startSelected = [&] {
+    if (selectedGame == static_cast<int>(gameLibrary.slotCount())) {
+      enterMoreGames();
+      return true;
+    }
     if (selectedGame < 0 ||
         selectedGame >= static_cast<int>(gameLibrary.entries().size())) {
       showToast(i18n::TextId::ChooseRom);
@@ -1018,6 +1036,24 @@ int Application::run(int argc, char **argv) {
     }
     return startGame(
         gameLibrary.entries()[static_cast<std::size_t>(selectedGame)]);
+  };
+  auto startMoreSelected = [&] {
+    if (moreCursor < 0 ||
+        moreCursor >= static_cast<int>(moreOrder.size()))
+      return false;
+    return startGame(
+        gameLibrary.entries()[moreOrder[static_cast<std::size_t>(moreCursor)]]);
+  };
+  auto moveMoreCursor = [&](int columns, int rows) {
+    const int count = static_cast<int>(moreOrder.size());
+    if (count == 0)
+      return;
+    int next = moreCursor;
+    if (columns != 0)
+      next = std::clamp(next + columns, 0, count - 1);
+    if (rows != 0)
+      next = std::clamp(next + rows * ui::moreGrid().columns, 0, count - 1);
+    moreCursor = next;
   };
   auto importGame = [&](const std::string &path, bool startAfterImport) {
     const library::ImportStatus status = gameLibrary.importGame(path);
@@ -1561,6 +1597,15 @@ int Application::run(int argc, char **argv) {
     refreshSaveStatus();
     screen = Screen::Management;
     return true;
+  };
+  // The wall's options button opens the same drawer the shelf has; the drawer
+  // still returns to the shelf, which is where the game was picked from.
+  auto openMoreManagement = [&] {
+    if (moreCursor < 0 ||
+        moreCursor >= static_cast<int>(moreOrder.size()))
+      return;
+    selectedGame = static_cast<int>(moreOrder[static_cast<std::size_t>(moreCursor)]);
+    (void)openManagement(ui::ManagementDialog::Menu);
   };
   // The strip is a pair of buttons for the pointer: 0 starts the selected game,
   // 1 opens its drawer. The keys never land on it, so a click is the only way
@@ -2407,14 +2452,14 @@ int Application::run(int argc, char **argv) {
               homePill = 1;
           } else if (key == SDLK_LEFT)
             ui::moveSelection(selectedGame, -1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
           else if (key == SDLK_RIGHT)
             ui::moveSelection(selectedGame, 1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
           else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
             // The shoulders move the shelf by a screenful; the selection stops
             // at either end instead of wrapping around.
-            const int count = static_cast<int>(gameLibrary.slotCount());
+            const int count = ui::homeSlotCount(gameLibrary);
             const int direction = key == SDLK_PAGEDOWN ? 1 : -1;
             selectedGame =
                 std::clamp(selectedGame + direction * 7, 0, count - 1);
@@ -2429,6 +2474,25 @@ int Application::run(int argc, char **argv) {
             quitConfirm = true;
             quitChoice = 0;
           }
+        } else if (screen == Screen::More) {
+          if (key == SDLK_LEFT)
+            moveMoreCursor(-1, 0);
+          else if (key == SDLK_RIGHT)
+            moveMoreCursor(1, 0);
+          else if (key == SDLK_UP)
+            moveMoreCursor(0, -1);
+          else if (key == SDLK_DOWN)
+            moveMoreCursor(0, 1);
+          else if (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN) {
+            const ui::MoreGrid grid = ui::moreGrid();
+            const int pageSize = std::max(1, grid.columns * grid.rows);
+            moveMoreCursor(key == SDLK_PAGEDOWN ? pageSize : -pageSize, 0);
+          } else if (key == SDLK_RETURN || key == SDLK_SPACE)
+            (void)startMoreSelected();
+          else if (key == SDLK_x || key == SDLK_m)
+            openMoreManagement();
+          else if (key == SDLK_ESCAPE || key == SDLK_b)
+            screen = Screen::Home;
         } else if (screen == Screen::Settings) {
           if (key == SDLK_r && settingCategory == 3 && !settingsRailFocus) {
             settings.input = config::defaultInputBindings();
@@ -2487,11 +2551,12 @@ int Application::run(int argc, char **argv) {
         float y = 0.0f;
         ui::windowToCanvas(event.button.x, event.button.y, x, y);
         if (screen == Screen::Home) {
-          const int clickedCard = ui::homeCardAt(
-              x, y, static_cast<int>(gameLibrary.slotCount()), homeRow);
-          const int clickedAction =
-              ui::homeActionAt(x, y, selectedEntryAvailable(),
-                               currentLanguage(), currentPrompts());
+          const int clickedCard =
+              ui::homeCardAt(x, y, ui::homeSlotCount(gameLibrary), homeRow);
+          const int clickedAction = ui::homeActionAt(
+              x, y, selectedEntryAvailable(),
+              selectedGame == static_cast<int>(gameLibrary.slotCount()),
+              currentLanguage(), currentPrompts());
           if (event.button.button == SDL_BUTTON_RIGHT && clickedCard >= 0) {
             selectedGame = clickedCard;
             (void)openManagement(ui::ManagementDialog::Menu);
@@ -2511,6 +2576,20 @@ int Application::run(int argc, char **argv) {
               selectedGame = clickedCard;
               if (alreadySelected)
                 (void)startSelected();
+            }
+          }
+        } else if (screen == Screen::More) {
+          if (event.button.button == SDL_BUTTON_RIGHT) {
+            screen = Screen::Home;
+          } else if (event.button.button == SDL_BUTTON_LEFT) {
+            const int clicked =
+                ui::moreGameAt(x, y, static_cast<int>(moreOrder.size()),
+                               moreCursor);
+            if (clicked >= 0) {
+              const bool alreadySelected = clicked == moreCursor;
+              moreCursor = clicked;
+              if (alreadySelected)
+                (void)startMoreSelected();
             }
           }
         } else if (screen == Screen::Management) {
@@ -2584,10 +2663,12 @@ int Application::run(int argc, char **argv) {
         if (screen == Screen::Home) {
           if (event.wheel.x < 0 || event.wheel.y < 0)
             ui::moveSelection(selectedGame, 1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
           else if (event.wheel.x > 0 || event.wheel.y > 0)
             ui::moveSelection(selectedGame, -1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
+        } else if (screen == Screen::More && event.wheel.y != 0) {
+          moveMoreCursor(0, event.wheel.y < 0 ? 1 : -1);
         } else if (screen == Screen::Settings && event.wheel.y != 0) {
           settingsNavigate(event.wheel.y < 0 ? SettingsNav::Down
                                              : SettingsNav::Up);
@@ -2610,10 +2691,10 @@ int Application::run(int argc, char **argv) {
             homePill = 1 - homePill;
           } else if (left) {
             ui::moveSelection(selectedGame, -1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
           } else if (right) {
             ui::moveSelection(selectedGame, 1,
-                              static_cast<int>(gameLibrary.slotCount()));
+                              ui::homeSlotCount(gameLibrary));
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
             if (homeFocus == ui::HomeFocus::Cards) {
               homeFocus = ui::HomeFocus::Pills;
@@ -2632,10 +2713,12 @@ int Application::run(int argc, char **argv) {
             } else {
               (void)startSelected();
             }
-          } else if ((event.cbutton.button == SDL_CONTROLLER_BUTTON_X ||
-                      event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) &&
-                     selectedEntryAvailable()) {
-            (void)openManagement(ui::ManagementDialog::Menu);
+          } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_X ||
+                     event.cbutton.button == SDL_CONTROLLER_BUTTON_Y) {
+            if (selectedGame == static_cast<int>(gameLibrary.slotCount()))
+              openMoreManagement();
+            else if (selectedEntryAvailable())
+              (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                      event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
 #if defined(MRG_PLATFORM_TRIMUI)
@@ -2651,7 +2734,7 @@ int Application::run(int argc, char **argv) {
                          SDL_CONTROLLER_BUTTON_LEFTSHOULDER ||
                      event.cbutton.button ==
                          SDL_CONTROLLER_BUTTON_RIGHTSHOULDER) {
-            const int count = static_cast<int>(gameLibrary.slotCount());
+            const int count = ui::homeSlotCount(gameLibrary);
             const int direction =
                 event.cbutton.button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER
                     ? 1
@@ -2659,6 +2742,30 @@ int Application::run(int argc, char **argv) {
             selectedGame =
                 std::clamp(selectedGame + direction * 7, 0, count - 1);
           }
+        } else if (screen == Screen::More) {
+          const ui::MoreGrid grid = ui::moreGrid();
+          const int pageSize = std::max(1, grid.columns * grid.rows);
+          const Uint8 button = event.cbutton.button;
+          if (button == SDL_CONTROLLER_BUTTON_DPAD_LEFT)
+            moveMoreCursor(-1, 0);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT)
+            moveMoreCursor(1, 0);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_UP)
+            moveMoreCursor(0, -1);
+          else if (button == SDL_CONTROLLER_BUTTON_DPAD_DOWN)
+            moveMoreCursor(0, 1);
+          else if (button == SDL_CONTROLLER_BUTTON_LEFTSHOULDER)
+            moveMoreCursor(-pageSize, 0);
+          else if (button == SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)
+            moveMoreCursor(pageSize, 0);
+          else if (button == SDL_CONTROLLER_BUTTON_A)
+            (void)startMoreSelected();
+          else if (button == SDL_CONTROLLER_BUTTON_X ||
+                   button == SDL_CONTROLLER_BUTTON_Y)
+            openMoreManagement();
+          else if (button == SDL_CONTROLLER_BUTTON_B ||
+                   button == SDL_CONTROLLER_BUTTON_BACK)
+            screen = Screen::Home;
         } else if (screen == Screen::Settings) {
           if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
               event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
@@ -2753,11 +2860,12 @@ int Application::run(int argc, char **argv) {
     // the focus, and moving to a different one restarts the fade.
     char focusBuffer[80];
     std::snprintf(focusBuffer, sizeof(focusBuffer),
-                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
+                  "%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d|%d",
                   static_cast<int>(screen), static_cast<int>(homeFocus),
                   homePill, selectedGame, settingCategory, settingRow,
                   settingsRailFocus ? 1 : 0, bindingCapture ? 1 : 0, pauseAction,
-                  pauseCoreOptionCursor, coreRefreshFocused ? 1 : 0);
+                  pauseCoreOptionCursor, coreRefreshFocused ? 1 : 0,
+                  moreCursor);
     if (focusKey != focusBuffer) {
       if (focusKey.empty()) {
         focusOpacity = 1.0f;
@@ -2776,8 +2884,8 @@ int Application::run(int argc, char **argv) {
     if (screen == Screen::Home) {
       // The shelf eases towards the column that keeps the selection on screen,
       // so a card sliding past never jumps.
-      const float rowTarget = ui::homeRowTarget(
-          selectedGame, static_cast<int>(gameLibrary.slotCount()));
+      const float rowTarget =
+          ui::homeRowTarget(selectedGame, ui::homeSlotCount(gameLibrary));
       // Coming back from another screen should show the shelf where it belongs
       // instead of sliding in from the start.
       if (!homeRowSettled) {
@@ -2794,7 +2902,8 @@ int Application::run(int argc, char **argv) {
     }
     // The highlighted game is the one being looked at, so its art jumps the
     // queue; the shelf's left-to-right order fills in after it.
-    if (screen == Screen::Home || selectedEntryAvailable()) {
+    if (screen == Screen::Home || screen == Screen::More ||
+        selectedEntryAvailable()) {
       const auto &shelf = gameLibrary.entries();
       if (selectedGame < static_cast<int>(shelf.size())) {
         const auto index = static_cast<std::size_t>(selectedGame);
@@ -2888,6 +2997,10 @@ int Application::run(int argc, char **argv) {
                    prompts, homeFocus, homePill, homeRow,
                    focusOpacity, ui::accentColor(settings.accent),
                    &coverCache);
+    } else if (screen == Screen::More) {
+      ui::drawMoreGames(renderer, gameLibrary, moreOrder, moreCursor,
+                        currentLanguage(), prompts, focusOpacity,
+                        ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
       ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        bindingCapture, activeControllerName(),
@@ -2941,11 +3054,19 @@ int Application::run(int argc, char **argv) {
         smokeHomePills = true;
         homeFocus = ui::HomeFocus::Pills;
         homePill = 1;
-      } else if (!smokeHomeQuit) {
+      } else if (!smokeHomeMore) {
         captureFrame(renderer, "home-pills-screenshot.bmp");
-        smokeHomeQuit = true;
+        smokeHomeMore = true;
+        homeFocus = ui::HomeFocus::Cards;
+        homePill = 1;
+        selectedGame = static_cast<int>(gameLibrary.slotCount());
+        moreOrder = ui::recentOrder(gameLibrary);
+        moreCursor = 0;
+        screen = Screen::More;
+      } else if (!smokeHomeQuit) {
         quitConfirm = true;
         quitChoice = 0;
+        smokeHomeQuit = true;
       } else if (!smokeHomeDone) {
         // A capture reads the frame that was just presented, so the dialog
         // needs one full frame on screen before the shot is taken.
@@ -2954,6 +3075,22 @@ int Application::run(int argc, char **argv) {
         captureFrame(renderer, "home-quit-screenshot.bmp");
         quitConfirm = false;
         smokeHomeDone = true;
+      }
+    }
+    else if (options.smokeHome && screen == Screen::More) {
+      // The wall is one more shot: it waits for the ring to settle, then
+      // returns to the shelf so the quit dialog is captured over it.
+      if (!smokeHomeMoreCaptured) {
+        if (focusOpacity >= 1.0f) {
+          captureFrame(renderer, "more-screenshot.bmp");
+          smokeHomeMoreCaptured = true;
+        }
+      } else if (!smokeHomeDone) {
+        smokeHomeDone = true;
+        smokeHomeQuit = true;
+        screen = Screen::Home;
+        quitConfirm = true;
+        quitChoice = 0;
       }
     }
     else if (options.smokeSettings && screen == Screen::Settings) {

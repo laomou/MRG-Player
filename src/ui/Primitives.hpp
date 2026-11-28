@@ -129,7 +129,7 @@ void drawChoiceButtons(SDL_Renderer *renderer, const LinearLayout &layout,
 // wallpaper, when present, replaces the drawn skyline with a soft version of
 // the selected game's cover, dimmed so the shelf stays readable.
 void drawBackground(SDL_Renderer *renderer, const Game &game,
-                    SDL_Texture *wallpaper = nullptr);
+                    SDL_Texture *wallpaper = nullptr, bool scene = true);
 
 // One footer legend entry: what the control does, then the control itself, the
 // way a console writes "Back  B". Reading left to right gives the action first
