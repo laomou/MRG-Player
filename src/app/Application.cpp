@@ -540,6 +540,9 @@ int Application::run(int argc, char **argv) {
   // the cursor is an index into it rather than into the shelf.
   std::vector<std::size_t> moreOrder;
   int moreCursor = 0;
+  // The drawer opens over either the shelf or the wall; closing it has to go
+  // back to the one it came from.
+  Screen managementOrigin = Screen::Home;
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
   float homeRow = 0.0f;
@@ -1588,24 +1591,53 @@ int Application::run(int argc, char **argv) {
       std::fprintf(stderr, "Save data inspection failed: %s\n",
                    saveError.c_str());
   };
-  auto openManagement = [&](ui::ManagementDialog initialDialog) {
+  auto openManagement = [&](ui::ManagementDialog initialDialog,
+                            Screen origin = Screen::Home) {
     if (!selectedEntryAvailable())
       return false;
     managementAction = 0;
     confirmationChoice = 0;
     managementDialog = initialDialog;
+    managementOrigin = origin;
     refreshSaveStatus();
     screen = Screen::Management;
     return true;
   };
-  // The wall's options button opens the same drawer the shelf has; the drawer
-  // still returns to the shelf, which is where the game was picked from.
+  // Leaving the drawer rebuilds the wall's order: favouriting a game moves it,
+  // and removing one shortens the list under the cursor.
+  auto leaveManagement = [&] {
+    if (managementOrigin != Screen::More) {
+      screen = Screen::Home;
+      return;
+    }
+    std::string keepId;
+    if (!moreOrder.empty() && moreCursor >= 0 &&
+        moreCursor < static_cast<int>(moreOrder.size())) {
+      keepId = gameLibrary
+                   .entries()[moreOrder[static_cast<std::size_t>(moreCursor)]]
+                   .id;
+    }
+    moreOrder = ui::recentOrder(gameLibrary);
+    moreCursor = 0;
+    for (std::size_t i = 0; i < moreOrder.size(); ++i) {
+      if (gameLibrary.entries()[moreOrder[i]].id == keepId) {
+        moreCursor = static_cast<int>(i);
+        break;
+      }
+    }
+    if (moreCursor >= static_cast<int>(moreOrder.size()))
+      moreCursor = static_cast<int>(moreOrder.size()) - 1;
+    moreCursor = std::max(0, moreCursor);
+    screen = Screen::More;
+  };
+  // The wall's options button opens the same drawer the shelf has, and the
+  // drawer comes back to the wall.
   auto openMoreManagement = [&] {
     if (moreCursor < 0 ||
         moreCursor >= static_cast<int>(moreOrder.size()))
       return;
     selectedGame = static_cast<int>(moreOrder[static_cast<std::size_t>(moreCursor)]);
-    (void)openManagement(ui::ManagementDialog::Menu);
+    (void)openManagement(ui::ManagementDialog::Menu, Screen::More);
   };
   // The strip is a pair of buttons for the pointer: 0 starts the selected game,
   // 1 opens its drawer. The keys never land on it, so a click is the only way
@@ -1646,7 +1678,7 @@ int Application::run(int argc, char **argv) {
       }
       selectedGame = gameLibrary.indexOfId(entry.id, entry.platform);
       if (selectedGame < 0) {
-        screen = Screen::Home;
+        leaveManagement();
         break;
       }
       showToast(entry.favorite ? i18n::TextId::Unfavorite
@@ -1657,7 +1689,7 @@ int Application::run(int argc, char **argv) {
       managementDialog = ui::ManagementDialog::Info;
       break;
     default:
-      screen = Screen::Home;
+      leaveManagement();
       break;
     }
   };
@@ -1667,7 +1699,7 @@ int Application::run(int argc, char **argv) {
       return;
     }
     if (!selectedEntryAvailable()) {
-      screen = Screen::Home;
+      leaveManagement();
       return;
     }
     if (managementDialog == ui::ManagementDialog::ConfirmRemoveRom) {
@@ -1676,7 +1708,7 @@ int Application::run(int argc, char **argv) {
         const int remaining = static_cast<int>(gameLibrary.entries().size());
         selectedGame =
             remaining > 0 ? std::clamp(removedIndex, 0, remaining - 1) : 0;
-        screen = Screen::Home;
+        leaveManagement();
         showToast(i18n::TextId::RomRemoved);
       } else {
         std::fprintf(stderr, "ROM removal failed: %s\n",
