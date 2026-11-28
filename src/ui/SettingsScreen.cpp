@@ -316,6 +316,11 @@ int settingRowCount(int category, bool keyboardPrompts) {
     return 3;
   if (category == 3)
     return 4 + static_cast<int>(config::kInputActionCount) + 1;
+  // The library page names where the ROMs are and, under it, the scan that
+  // picks up new ones. The handheld has no library pill, so this row is the
+  // only way to import there.
+  if (category == 4)
+    return 2;
   if (category == 5)
     return 5;
   if (category == 6)
@@ -412,9 +417,16 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts) {
   if (category == 5)
     return kCoreRows.hit(x, y);
   auto rows = kSettingRows;
-  rows.count = category == 1
-                   ? displayRowCount()
-                   : (category == 2 ? 3 : (category == 6 ? kThemeRowCount : 1));
+  int count = 1;
+  if (category == 1)
+    count = displayRowCount();
+  else if (category == 2)
+    count = 3;
+  else if (category == 4)
+    count = 2;
+  else if (category == 6)
+    count = kThemeRowCount;
+  rows.count = count;
   return rows.hit(x, y);
 }
 
@@ -801,10 +813,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                         language),
                      game.accent, focusOpacity);
   } else if (category == 4) {
-    drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused,
+    drawSettingRow(renderer, kSettingRows.item(0), row == 0,
+                   contentFocused && row == 0,
                    tr(TextId::RomDirectory, language),
                    tr(TextId::RomDirectoryDescription, language),
                    tr(TextId::ManagedDirectory, language), game.accent,
+                   focusOpacity);
+    drawSettingRow(renderer, kSettingRows.item(1), row == 1,
+                   contentFocused && row == 1,
+                   tr(TextId::RescanRom, language),
+                   tr(TextId::RescanRomDescription, language), "", game.accent,
                    focusOpacity);
   } else {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused, "MRG PLAYER",
@@ -839,6 +857,12 @@ std::vector<Hint> settingsFooterHints(int category, int row,
             : (installedRow ? i18n::TextId::HintDetails
                             : i18n::TextId::HintInstall);
     footer.push_back({i18n::tr(action, language), prompts.confirm, true});
+  } else if (category == 4) {
+    // The first row only reports where the ROMs live; the scan underneath is
+    // the page's one action, and it runs on the confirm key.
+    if (row == 1)
+      footer.push_back({i18n::tr(i18n::TextId::ConfirmControl, language),
+                        prompts.confirm, true});
   } else {
     footer.push_back(
         {i18n::tr(i18n::TextId::ChangeControl, language), prompts.confirm, true});

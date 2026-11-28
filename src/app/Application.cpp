@@ -567,6 +567,7 @@ int Application::run(int argc, char **argv) {
   bool smokeSettingsDisplay = false;
   bool smokeSettingsAudio = false;
   bool smokeSettingsController = false;
+  bool smokeSettingsLibrary = false;
   bool smokeHomePills = false;
   bool smokeHomeQuit = false;
   bool smokeHomeDone = false;
@@ -1037,18 +1038,10 @@ int Application::run(int argc, char **argv) {
           gameLibrary.entries()[static_cast<std::size_t>(selectedGame)]);
     return true;
   };
-  auto chooseAndImportGame = [&] {
-    std::string pickerError;
-    const std::optional<std::string> path = platform::pickGameFile(pickerError);
-    if (path.has_value()) {
-      (void)importGame(*path, false);
-      return;
-    }
-    if (pickerError.empty())
-      return; // The player closed the dialog without choosing a file.
-    std::fprintf(stderr, "%s\n", pickerError.c_str());
-    // A device without a file dialog has no way to drag a file in, so the ROM
-    // folders take over the import action instead of pointing at a drag.
+  // The ROM folders are the import source on a device without a file dialog,
+  // and they are what the settings page rescans. One implementation, so the
+  // pill and the settings row cannot report different things.
+  auto scanRomFolders = [&] {
     const std::vector<std::string> directories = config::romSearchDirectories();
     if (directories.empty()) {
       showToast(i18n::TextId::PickerUnavailable, 4000);
@@ -1067,6 +1060,20 @@ int Application::run(int argc, char **argv) {
     } else {
       showToast(i18n::TextId::RomFolderEmpty, 4000);
     }
+  };
+  auto chooseAndImportGame = [&] {
+    std::string pickerError;
+    const std::optional<std::string> path = platform::pickGameFile(pickerError);
+    if (path.has_value()) {
+      (void)importGame(*path, false);
+      return;
+    }
+    if (pickerError.empty())
+      return; // The player closed the dialog without choosing a file.
+    std::fprintf(stderr, "%s\n", pickerError.c_str());
+    // A device without a file dialog has no way to drag a file in, so the ROM
+    // folders take over the import action instead of pointing at a drag.
+    scanRomFolders();
   };
   auto leaveGame = [&] {
     recordCurrentSession();
@@ -1207,6 +1214,16 @@ int Application::run(int argc, char **argv) {
     }
     if (settingCategory == 5) {
       activateCoreRow(settingRow);
+      return;
+    }
+    if (settingCategory == 4) {
+      if (settingRow == 1) {
+        // The scan reports through the toast, and the toast belongs to the
+        // shelf, so the player lands where the result is visible.
+        scanRomFolders();
+        screen = Screen::Home;
+        homeFocus = ui::HomeFocus::Cards;
+      }
       return;
     }
     if (settingCategory == 3 && settingRow >= 4 &&
@@ -2373,11 +2390,12 @@ int Application::run(int argc, char **argv) {
             config::launcherMenuKey(settings.input, event.key.keysym.sym);
         if (screen == Screen::Home) {
           if ((key == SDLK_LEFT || key == SDLK_RIGHT) &&
-              homeFocus == ui::HomeFocus::Pills) {
+              homeFocus == ui::HomeFocus::Pills &&
+              ui::libraryPillVisible()) {
             homePill = 1 - homePill;
           } else if ((key == SDLK_RETURN || key == SDLK_SPACE) &&
                      homeFocus == ui::HomeFocus::Pills) {
-            if (homePill == 0)
+            if (homePill == 0 && ui::libraryPillVisible())
               chooseAndImportGame();
             else
               openSettings();
@@ -2385,6 +2403,8 @@ int Application::run(int argc, char **argv) {
             homeFocus = ui::HomeFocus::Cards;
           } else if (key == SDLK_UP && homeFocus == ui::HomeFocus::Cards) {
             homeFocus = ui::HomeFocus::Pills;
+            if (!ui::libraryPillVisible())
+              homePill = 1;
           } else if (key == SDLK_LEFT)
             ui::moveSelection(selectedGame, -1,
                               static_cast<int>(gameLibrary.slotCount()));
@@ -2585,7 +2605,8 @@ int Application::run(int argc, char **argv) {
               event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_LEFT;
           const bool right =
               event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_RIGHT;
-          if ((left || right) && homeFocus == ui::HomeFocus::Pills) {
+          if ((left || right) && homeFocus == ui::HomeFocus::Pills &&
+              ui::libraryPillVisible()) {
             homePill = 1 - homePill;
           } else if (left) {
             ui::moveSelection(selectedGame, -1,
@@ -2594,14 +2615,17 @@ int Application::run(int argc, char **argv) {
             ui::moveSelection(selectedGame, 1,
                               static_cast<int>(gameLibrary.slotCount()));
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_UP) {
-            if (homeFocus == ui::HomeFocus::Cards)
+            if (homeFocus == ui::HomeFocus::Cards) {
               homeFocus = ui::HomeFocus::Pills;
+              if (!ui::libraryPillVisible())
+                homePill = 1;
+            }
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_DPAD_DOWN) {
             if (homeFocus == ui::HomeFocus::Pills)
               homeFocus = ui::HomeFocus::Cards;
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_A) {
             if (homeFocus == ui::HomeFocus::Pills) {
-              if (homePill == 0)
+              if (homePill == 0 && ui::libraryPillVisible())
                 chooseAndImportGame();
               else
                 openSettings();
@@ -2956,22 +2980,30 @@ int Application::run(int argc, char **argv) {
                  elapsed >= 2400) {
         captureFrame(renderer, "settings-controller-screenshot.bmp");
         smokeSettingsController = true;
+        // The library page is the one page with an action row, so the capture
+        // lands on the scan rather than the folder report above it.
+        settingCategory = 4;
+        settingRow = 1;
+      } else if (smokeSettingsController && !smokeSettingsLibrary &&
+                 elapsed >= 3000) {
+        captureFrame(renderer, "settings-library-screenshot.bmp");
+        smokeSettingsLibrary = true;
         settingCategory = 5;
         settingRow = 0;
         refreshCoreRows();
-      } else if (smokeSettingsController && !smokeSettingsCores &&
-                 elapsed >= 3000) {
+      } else if (smokeSettingsLibrary && !smokeSettingsCores &&
+                 elapsed >= 3400) {
         captureFrame(renderer, "settings-cores-screenshot.bmp");
         smokeSettingsCores = true;
         settingCategory = 6;
         settingRow = 0;
-      } else if (smokeSettingsCores && !smokeSettingsTheme && elapsed >= 3400) {
+      } else if (smokeSettingsCores && !smokeSettingsTheme && elapsed >= 3800) {
         captureFrame(renderer, "settings-theme-screenshot.bmp");
         smokeSettingsTheme = true;
         settingCategory = 7;
         settingRow = 0;
       } else if (smokeSettingsTheme && !smokeSettingsAbout &&
-                 elapsed >= 3800) {
+                 elapsed >= 4200) {
         captureFrame(renderer, "settings-about-screenshot.bmp");
         smokeSettingsAbout = true;
       }
