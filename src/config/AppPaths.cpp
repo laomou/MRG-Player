@@ -31,29 +31,6 @@ std::string preferenceRoot(const char *product) {
   return result;
 }
 
-bool copyIfMissing(const fs::path &source, const fs::path &destination,
-                   std::string &error) {
-  std::error_code ec;
-  if (!fs::exists(source, ec) || ec || fs::exists(destination, ec))
-    return !ec;
-  fs::create_directories(destination.parent_path(), ec);
-  if (ec) {
-    error = "Cannot create migrated data directory: " + ec.message();
-    return false;
-  }
-  if (fs::is_directory(source, ec)) {
-    fs::copy(source, destination,
-             fs::copy_options::recursive | fs::copy_options::skip_existing, ec);
-  } else {
-    fs::copy_file(source, destination, fs::copy_options::skip_existing, ec);
-  }
-  if (ec) {
-    error = "Cannot migrate legacy launcher data: " + ec.message();
-    return false;
-  }
-  return true;
-}
-
 } // namespace
 
 std::string dataRoot() {
@@ -68,31 +45,6 @@ std::string dataRoot() {
     return root + '/';
   }
   return preferenceRoot("MRGPlayer");
-}
-
-std::string legacyDataRoot() { return preferenceRoot("NESPlayerLauncher"); }
-
-bool migrateLegacyData(std::string &error) {
-  error.clear();
-  const fs::path current(paths::fromUtf8(dataRoot()));
-  const fs::path legacy(paths::fromUtf8(legacyDataRoot()));
-  if (current.empty()) {
-    error = std::string("Cannot locate MRG Player data directory: ") +
-            SDL_GetError();
-    return false;
-  }
-  std::error_code ec;
-  fs::create_directories(current, ec);
-  if (ec) {
-    error = "Cannot create MRG Player data directory: " + ec.message();
-    return false;
-  }
-  if (legacy.empty() || !fs::exists(legacy, ec) || ec)
-    return !ec;
-  return copyIfMissing(legacy / "settings.ini", current / "settings.ini",
-                       error) &&
-         copyIfMissing(legacy / "roms", current / "library" / "nes", error) &&
-         copyIfMissing(legacy / "saves", current / "saves" / "nes", error);
 }
 
 std::string executableDirectory() {
@@ -141,13 +93,10 @@ std::vector<std::string> romSearchDirectories() {
   }
 
   // Desktop default mirrors a card: Roms/<system> folders with Imgs/<system>
-  // beside them, so a tree copied off a device opens the way it left it. The
-  // older lowercase roms/ is still read, so an existing setup keeps working.
+  // beside them, so a tree copied off a device opens the way it left it.
   const std::string root = dataRoot();
-  if (!root.empty()) {
+  if (!root.empty())
     add(paths::toUtf8(paths::fromUtf8(root) / "Roms"));
-    add(paths::toUtf8(paths::fromUtf8(root) / "roms"));
-  }
   const std::string executable = executableDirectory();
   add(executable + "Roms");
   add(executable + "roms");
@@ -173,29 +122,15 @@ std::vector<std::string> coverDirectories() {
 }
 
 std::string coverNamesPath() {
-  std::string migrationError;
-  (void)migrateLegacyData(migrationError);
   const std::string root = dataRoot();
   const fs::path base = root.empty() ? fs::path(".") : paths::fromUtf8(root);
-  const fs::path target = base / "cover-names.json";
   std::error_code ec;
-  if (!fs::exists(target, ec)) {
-    // Covers used to live in <data>/covers, with names.json beside them. Move
-    // the mapping forward so a player's edits survive the change.
-    const fs::path legacy = base / "covers" / "names.json";
-    std::error_code legacyError;
-    if (fs::is_regular_file(legacy, legacyError)) {
-      std::error_code copyError;
-      fs::copy_file(legacy, target, fs::copy_options::overwrite_existing,
-                    copyError);
-    }
-  }
-  return paths::toUtf8(target);
+  if (!root.empty())
+    fs::create_directories(base, ec);
+  return paths::toUtf8(base / "cover-names.json");
 }
 
 std::string dataSubdirectory(std::string_view first, std::string_view second) {
-  std::string migrationError;
-  (void)migrateLegacyData(migrationError);
   const std::string root = dataRoot();
   const fs::path base = root.empty() ? fs::path(".") : paths::fromUtf8(root);
   const fs::path directory = base / std::string(first) / std::string(second);

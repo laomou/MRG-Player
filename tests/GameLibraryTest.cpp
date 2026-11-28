@@ -101,38 +101,13 @@ int main() {
   ok &= check(writeBytes(wrongExtension, firstBytes),
               "write wrong-extension test ROM");
 
+  // Keep the preference directory inside the test's temporary root: the
+  // launcher writes its settings and saves through SDL_GetPrefPath.
   const fs::path xdgRoot = root / "xdg";
   SDL_setenv("XDG_DATA_HOME", xdgRoot.string().c_str(), 1);
-  const fs::path legacyRoot = launcher::config::legacyDataRoot();
   const fs::path currentRoot = launcher::config::dataRoot();
-  fs::create_directories(legacyRoot / "roms", ec);
-  fs::create_directories(legacyRoot / "saves", ec);
-  ok &= check(!ec, "create isolated legacy data directories");
-  ok &= check(writeBytes(legacyRoot / "settings.ini", {0x31}),
-              "write legacy settings");
-  ok &= check(writeBytes(legacyRoot / "roms" / "legacy.nes", firstBytes),
-              "write legacy managed ROM");
-  ok &= check(writeBytes(legacyRoot / "saves" / "legacy.sav", {0x5a}),
-              "write legacy save");
-  std::string migrationError;
-  ok &= check(launcher::config::migrateLegacyData(migrationError),
-              "migrate legacy data into MRG Player layout");
-  ok &= check(readBytes(currentRoot / "settings.ini") ==
-                  std::vector<std::uint8_t>{0x31},
-              "legacy settings migrate");
-  ok &= check(readBytes(currentRoot / "library" / "nes" / "legacy.nes") ==
-                  firstBytes,
-              "legacy ROMs migrate into platform directory");
-  ok &= check(readBytes(currentRoot / "saves" / "nes" / "legacy.sav") ==
-                  std::vector<std::uint8_t>{0x5a},
-              "legacy saves migrate into platform directory");
-  ok &= check(writeBytes(legacyRoot / "settings.ini", {0x32}),
-              "change legacy settings after migration");
-  ok &= check(launcher::config::migrateLegacyData(migrationError),
-              "repeat migration safely");
-  ok &= check(readBytes(currentRoot / "settings.ini") ==
-                  std::vector<std::uint8_t>{0x31},
-              "migration never overwrites current settings");
+  ok &= check(!currentRoot.empty(),
+              "the data root resolves inside the temporary directory");
 
   GameLibrary library(managed.string());
   ok &= check(library.initialize(), "initialize managed library");

@@ -7,10 +7,7 @@
 namespace launcher::config {
 
 [[nodiscard]] std::string dataRoot();
-[[nodiscard]] std::string legacyDataRoot();
-[[nodiscard]] bool migrateLegacyData(std::string &error);
-// Directory for one class of runtime data, for example "saves" and "nes". The
-// legacy launcher directory is migrated on first use and the directory is
+// Directory for one class of runtime data, for example "saves" and "nes". It is
 // created if missing.
 [[nodiscard]] std::string dataSubdirectory(std::string_view first, std::string_view second);
 
@@ -30,8 +27,7 @@ namespace launcher::config {
 [[nodiscard]] std::vector<std::string> coverDirectories();
 
 // cover-names.json in the data root: the launcher title to No-Intro name
-// mapping used by automatic lookups. An older covers/names.json is copied over
-// the first time.
+// mapping used by automatic lookups.
 [[nodiscard]] std::string coverNamesPath();
 
 } // namespace launcher::config
