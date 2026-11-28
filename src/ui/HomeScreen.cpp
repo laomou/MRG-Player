@@ -748,28 +748,43 @@ void drawMoreGames(SDL_Renderer *renderer,
                     focusOpacity);
   }
 
+  if (count == 0) {
+    // A wall with nothing on it still has to say why: the tile is reachable
+    // even when the library is empty.
+    const TextId emptyHint = libraryPillVisible()
+                                 ? TextId::ChooseRom
+                                 : TextId::ChooseRomHandheld;
+    centeredText(renderer,
+                 static_cast<int>((layout.marginX + layout.rowRight) * 0.5f),
+                 static_cast<int>((layout.gridTop + layout.gridBottom) * 0.5f),
+                 tr(emptyHint, language), 2, {191, 201, 220, 255});
+  }
+
   // The one line under the grid says which game the ring is on: the covers are
   // unlabelled by design, so the page names the selection instead of printing a
   // caption under every card.
+  const float dividerY = static_cast<float>(kCanvasHeight) - 82.0f;
   if (count > 0) {
     const library::GameEntry &selected =
         gameLibrary.entries()[order[static_cast<std::size_t>(cursor)]];
-    text(renderer, static_cast<int>(layout.marginX),
-         static_cast<int>(layout.gridBottom) + 18,
-         fitText(selected.title,
-                 static_cast<int>(layout.rowRight - layout.marginX) - 220, 3),
-         3, accent);
     const std::string playTime =
         std::string(tr(TextId::PlayTime, language)) + ": " +
         i18n::durationText(selected.playSeconds, language);
-    text(renderer, static_cast<int>(layout.marginX),
-         static_cast<int>(layout.gridBottom) + 50, playTime, 1,
-         {232, 236, 244, 255});
+    const float playWidth = static_cast<float>(textWidth(playTime, 1));
+    const int titleRoom = static_cast<int>(
+        layout.rowRight - layout.marginX - playWidth - 28.0f);
+    // One line, both ends: the title takes the space the play time leaves, so
+    // neither runs into the divider under it.
+    const int titleY = static_cast<int>(dividerY) - 44;
+    text(renderer, static_cast<int>(layout.marginX), titleY,
+         fitText(selected.title, titleRoom, 3), 3, accent);
+    text(renderer,
+         static_cast<int>(layout.rowRight - playWidth), titleY + 12,
+         playTime, 1, {232, 236, 244, 255});
   }
 
-  fill(renderer, layout.marginX,
-       static_cast<float>(kCanvasHeight) - 82.0f,
-       layout.rowRight - layout.marginX, 1, {255, 255, 255, 24});
+  fill(renderer, layout.marginX, dividerY, layout.rowRight - layout.marginX, 1,
+       {255, 255, 255, 24});
   std::vector<Hint> hints;
   hints.push_back({tr(TextId::HintOptions, language), prompts.options, false});
   hints.push_back({tr(TextId::Back, language), prompts.back, false});
