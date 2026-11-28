@@ -195,13 +195,13 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
           removeRom ? SDL_Color{120, 214, 148, 20}
                     : SDL_Color{255, 98, 94, 20});
   text(renderer, x + 100, y + 273,
-       tr(removeRom ? TextId::SaveWillRemain : TextId::RomWillRemain, language),
+       tr(removeRom ? TextId::RomWillRemain : TextId::SaveWillRemain, language),
        2,
        removeRom ? SDL_Color{188, 234, 200, 255}
                  : SDL_Color{255, 185, 180, 255});
   text(renderer, x + 100, y + 296,
-       tr(removeRom ? TextId::SaveRemainDescription
-                    : TextId::RomRemainDescription,
+       tr(removeRom ? TextId::RomRemainDescription
+                    : TextId::SaveRemainDescription,
           language),
        1, {143, 166, 151, 255});
 

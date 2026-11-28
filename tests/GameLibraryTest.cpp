@@ -82,7 +82,7 @@ int main() {
                         ("nes-player-library-test-" + std::to_string(nonce));
   const fs::path sources = root / "sources";
   const fs::path managed = root / "managed";
-  const fs::path managedNes = managed / "nes";
+  const fs::path managedNes = managed / "FC";
   std::error_code ec;
   fs::create_directories(sources, ec);
   if (!check(!ec, "create temporary source directory"))
@@ -118,13 +118,14 @@ int main() {
               "import valid ROM");
   ok &= check(library.entries().size() == 1, "one imported entry is visible");
   ok &= check(library.entries()[0].title == "My Game",
-              "hash suffix is hidden from title");
-  const fs::path managedFirst = library.entries()[0].filePath;
-  ok &= check(managedFirst.parent_path() == managedNes,
-              "ROM is copied into managed directory");
-  ok &= check(managedFirst != first, "managed entry does not use source path");
-  ok &= check(readBytes(managedFirst) == firstBytes,
-              "managed ROM bytes match source");
+              "the extension is hidden from the title");
+  // The library indexes the file where the player put it: an import must not
+  // leave a second copy of the same bytes anywhere.
+  ok &= check(library.entries()[0].filePath ==
+                  launcher::paths::toUtf8(fs::absolute(first)),
+              "the entry points at the ROM the player added");
+  ok &= check(readBytes(first) == firstBytes, "the source ROM is left alone");
+  ok &= check(!fs::exists(managedNes), "no per-platform copy is created");
   ok &= check(library.lastImportedIndex() == 0,
               "newly imported entry is selected");
 
@@ -144,14 +145,15 @@ int main() {
       check(library.error() == "No installed runtime supports this game format",
             "unsupported format reports missing runtime");
 
-  ok &= check(writeBytes(managedNes / "manual-broken.nes", {0, 1, 2, 3}),
-              "write damaged managed ROM");
+  ok &= check(writeBytes(managed / "manual-broken.nes", {0, 1, 2, 3}),
+              "write a stray file into the library folder");
   GameLibrary rescanned(managed.string());
-  ok &= check(rescanned.initialize(), "rescan managed library");
+  ok &= check(rescanned.initialize(), "rescan library metadata");
   ok &= check(rescanned.entries().size() == 1,
-              "startup scan ignores damaged ROMs");
-  ok &= check(rescanned.entries()[0].filePath == managedFirst.string(),
-              "startup scan restores managed entry");
+              "the shelf holds only what the index knows about");
+  ok &= check(rescanned.entries()[0].filePath ==
+                  launcher::paths::toUtf8(fs::absolute(first)),
+              "rescan restores the indexed entry");
 
   ok &= check(rescanned.importGame(second.string()) == ImportStatus::Imported,
               "uppercase .NES extension is accepted");
@@ -161,6 +163,43 @@ int main() {
               "library entries sort case-insensitively");
   ok &= check(rescanned.slotCount() == 7,
               "small populated library retains seven carousel slots");
+
+  // An entry written by a build that copied ROMs has no path of its own. The
+  // first scan adopts the copy; the next import of the real file reclaims it.
+  {
+    const fs::path legacyDir = root / "legacy-copy";
+    const fs::path legacyPlatform = legacyDir / "FC";
+    fs::create_directories(legacyPlatform, ec);
+    ok &= check(!ec, "create the copy-era library folder");
+    const fs::path legacySource = sources / "legacy.nes";
+    ok &= check(writeBytes(legacySource, makeRom(0x55)), "write a legacy ROM");
+    const std::string legacyId = launcher::library::contentIdForPath(
+        legacySource.string(), launcher::game::GamePlatform::Nes);
+    ok &= check(legacyId.size() == 16, "hash a ROM into a content id");
+    const fs::path legacyCopy =
+        legacyPlatform / ("legacy__" + legacyId + ".nes");
+    ok &= check(writeBytes(legacyCopy, makeRom(0x55)),
+                "write the copy the old build made");
+    {
+      std::ofstream output(legacyDir / "metadata.tsv", std::ios::trunc);
+      output << "MRG_LIBRARY_METADATA_V2" << "\n"
+             << "1\t" << legacyId << "\t1\t9\t7\t0\t0\t0\t0\tOld Copy"
+             << "\n";
+    }
+    GameLibrary adopted(legacyDir.string());
+    ok &= check(adopted.initialize(), "load a library from the copy era");
+    ok &= check(adopted.entries().size() == 1 &&
+                    adopted.entries()[0].filePath == legacyCopy.string(),
+                "the old copy is adopted into the index");
+    ok &= check(adopted.importGame(legacySource.string()) ==
+                    ImportStatus::AlreadyPresent,
+                "the real file replaces the old copy");
+    ok &= check(!fs::exists(legacyCopy), "the old copy is reclaimed");
+    ok &= check(adopted.entries().size() == 1 &&
+                    adopted.entries()[0].filePath ==
+                        launcher::paths::toUtf8(fs::absolute(legacySource)),
+                "the entry follows the file the player already had");
+  }
 
   const std::string firstId = library.entries()[0].id;
   const int metadataIndex =
@@ -232,28 +271,29 @@ int main() {
   ok &= check(registry.deleteSaveData(firstEntry, saveError, saves.string()) ==
                   SaveDataStatus::Removed,
               "delete save data removes only the save file");
-  ok &= check(fs::exists(managedFirst), "deleting save data keeps managed ROM");
+  ok &= check(fs::exists(first), "deleting save data keeps the ROM");
   ok &= check(registry.deleteSaveData(firstEntry, saveError, saves.string()) ==
                   SaveDataStatus::Missing,
               "deleting absent save data is harmless");
 
-  ok &= check(writeBytes(savePath, {0x33}), "restore save before ROM removal");
-  const int firstIndex = rescanned.indexOfPath(managedFirst.string());
+  ok &= check(writeBytes(savePath, {0x33}), "restore save before removal");
+  const int firstIndex =
+      rescanned.indexOfPath(launcher::paths::toUtf8(fs::absolute(first)));
   ok &= check(firstIndex >= 0, "find imported ROM before removal");
   ok &= check(firstIndex >= 0 &&
                   rescanned.removeGame(static_cast<std::size_t>(firstIndex)),
-              "remove selected ROM from managed library");
-  ok &= check(!fs::exists(managedFirst), "managed ROM file is deleted");
-  ok &= check(fs::exists(savePath), "removing ROM retains separate save data");
+              "forget the selected game");
+  ok &= check(fs::exists(first), "forgetting a game keeps the ROM on the card");
+  ok &= check(fs::exists(savePath), "forgetting a game keeps its save data");
   ok &= check(rescanned.entries().size() == 1,
-              "library refreshes after ROM removal");
+              "library refreshes after the game is forgotten");
   ok &= check(!rescanned.removeGame(99), "invalid removal index is rejected");
   ok &=
       check(rescanned.error() == "Selected game is not in the managed library",
             "invalid removal error is precise");
 
   ok &= check(rescanned.importGame(first.string()) == ImportStatus::Imported,
-              "reimport removed game");
+              "adding the same ROM again lists it again");
   const int restoredMetadataIndex =
       rescanned.indexOfId(firstId, launcher::game::GamePlatform::Nes);
   ok &= check(restoredMetadataIndex >= 0 &&
@@ -261,7 +301,7 @@ int main() {
                   rescanned.entries()[restoredMetadataIndex].title ==
                       "Custom % Name" &&
                   rescanned.entries()[restoredMetadataIndex].playSeconds == 50,
-              "metadata survives ROM removal and reimport");
+              "favorite, title and play time survive being forgotten");
 
   // A game can carry its own display options, stored next to the rest of the
   // metadata so they follow the library directory.
@@ -301,7 +341,7 @@ int main() {
                                       overrideReadBack),
               "cleared override is gone");
 
-  // V1 metadata still loads, and the next save upgrades it to V2.
+  // V1 metadata still loads, and the next save upgrades it to V3.
   const fs::path legacyMetadataDir = root / "legacy-metadata";
   fs::create_directories(legacyMetadataDir, ec);
   {
@@ -328,8 +368,8 @@ int main() {
     std::getline(upgraded, upgradedHeader);
     const std::string upgradedRow{std::istreambuf_iterator<char>(upgraded),
                                   std::istreambuf_iterator<char>()};
-    ok &= check(upgradedHeader == "MRG_LIBRARY_METADATA_V2",
-                "metadata is rewritten as V2");
+    ok &= check(upgradedHeader == "MRG_LIBRARY_METADATA_V3",
+                "metadata is rewritten as V3");
     ok &= check(upgradedRow.find("Legacy Title") != std::string::npos,
                 "upgrade keeps the V1 title");
   }
@@ -419,10 +459,11 @@ int main() {
     ok &= check(unicodeEntry != unicodeLibrary.entries().end(),
                 "the non-ASCII title is kept in the library");
     if (unicodeEntry != unicodeLibrary.entries().end()) {
-      const fs::path managed =
-          launcher::paths::fromUtf8(unicodeEntry->filePath);
-      ok &= check(readBytes(managed) == makeRom(0x33),
-                  "the managed copy of a non-ASCII ROM is readable");
+      ok &= check(unicodeEntry->filePath ==
+                      launcher::paths::toUtf8(fs::absolute(unicodeRom)),
+                  "the non-ASCII ROM is indexed where it lies");
+      ok &= check(readBytes(unicodeRom) == makeRom(0x33),
+                  "the non-ASCII ROM stays readable in place");
     }
   }
   {

@@ -16,14 +16,14 @@ namespace fs = std::filesystem;
 constexpr std::uintmax_t kMaximumGameSize = 64U * 1024U * 1024U;
 
 constexpr PlatformDescriptor kUnknown{GamePlatform::Unknown, "unknown", "UNKNOWN", "GAME FILE", "unknown",
-                                    ""};
+                                    "", ""};
 
 constexpr std::array<PlatformDescriptor, 5> kDescriptors{{
-    {GamePlatform::Nes, "nes", "FC (NES)", ".NES ROM", "nes", "FC"},
-    {GamePlatform::Gba, "gba", "GAME BOY ADVANCE", ".GBA ROM", "gba", "GBA"},
-    {GamePlatform::Snes, "snes", "SFC (SNES)", ".SFC ROM", "snes", "SFC"},
-    {GamePlatform::GameBoy, "gb", "GAME BOY", ".GB ROM", "gb", "GB"},
-    {GamePlatform::Genesis, "genesis", "MD (GENESIS)", ".MD ROM", "genesis", "MD"},
+    {GamePlatform::Nes, "nes", "FC (NES)", ".NES ROM", "FC", "FC", "nes"},
+    {GamePlatform::Gba, "gba", "GAME BOY ADVANCE", ".GBA ROM", "GBA", "GBA", "gba"},
+    {GamePlatform::Snes, "snes", "SFC (SNES)", ".SFC ROM", "SFC", "SFC", "snes"},
+    {GamePlatform::GameBoy, "gb", "GAME BOY", ".GB ROM", "GB", "GB", "gb"},
+    {GamePlatform::Genesis, "genesis", "MD (GENESIS)", ".MD ROM", "MD", "MD", "genesis"},
 }};
 
 struct ExtensionMap {
@@ -112,6 +112,10 @@ const PlatformDescriptor &platformDescriptor(GamePlatform platform) noexcept {
       return descriptor;
   }
   return kUnknown;
+}
+
+std::vector<PlatformDescriptor> platformDescriptors() {
+  return {kDescriptors.begin(), kDescriptors.end()};
 }
 
 GamePlatform platformFromExtension(const std::string &path) noexcept {

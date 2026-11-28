@@ -8,9 +8,9 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 
 - Native 1280×720 resizable, high-DPI launcher UI with fullscreen support
 - English and Simplified Chinese UI
-- Platform-neutral game model, managed library, runtime interface, and runtime registry
+- Platform-neutral game model, game library index, runtime interface, and runtime registry
 - Dynamic platform and file-type labels in the library and management UI
-- Persistent managed library with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
+- Persistent game library that indexes ROMs where they lie, with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
 - Box art per game in the card's own `Imgs/<system>/` folder, the file the stock launcher shows, so art dropped in by hand and art the launcher fetches are the same picture; map a local title to a libretro-thumbnails name in `cover-names.json` to make lookups hit, and cards without art keep the plain navy card with a console badge while the selected game's art becomes the blurred background
 - Console-agnostic runtime: video, audio, input, pacing, battery saves, and controller hot plugging are handled once for every core
 - In-game pause menu with three persistent instant-state slots, console reset, and a confirmed power cycle (cold boot that keeps battery saves)
@@ -29,7 +29,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - libretro back end for NES, GBA, SNES, Game Boy, and Genesis: core discovery, `MRG_CORES_DIR` override, `.so.zip` unpacking, isolated `SDL_LoadObject` loading, and software framebuffer handling for 0RGB1555, RGB565, and XRGB8888 cores
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
-- Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
+- Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each validated for its own platform before the library lists it
 - ROM folder scanning: on a build without a file dialog, the folders named by `MRG_ROM_DIRS` are imported on first start, and the Home import action rescans them; without that variable a desktop build reads the card layout, `Roms/<system>` beside `Imgs/<system>` under the data root and beside the executable, and still reads an older `roms/`
 - Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, rewind, runahead, frame stepping, screenshots, turbo, display overrides, and mute
 
@@ -43,7 +43,7 @@ src/
 ├── config/                  # Settings, input bindings, data roots, and migration
 ├── game/                    # Platform descriptors, detection, and validation
 ├── i18n/                    # English and Simplified Chinese catalog
-├── library/                 # Platform-neutral managed game library
+├── library/                 # Game library: metadata and ROM paths
 ├── model/                   # Launcher card style metadata
 ├── platform/                # Optional native file picker
 ├── runtime/                 # IGameRuntime, RuntimeRegistry, video geometry
@@ -53,36 +53,38 @@ src/
 
 `IGameRuntime` defines the video/audio/input lifecycle used by the application. `RuntimeRegistry` maps `GameEntry::platform` to `LibretroRuntime`, which opens a matching core through `SDL_LoadObject` and adapts it to that interface. `third_party/libretro/libretro.h` is the vendored upstream header, so the ABI matches the cores it loads.
 
-Managed data uses platform subdirectories so future runtimes do not share ROM or save namespaces:
+The layout has two halves, and only one of them is yours to edit:
 
 ```text
-MRGPlayer/
+<card>/                       # the open half: the stock launcher reads it too
+├── Roms/FC/, Roms/SFC/, ...   # the games, one folder per system
+└── Imgs/FC/<title>.png       # box art beside them, the file the stock launcher shows
+
+<data root>/                  # everything the launcher manages
 ├── settings.ini
 ├── cores/                    # libretro cores (.so/.dylib/.dll, or their .zip)
-├── cores-unpacked/           # cores extracted from a .zip
+│   └── unpacked/             # cores extracted from a .zip
 ├── system/                   # core system and BIOS files
 ├── library/
-│   ├── metadata.tsv          # favorites, titles, play time, display overrides
-│   ├── nes/
-│   └── gba/                  # one directory per platform
-├── saves/
-│   ├── nes/
-│   └── gba/                  # one .srm battery save per game
-├── states/
-│   ├── nes/
-│   └── gba/
+│   ├── metadata.tsv          # path, favorites, titles, play time, display overrides
+│   └── cover-names.json      # local title to libretro-thumbnails name, for lookups
+├── saves/FC/                 # one .srm battery save per game
+├── states/FC/                # three instant-state slots per game
 ├── core-options/             # one `<core>.tsv` of chosen values per core
-├── cover-names.json          # local title to libretro-thumbnails name, for lookups
 ├── screenshots/              # F12 captures
-├── Roms/                     # the card layout: Roms/FC, Roms/MD, Roms/GBA, ...
-└── Imgs/                     # art beside it: Imgs/FC/<title>.png
+└── rom-cache/                # a one-run ASCII copy of a non-ASCII ROM name
 ```
 
-A desktop build reads the same layout a card uses, `Roms/<system>` with `Imgs/<system>` beside
-it, so a folder copied off a device opens as it left it and one cover file serves both. A tree
-named `roms/` next to the executable or the data root is still scanned for older setups.
+Every platform folder uses the card's name -- `FC`, `SFC`, `MD`, `GB`, `GBA` -- so one system has
+one name everywhere a player can see it. A desktop build is the same two halves with the data root
+standing in for the card, so a folder copied off a device opens as it left it and one cover file
+serves both. A tree named `roms/` next to the executable or the data root is still scanned for
+older setups.
 
-Library metadata is keyed by platform and stable content ID, so favorite, custom-title, play-history, and per-game display data survives removing and later reimporting the same game. `metadata.tsv` is written in a versioned format that also holds each game's optional display override; files written by older builds still load and are rewritten in the current format on the next save.
+[docs/paths.md](docs/paths.md) spells out which folder is whose, who writes each one, and what
+deleting it costs.
+
+Library metadata is keyed by platform and stable content ID, and each row also stores the path of the ROM. The library is an index, not a copy: a game is read from the file the player put on the card, and removing it from the library never deletes that file. A game that is moved or renamed is picked up again by the next scan, which matches the same bytes to the same entry, so favorite, custom-title, play-history, and per-game display data survive removing and later reimporting the same game. `metadata.tsv` is written in a versioned format that also holds each game's optional display override; files written by older builds still load and are rewritten in the current format on the next save.
 
 ## Build and run
 
@@ -112,9 +114,9 @@ The tag without its leading `v` is passed in as `MRG_VERSION_STRING`, so the Abo
 
 ## Game library
 
-Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the file is copied to its managed directory: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
+Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the game is listed: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. The file itself stays where it is -- nothing is copied into the data root, so a card holds one copy of each game. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
 
-On Linux the root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from `SDL_GetPrefPath("MRG", "MRGPlayer")`, and a device build points `MRG_DATA_DIR` at the card instead. Everything inside it is one layout on both: `Roms/<system>/` for the games the card ships, `Imgs/<system>/` for their art beside it, and `library/`, `saves/`, `states/`, `system/`, `core-options/` and `rom-cache/` for what the launcher manages.
+On Linux the root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from `SDL_GetPrefPath("MRG", "MRGPlayer")`, and a device build points `MRG_DATA_DIR` at the card instead. It holds what the launcher manages: `library/`, `saves/`, `states/`, `system/`, `core-options/`, `cores/` and `rom-cache/`. The games and their art sit outside it, in `Roms/<system>/` and `Imgs/<system>/` on the card -- `MRG_CARD_ROOT` names it, and on a desktop the data root stands in for the card.
 
 ### Folders on a card
 
@@ -135,7 +137,7 @@ every machine. Only the top of the tree is tidied: a folder you made yourself (`
 a game already inside a system folder, documentation such as `Roms/README.md`, and a name that
 already exists in the target folder are all left exactly where they are.
 
-Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
+Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the game from the library, or delete its battery save. Removing a game only forgets the library entry: the ROM stays on the card and the save, favorite, title, and play time are kept, so adding the same file again picks up where it left off. Deleting save data retains the game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
 ### Box art
 
@@ -144,8 +146,8 @@ tree, with the system folder named the way the card names it, so `Imgs/FC/F1赛�
 `Roms/FC/F1赛车.nes`. That is exactly the file the stock launcher shows, so art dropped in by hand,
 shipped with an image pack, or fetched here is the same picture instead of two that can disagree.
 
-Most people have no art on disk, so the launcher can fetch it. It reads `cover-names.json` in the
-data root, which is created with three examples and never overwritten:
+Most people have no art on disk, so the launcher can fetch it. It reads `library/cover-names.json`,
+which is created with three examples and never overwritten:
 
 ```json
 {
@@ -368,7 +370,7 @@ Every platform runs through a libretro core that must already be on the machine;
 
 **Settings → Cores** installs the preferred core for each platform. Each row names the core, shows how much space the installed library takes, and reports whether it is there. Enter on a row downloads that core's archive from the libretro buildbot and unpacks it into `cores/` under the data root; on a row that is already installed the same key re-downloads the current build, which is how a core is updated. Delete removes the core, its archive, and any copy unpacked from one, and asks for a second press first so a stray key never costs a download. R re-reads the disk. Every outcome is reported as a banner on the page. The download runs on a background thread, so the launcher keeps drawing. On Linux and macOS it uses `curl` with `wget` as a fallback; on Windows it uses WinHTTP, so a stock machine needs no extra tools. The buildbot only publishes rolling `latest/` directories, so an install fetches whatever that directory holds today; the SHA-256 of each archive is printed to stderr for reference rather than enforced. Set `MRG_CORES_BASE_URL` to a mirror that ends in `/` to fetch from somewhere else. If a buildbot directory is unreachable, the row's install fails with a message that says which step failed.
 
-A downloaded archive needs no manual step: the libretro buildbot publishes every core as a one-file zip, and a <core>.so.zip (`.dll.zip` on Windows, `.dylib.zip` on macOS) sitting where the library itself would be is unpacked on first use. The extracted copy lands in `cores-unpacked/` under the data root, which keeps read-only system directories untouched, and it is reused on later launches while its bytes still match the archive. An archive that is not a zip, or that does not contain the expected library, is reported on stderr and skipped, so a stray file never hides a working core.
+A downloaded archive needs no manual step: the libretro buildbot publishes every core as a one-file zip, and a <core>.so.zip (`.dll.zip` on Windows, `.dylib.zip` on macOS) sitting where the library itself would be is unpacked on first use. The extracted copy lands in `cores/unpacked/` under the data root, which keeps read-only system directories untouched, and it is reused on later launches while its bytes still match the archive. An archive that is not a zip, or that does not contain the expected library, is reported on stderr and skipped, so a stray file never hides a working core.
 
 Cores open the ROM through narrow file APIs, so a game whose file name is not plain ASCII (`F1赛车.nes`) is copied once into `rom-cache/` under the data root and the core is handed that ASCII path instead. The copy is removed when the game stops, and the error message a failed load reports still names the file the player picked.
 
@@ -382,7 +384,7 @@ Everything above the runtime interface treats every platform the same: one pause
 - Game compatibility, expansion audio, FDS support, and mapper coverage are the core's, not the launcher's; pick a core that covers the titles you play.
 - Only software-rendered cores are supported, and a core that insists on an OpenGL or Vulkan context is refused.
 - Instant states are the core's own blob, so their cross-build compatibility is the core's, not ours; the launcher still rejects a state written by a different core.
-- Box art is looked up by exact No-Intro name. A title the thumbnails project does not ship needs an entry in `cover-names.json` under the data root, or `Imgs/<system>/<title>.png` dropped in by hand.
+- Box art is looked up by exact No-Intro name. A title the thumbnails project does not ship needs an entry in `library/cover-names.json`, or `Imgs/<system>/<title>.png` dropped in by hand.
 
 ## Tests
 
@@ -414,4 +416,4 @@ The UI regression tests exercise control-help bindings, keyboard/controller navi
 
 The `--smoke-test-*` flags are a developer tool and are compiled out by default: a build without `-DMRG_ENABLE_SMOKE_TESTS=ON` reports them as unknown options, so a released binary carries neither the flags nor the frame-capture code they drive. CI configures with the option on.
 
-Smoke tests render 1280×720 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, cores, theme, and about pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, the core options panel, and the controls drawer, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `core-option-text-test` checks the Chinese core-option labels and the fallbacks; `cover-names-test` checks the box-art mapping parser, the console repositories, and the URL candidates; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, rewinding through remembered snapshots, showing the frame runahead produces, unpacking the same core from stored and deflated zips, removing an installed core, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.
+Smoke tests render 1280×720 BMP files in the working directory, which git ignores; the settings smoke test captures the general, display, audio, controller, cores, theme, and about pages. The pause smoke test saves and reloads a slot, exercises fast-forward with both audio policies, the mute hotkey, slow motion, single-frame stepping and the slot metadata card, captures the pause card, the per-game display panel, the core options panel, and the controls drawer, then resets and power cycles the console. The unit test covers validation, import, platform metadata, platform directory layout, duplicate detection, discovery, runtime registration, save routing, independent game/save removal, library metadata persistence, favorite ordering, play-history accumulation, per-game display overrides, the older-metadata upgrade path, and configurable input persistence, adaptive prompt selection, controller-layout labels, and no-controller fallback. `input-bindings-test` checks the default binding table, the eight-versus-ten action split, and the turbo duty cycle; `core-option-text-test` checks the Chinese core-option labels and the fallbacks; `cover-names-test` checks the box-art mapping parser, the console repositories, and the URL candidates; `data-layout-test` checks that a data root written by a previous build is moved into the current folder names, that a newer file is never overwritten by an older one, and that a downloaded cover can never land inside the pak; `png-writer-test` decodes the file the screenshot writer produces. `libretro-runtime-test` builds stub cores under the GBA and NES names, points `MRG_CORES_DIR` at them, and drives the whole back end: platform detection, core discovery, NES routing through libretro, `dlopen` and symbol resolution, frames, instant-state round trips and their determinism, battery saves, a power cycle, collecting the core's declared options, answering `GET_VARIABLE`, flagging updates back to the core, persisting and resetting those values, rewinding through remembered snapshots, showing the frame runahead produces, unpacking the same core from stored and deflated zips, removing an installed core, and the error raised when no core is installed. Setting `MRG_TEST_CORE_INSTALL=1` additionally downloads the current NES core and checks the installer end to end, which is why it is opt-in: the suite itself never touches the network. `sha256-test` checks the hash helper against the FIPS 180-4 vectors.

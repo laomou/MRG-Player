@@ -19,11 +19,19 @@ struct PlatformDescriptor {
   std::string_view fileTypeLabel;
   std::string_view managedDirectory;
   // The folder a card uses for this system, as the stock launcher names it, or
-  // empty when it has none.
+  // empty when it has none. The launcher's own folders are named the same way,
+  // so one system has one name everywhere a player can see it.
   std::string_view cardDirectory;
+  // What an earlier build called the managed folder, before it used the card's
+  // names. Kept so the data a player already owns can be moved once instead of
+  // being orphaned.
+  std::string_view legacyManagedDirectory;
 };
 
 [[nodiscard]] const PlatformDescriptor &platformDescriptor(GamePlatform platform) noexcept;
+// Every platform the launcher imports, in the order they are listed. A copy, so
+// the table stays private to the file that owns it.
+[[nodiscard]] std::vector<PlatformDescriptor> platformDescriptors();
 [[nodiscard]] GamePlatform platformFromExtension(const std::string &path) noexcept;
 // The platform the enclosing folders name, or Unknown when they name none.
 [[nodiscard]] GamePlatform platformFromDirectory(const std::string &path) noexcept;

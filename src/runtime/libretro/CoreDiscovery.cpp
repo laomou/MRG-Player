@@ -56,12 +56,14 @@ const CoreFamily *familyFor(game::GamePlatform platform) {
 }
 
 // Downloaded cores arrive as <name>.so.zip and are unpacked once into the data
-// directory, which keeps read-only system directories untouched.
+// directory, which keeps read-only system directories untouched. They live
+// inside the folder that holds the archives, so the whole tree moves or goes as
+// one.
 fs::path unpackedCoreDirectory() {
   const std::string root = config::dataRoot();
   if (root.empty())
     return {};
-  return paths::fromUtf8(root) / "cores-unpacked";
+  return paths::fromUtf8(root) / "cores" / "unpacked";
 }
 
 } // namespace
