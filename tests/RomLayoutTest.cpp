@@ -66,6 +66,10 @@ int main() {
   ok &= check(writeFile(roms / "FC" / "README.md"), "write FC/README.md");
   ok &= check(writeFile(roms / "MD" / "readme.txt"), "write MD/readme.txt");
   ok &= check(writeFile(roms / "GB" / "LICENSE"), "write GB/LICENSE");
+  // The stock launcher writes these into the same folders as the games.
+  ok &= check(writeFile(roms / "GB" / "GB_cache7.db"), "write GB/GB_cache7.db");
+  ok &= check(writeFile(roms / "GB" / "recentlist.json"), "write GB/recentlist.json");
+  ok &= check(writeFile(roms / "FC" / "box.png"), "write FC/box.png");
 
   // Outside a system folder the extension still decides.
   ok &= check(writeFile(roms / "Mystery" / "Unknown.nes"), "write Mystery/Unknown.nes");
@@ -87,6 +91,11 @@ int main() {
   ok &= check(detectPlatform(card + "/FC/README.md") == GamePlatform::Unknown, "Roms/FC/README.md is documentation");
   ok &= check(detectPlatform(card + "/MD/readme.txt") == GamePlatform::Unknown, "Roms/MD/readme.txt is documentation");
   ok &= check(detectPlatform(card + "/GB/LICENSE") == GamePlatform::Unknown, "Roms/GB/LICENSE is a licence");
+  ok &= check(detectPlatform(card + "/GB/GB_cache7.db") == GamePlatform::Unknown,
+              "Roms/GB/GB_cache7.db is the stock launcher's index, not a game");
+  ok &= check(detectPlatform(card + "/GB/recentlist.json") == GamePlatform::Unknown,
+              "Roms/GB/recentlist.json is the stock launcher's recent list");
+  ok &= check(detectPlatform(card + "/FC/box.png") == GamePlatform::Unknown, "Roms/FC/box.png is box art, not a game");
   ok &= check(detectPlatform(card + "/Mystery/Unknown.nes") == GamePlatform::Nes,
               "an extension outside a system folder still counts");
   ok &= check(detectPlatform(card + "/Mystery/Unknown.md") == GamePlatform::Genesis,
@@ -105,6 +114,9 @@ int main() {
   ok &= check(!names(found, "README.md"), "the scan skips Roms/FC/README.md");
   ok &= check(!names(found, "readme.txt"), "the scan skips Roms/MD/readme.txt");
   ok &= check(!names(found, "LICENSE"), "the scan skips Roms/GB/LICENSE");
+  ok &= check(!names(found, "GB_cache7.db"), "the scan skips the stock launcher's index");
+  ok &= check(!names(found, "recentlist.json"), "the scan skips the stock launcher's recent list");
+  ok &= check(!names(found, "box.png"), "the scan skips box art");
   ok &= check(names(found, "Unknown.nes"), "the scan finds a game outside a system folder");
 
   // A game dropped straight into Roms/ is filed under the folder a card would

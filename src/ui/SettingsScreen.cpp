@@ -73,6 +73,24 @@ constexpr int generalRowCount(bool keyboardPrompts) {
 constexpr int generalSettingAt(int row, bool keyboardPrompts) {
   return !keyboardPrompts && row >= kRewindSetting ? row + 1 : row;
 }
+// The handheld has one panel and no window manager, so "windowed" is not a
+// choice there: the display page drops the mode line and the three display
+// settings move up into its slot.
+constexpr int displayRowCount() {
+#if defined(MRG_PLATFORM_TRIMUI)
+  return 3;
+#else
+  return 4;
+#endif
+}
+constexpr int displaySettingAt(int row) {
+#if defined(MRG_PLATFORM_TRIMUI)
+  return row + 1;
+#else
+  return row;
+#endif
+}
+
 constexpr int kGeneralRowY = kContentTop + 64;
 constexpr int kGeneralRowStep = 67;
 constexpr int kGeneralRowHeight = 61;
@@ -146,6 +164,10 @@ TextId categoryText(int category) {
 }
 
 TextId categoryDescription(int category) {
+#if defined(MRG_PLATFORM_TRIMUI)
+  if (category == 1)
+    return TextId::DisplayHandheldDescription;
+#endif
   constexpr std::array<TextId, kCategoryCount> ids{
       TextId::GeneralDescription, TextId::DisplayDescription,
       TextId::AudioDescription,   TextId::ControllerDescription,
@@ -254,6 +276,16 @@ TextId controllerStyleText(config::ControllerStyle style) {
 
 } // namespace
 
+// Every core file ends in "_libretro.so"; on a 1024 px screen that suffix eats
+// the room the name itself needs, so the row shows the name alone.
+std::string coreDisplayName(const std::string &file) {
+  static constexpr const char *kSuffix = "_libretro.so";
+  const std::size_t suffix = std::char_traits<char>::length(kSuffix);
+  if (file.size() > suffix && file.compare(file.size() - suffix, suffix, kSuffix) == 0)
+    return file.substr(0, file.size() - suffix);
+  return file;
+}
+
 CoreRowColumns coreRowColumns(const std::string &status) {
   const int statusWidth = textWidth(status, 1) + 26;
   const int statusX = kCorePillRight - statusWidth;
@@ -279,7 +311,7 @@ int settingRowCount(int category, bool keyboardPrompts) {
   if (category == 0)
     return generalRowCount(keyboardPrompts);
   if (category == 1)
-    return 4;
+    return displayRowCount();
   if (category == 2)
     return 3;
   if (category == 3)
@@ -380,8 +412,9 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts) {
   if (category == 5)
     return kCoreRows.hit(x, y);
   auto rows = kSettingRows;
-  rows.count = category == 1 ? 4
-               : (category == 2 ? 3 : (category == 6 ? kThemeRowCount : 1));
+  rows.count = category == 1
+                   ? displayRowCount()
+                   : (category == 2 ? 3 : (category == 6 ? kThemeRowCount : 1));
   return rows.hit(x, y);
 }
 
@@ -410,17 +443,23 @@ void changeSetting(AppSettings &settings, int category, int row,
       break;
     }
   } else if (category == 1) {
-    if (row == 0)
+    switch (displaySettingAt(row)) {
+    case 0:
       settings.fullscreen = !settings.fullscreen;
-    else if (row == 1)
+      break;
+    case 1:
       settings.videoAspect = (settings.videoAspect + direction + 3) % 3;
-    else if (row == 2)
+      break;
+    case 2:
       settings.videoIntegerScale = !settings.videoIntegerScale;
-    else
+      break;
+    default:
       // Three stops that wrap, so a press at either end moves the setting
       // instead of doing nothing.
       settings.videoOverscan =
           (settings.videoOverscan + direction * 8 + 24) % 24;
+      break;
+    }
   } else if (category == 2) {
     if (row == 0)
       settings.volume = (settings.volume + direction * 10 + 110) % 110;
@@ -554,28 +593,47 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                      rows[setting].second, game.accent, focusOpacity);
     }
   } else if (category == 1) {
-    drawSettingRow(
-        renderer, kSettingRows.item(0), row == 0, contentFocused && row == 0,
-        tr(TextId::DisplayMode, language), std::string(),
-        tr(settings.fullscreen ? TextId::Fullscreen : TextId::Windowed,
-           language),
-        game.accent, focusOpacity);
-    drawSettingRow(renderer, kSettingRows.item(1), row == 1, contentFocused && row == 1,
-                   tr(TextId::AspectRatio, language),
-                   tr(TextId::AspectRatioDescription, language),
-                   tr(aspectText(settings.videoAspect), language), game.accent,
-                   focusOpacity);
-    drawSettingRow(
-        renderer, kSettingRows.item(2), row == 2, contentFocused && row == 2,
-        tr(TextId::IntegerScale, language),
-        tr(TextId::IntegerScaleDescription, language),
-        tr(settings.videoIntegerScale ? TextId::On : TextId::Off, language),
-        game.accent, focusOpacity);
-    drawSettingRow(renderer, kSettingRows.item(3), row == 3, contentFocused && row == 3,
-                   tr(TextId::Overscan, language),
-                   tr(TextId::OverscanDescription, language),
-                   std::to_string(settings.videoOverscan) + " px",
-                   game.accent, focusOpacity);
+    // One table for both layouts: the row the keys are on and the setting it
+    // edits are allowed to differ, which is what lets the handheld leave the
+    // window mode out without a second copy of this block.
+    for (int index = 0; index < displayRowCount(); ++index) {
+      const Rect bounds = kSettingRows.item(index);
+      const bool onRow = row == index;
+      const bool focusedHere = contentFocused && onRow;
+      switch (displaySettingAt(index)) {
+      case 0:
+        drawSettingRow(renderer, bounds, onRow, focusedHere,
+                       tr(TextId::DisplayMode, language), std::string(),
+                       tr(settings.fullscreen ? TextId::Fullscreen
+                                              : TextId::Windowed,
+                          language),
+                       game.accent, focusOpacity);
+        break;
+      case 1:
+        drawSettingRow(renderer, bounds, onRow, focusedHere,
+                       tr(TextId::AspectRatio, language),
+                       tr(TextId::AspectRatioDescription, language),
+                       tr(aspectText(settings.videoAspect), language),
+                       game.accent, focusOpacity);
+        break;
+      case 2:
+        drawSettingRow(renderer, bounds, onRow, focusedHere,
+                       tr(TextId::IntegerScale, language),
+                       tr(TextId::IntegerScaleDescription, language),
+                       tr(settings.videoIntegerScale ? TextId::On
+                                                     : TextId::Off,
+                          language),
+                       game.accent, focusOpacity);
+        break;
+      default:
+        drawSettingRow(renderer, bounds, onRow, focusedHere,
+                       tr(TextId::Overscan, language),
+                       tr(TextId::OverscanDescription, language),
+                       std::to_string(settings.videoOverscan) + " px",
+                       game.accent, focusOpacity);
+        break;
+      }
+    }
   } else if (category == 2) {
     drawSettingRow(renderer, kSettingRows.item(0), row == 0, contentFocused && row == 0,
                    tr(TextId::MasterVolume, language),
@@ -626,14 +684,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
     for (std::size_t index = 0; index < config::kInputActionCount; ++index) {
       const int bindingRow = static_cast<int>(index) + 4;
       // The pad button every port can bind; the key half only exists on the port
-      // the keyboard belongs to.
-      const std::string binding =
-          config::controllerButtonPrompt(pads[index], resolvedControllerStyle);
+      // the keyboard belongs to. The names are shortened here, and only here:
+      // two binding columns share the track, so "Right Shift / RIGHTSHOULDER"
+      // would be ellipsised into "Right Shift / RIGHTSH..." on the Brick canvas.
+      const std::string binding = config::controllerButtonShortPrompt(
+          pads[index], resolvedControllerStyle);
       const std::string value =
           bindingCapture && row == bindingRow
               ? tr(TextId::PressInput, language)
               : player == 0
-                    ? config::keyBindingName(keys[index]) + " / " + binding
+                    ? config::keyBindingShortName(keys[index]) + " / " + binding
                     : binding;
       drawCompactRow(
           renderer, controllerRowBounds(bindingRow),
@@ -686,13 +746,23 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
         continue;
       const CoreRow &entry = cores[static_cast<std::size_t>(index)];
       const int centerY = y + kCoreRowHeight / 2;
-      text(renderer, kTrackX + 22, textCenteredY(entry.platform, centerY, 2),
-           entry.platform, 2,
+      // "GAME BOY ADVANCE" at scale 2 is wider than the platform column, and it
+      // used to run straight into the core filename. Shrink it a step before
+      // shortening it: the platform is the one thing on this page that must stay
+      // readable at a glance.
+      const int platformWidth = kCoreColumnCoreX - kColumnGutter - (kTrackX + 22);
+      const int platformScale =
+          textWidth(entry.platform, 2) <= platformWidth ? 2 : 1;
+      const std::string platformText =
+          fitText(entry.platform, platformWidth, platformScale);
+      text(renderer, kTrackX + 22,
+           textCenteredY(platformText, centerY, platformScale), platformText,
+           platformScale,
            selected ? SDL_Color{255, 255, 255, 255}
                     : SDL_Color{232, 238, 246, 255});
       const CoreRowColumns columns = coreRowColumns(entry.status);
       const std::string fittedCore =
-          fitText(entry.core, static_cast<int>(columns.filename.w), 1);
+          fitText(coreDisplayName(entry.core), static_cast<int>(columns.filename.w), 1);
       text(renderer, static_cast<int>(columns.filename.x),
            textCenteredY(fittedCore, centerY, 1), fittedCore, 1,
            {176, 193, 211, 255});

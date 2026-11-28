@@ -153,6 +153,14 @@ InputDeviceKind resolvePromptDevice(PromptDeviceMode mode,
                                     bool controllerConnected) noexcept;
 std::string controllerButtonPrompt(SDL_GameControllerButton button,
                                    ControllerStyle style);
+// Short names for the controller page: it prints fourteen rows side by side on
+// a 1024 canvas, so the value half has room for a key and a button but not for
+// "RIGHTSHOULDER" next to it. Only the dense list uses these; every other screen
+// keeps the full printable name.
+[[nodiscard]] std::string keyBindingShortName(SDL_Keycode key);
+[[nodiscard]] std::string
+controllerButtonShortPrompt(SDL_GameControllerButton button,
+                             ControllerStyle style);
 // Bindings decide the words for buttons whose bound key is not a menu key --
 // the shelf's options drawer -- so the prompt set has to see them. Passing none
 // falls back to the defaults, which is what the tests and the first frame use.

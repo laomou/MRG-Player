@@ -71,10 +71,25 @@ constexpr std::array<std::string_view, 7> kDocumentationStems{{
     "readme", "license", "licence", "copying", "changelog", "changes", "credits",
 }};
 
+// The stock launcher keeps its own index, cover and save files inside the system
+// folders ("Roms/GB/GB_cache7.db", "Roms/GB/recentlist.json"), right where a
+// game sits. Being inside the folder is not enough to make one playable, so
+// these extensions are refused before the folder gets a say: an index imported
+// as a game would be launched with the wrong core and fail.
+constexpr std::array<std::string_view, 22> kDataFileExtensions{{
+    ".db",  ".sqlite", ".json", ".xml",  ".txt", ".ini", ".cfg", ".log", ".sav", ".srm", ".state",
+    ".bmp", ".png",    ".jpg",  ".jpeg", ".gif", ".mp3", ".wav", ".mp4", ".zip", ".7z",  ".rar",
+}};
+
 std::string lowerAscii(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
+}
+
+bool isDataFile(const fs::path &path) {
+  const std::string extension = lowerAscii(paths::toUtf8(path.extension()));
+  return std::find(kDataFileExtensions.begin(), kDataFileExtensions.end(), extension) != kDataFileExtensions.end();
 }
 
 bool isDocumentation(const fs::path &path) {
@@ -149,6 +164,9 @@ GamePlatform detectPlatform(const std::string &path) noexcept {
   // A readme beside the games is documentation, not a ROM, even when its
   // extension is a game one.
   if (isDocumentation(paths::fromUtf8(path)))
+    return GamePlatform::Unknown;
+  // A cache file the stock launcher wrote next to its games is not one.
+  if (isDataFile(paths::fromUtf8(path)))
     return GamePlatform::Unknown;
   const GamePlatform fromDirectory = platformFromDirectory(path);
   if (fromDirectory != GamePlatform::Unknown)
