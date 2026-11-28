@@ -49,6 +49,10 @@ class CoverCache : public CoverSource {
   // Installs a finished download. Call once per frame, outside drawing.
   void poll(SDL_Renderer *renderer);
 
+  // True once after a download failed because the host was unreachable. The
+  // cache stops asking for the rest of the session; the caller can say so.
+  [[nodiscard]] bool takeOfflineNotice();
+
   // Bumped whenever art appears, so a screen that only redraws on change knows
   // there is something new to show.
   [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
@@ -61,6 +65,7 @@ class CoverCache : public CoverSource {
   struct DownloadJob {
     std::atomic<bool> done{false};
     bool ok = false;
+    bool networkFailure = false;
     std::string id;
     std::string target;
   };
@@ -85,6 +90,10 @@ class CoverCache : public CoverSource {
   std::map<std::string, SDL_Texture *> covers_;
   std::map<std::string, SDL_Texture *> wallpapers_;
   std::set<std::string> attempted_;
+  // A host that cannot be reached fails every later request the same way, so
+  // one failure turns cover downloads off until the next launch.
+  bool offline_ = false;
+  bool noticePending_ = false;
   std::thread worker_;
   std::shared_ptr<DownloadJob> job_;
   std::uint64_t revision_ = 0;

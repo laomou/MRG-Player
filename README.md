@@ -179,10 +179,12 @@ appended, so an English-named ROM often works with no mapping at all. A mapping 
 full `https://` URL, which is fetched as-is.
 
 Downloads run one at a time in the background, only from the platform's thumbnail repository, and
-stop at 8 MiB. A failure is silent: the card keeps its gradient and the next launch tries again. A
-success is written to `Imgs/<system>/<title>.png` beside the ROMs, so the stock launcher shows it too
-and later launches never touch the network. The selected game's art is also blurred into the
-launcher background; without it the background uses the selected console's palette.
+stop at 8 MiB. A picture the server does not have leaves the card's gradient in place and is tried
+again next launch; the first unreachable host ends fetching for the session and says so once, so an
+offline card is not asked once per game. A success is written to `Imgs/<system>/<title>.png` beside
+the ROMs, so the stock launcher shows it too and later launches never touch the network. The
+selected game's art is also blurred into the launcher background; without it the background uses the
+selected console's palette.
 
 ### Starting a ROM from the command line
 

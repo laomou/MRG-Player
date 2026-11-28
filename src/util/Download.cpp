@@ -6,8 +6,10 @@
 #include <string>
 
 #if !defined(_WIN32)
+#include <fcntl.h>
 #include <spawn.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <vector>
@@ -54,8 +56,8 @@ std::string narrow(const std::wstring &text) {
 }  // namespace
 
 #if defined(_WIN32)
-bool downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
-                  std::uint64_t &written, std::string &error) {
+DownloadStatus downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
+                            std::uint64_t &written, std::string &error) {
   written = 0;
   const std::wstring wideUrl = widen(url);
   URL_COMPONENTS parts{};
@@ -65,7 +67,7 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
   parts.dwUrlPathLength = static_cast<DWORD>(-1);
   if (WinHttpCrackUrl(wideUrl.c_str(), static_cast<DWORD>(wideUrl.size()), 0, &parts) == FALSE) {
     error = "Cannot parse the download URL";
-    return false;
+    return DownloadStatus::Failed;
   }
   const std::wstring host(parts.lpszHostName, parts.dwHostNameLength);
   const std::wstring path(parts.lpszUrlPath, parts.dwUrlPathLength);
@@ -73,7 +75,7 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
                                   WINHTTP_NO_PROXY_BYPASS, 0);
   if (session == nullptr) {
     error = "Cannot start an HTTP session (error " + std::to_string(GetLastError()) + ")";
-    return false;
+    return DownloadStatus::Network;
   }
   HINTERNET connection = WinHttpConnect(session, host.c_str(), parts.nPort, 0);
   HINTERNET request =
@@ -86,7 +88,7 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
     if (connection != nullptr)
       WinHttpCloseHandle(connection);
     WinHttpCloseHandle(session);
-    return false;
+    return DownloadStatus::Network;
   }
   // The servers answer with redirects in front of some files, so follow them.
   DWORD redirectPolicy = WINHTTP_OPTION_REDIRECT_POLICY_ALWAYS;
@@ -104,7 +106,9 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connection);
     WinHttpCloseHandle(session);
-    return false;
+    // A 4xx means the file simply is not there; a 5xx means the service is
+    // down, which is worth treating like an unreachable host.
+    return ok && status < 500 ? DownloadStatus::NotFound : DownloadStatus::Network;
   }
   FILE *file = _wfopen(widen(target).c_str(), L"wb");
   if (file == nullptr) {
@@ -112,7 +116,7 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
     WinHttpCloseHandle(request);
     WinHttpCloseHandle(connection);
     WinHttpCloseHandle(session);
-    return false;
+    return DownloadStatus::Failed;
   }
   std::uint8_t buffer[64 * 1024];
   bool wroteEverything = true;
@@ -136,37 +140,82 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
   WinHttpCloseHandle(session);
   if (!wroteEverything) {
     error = "The download was interrupted (error " + std::to_string(GetLastError()) + ")";
-    return false;
+    return DownloadStatus::Network;
   }
-  return written != 0;
+  return written != 0 ? DownloadStatus::Ok : DownloadStatus::Failed;
 }
 #else
 namespace {
 
+struct ProgramResult {
+  bool started = false;  // False when the program is not installed.
+  int code = 0;          // Exit code, or 128 + signal when it was killed.
+};
+
 // Runs one program with its own argument vector. posix_spawnp searches PATH
 // like a shell would, but nothing the caller passes is ever parsed as shell
-// syntax, so a URL or a path cannot become a command.
-bool runProgram(const std::vector<std::string> &arguments) {
+// syntax, so a URL or a path cannot become a command. stderr goes to
+// /dev/null: the fetcher's complaint is returned as a status instead of being
+// mixed into the launcher's own output, which may be a serial console.
+ProgramResult runProgram(const std::vector<std::string> &arguments) {
   std::vector<char *> argv;
   argv.reserve(arguments.size() + 1);
   for (const std::string &argument : arguments)
     argv.push_back(const_cast<char *>(argument.c_str()));
   argv.push_back(nullptr);
+  posix_spawn_file_actions_t actions;
+  posix_spawn_file_actions_init(&actions);
+  posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
   pid_t pid = 0;
-  if (posix_spawnp(&pid, argv.front(), nullptr, nullptr, argv.data(), environ) != 0)
-    return false;
+  const int spawned = posix_spawnp(&pid, argv.front(), &actions, nullptr, argv.data(), environ);
+  posix_spawn_file_actions_destroy(&actions);
+  if (spawned != 0)
+    return {};
   int status = 0;
   while (waitpid(pid, &status, 0) < 0) {
     if (errno != EINTR)
-      return false;
+      return {true, 0};
   }
-  return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+  return {true, WIFEXITED(status) ? WEXITSTATUS(status) : 128};
+}
+
+DownloadStatus classifyCurl(int code) {
+  switch (code) {
+  case 22:            // HTTP status >= 400: the file is not on the server.
+    return DownloadStatus::NotFound;
+  case 5:             // Could not resolve the proxy.
+  case 6:             // Could not resolve the host.
+  case 7:             // Could not connect.
+  case 18:            // Partial transfer.
+  case 28:            // Timed out.
+  case 35:            // TLS handshake failed.
+  case 52:            // Empty reply.
+  case 55:            // Sending the request failed.
+  case 56:            // Receiving the reply failed.
+    return DownloadStatus::Network;
+  default:
+    return DownloadStatus::Failed;
+  }
+}
+
+DownloadStatus classifyWget(int code) {
+  switch (code) {
+  case 4:             // Network failure.
+  case 5:             // TLS verification failed.
+  case 6:             // Authentication failure.
+  case 7:             // Protocol error.
+    return DownloadStatus::Network;
+  case 8:             // The server answered with an error status.
+    return DownloadStatus::NotFound;
+  default:
+    return DownloadStatus::Failed;
+  }
 }
 
 }  // namespace
 
-bool downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
-                  std::uint64_t &written, std::string &error) {
+DownloadStatus downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
+                            std::uint64_t &written, std::string &error) {
   written = 0;
   // The cap is applied twice: curl refuses a body larger than the limit before
   // it writes anything, and the result is checked afterwards because wget has
@@ -176,27 +225,41 @@ bool downloadFile(const std::string &url, const std::string &target, std::uint64
     curl.insert(curl.end(), {"--max-filesize", std::to_string(maximumBytes)});
   }
   curl.insert(curl.end(), {"-o", target, url});
-  if (!runProgram(curl)) {
-    if (!runProgram({"wget", "-q", "-T", "60", "-O", target, url})) {
+  const ProgramResult curlResult = runProgram(curl);
+  DownloadStatus status = DownloadStatus::Failed;
+  if (curlResult.started)
+    status = curlResult.code == 0 ? DownloadStatus::Ok : classifyCurl(curlResult.code);
+  // Only reach for wget when curl is not installed. Once curl ran, a retry
+  // through another client would repeat the same timeout for no new answer.
+  if (!curlResult.started) {
+    const ProgramResult wgetResult = runProgram({"wget", "-q", "-T", "60", "-O", target, url});
+    if (!wgetResult.started) {
       error = "The download failed; install curl or wget, or fetch the file by hand";
-      return false;
+      return DownloadStatus::Failed;
     }
+    status = wgetResult.code == 0 ? DownloadStatus::Ok : classifyWget(wgetResult.code);
+  }
+  if (status != DownloadStatus::Ok) {
+    error = status == DownloadStatus::Network      ? "Cannot reach the download server"
+            : status == DownloadStatus::NotFound   ? "The download server does not have that file"
+                                                    : "The download failed";
+    return status;
   }
   std::error_code code;
   written = fs::file_size(paths::fromUtf8(target), code);
   if (code) {
     written = 0;
     error = "The downloaded file was not written";
-    return false;
+    return DownloadStatus::Failed;
   }
   if (maximumBytes != 0 && written > maximumBytes) {
     std::error_code ignored;
     fs::remove(paths::fromUtf8(target), ignored);
     written = 0;
     error = "The download is larger than the allowed size (" + std::to_string(maximumBytes) + " bytes)";
-    return false;
+    return DownloadStatus::Failed;
   }
-  return true;
+  return DownloadStatus::Ok;
 }
 #endif
 

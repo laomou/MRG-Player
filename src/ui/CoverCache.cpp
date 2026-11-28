@@ -171,6 +171,8 @@ void CoverCache::shutdown() {
   attempted_.clear();
   coverPaths_.clear();
   coverRoots_.clear();
+  offline_ = false;
+  noticePending_ = false;
   namesPath_.clear();
   names_.clear();
 }
@@ -225,8 +227,10 @@ SDL_Texture *CoverCache::cover(SDL_Renderer *renderer, const library::GameEntry 
     return loadCover(renderer, game.id, path);
   // One download at a time. A card that asks while another download is running
   // stays unmarked on purpose: it gets its turn on a later frame instead of
-  // being written off for the rest of the session.
-  if (job_ != nullptr || !pendingGame_.id.empty())
+  // being written off for the rest of the session. Once the host proved
+  // unreachable there is nothing to try: every later request would only wait
+  // for the same timeout.
+  if (offline_ || job_ != nullptr || !pendingGame_.id.empty())
     return nullptr;
   if (!attempted_.insert(game.id).second)
     return nullptr;
@@ -294,7 +298,15 @@ void CoverCache::startDownload(const library::GameEntry &game) {
     for (const std::string &url : urls) {
       std::uint64_t bytes = 0;
       std::string error;
-      if (!io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error)) {
+      const io::DownloadStatus status =
+          io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error);
+      if (status == io::DownloadStatus::Network) {
+        job->networkFailure = true;
+        std::error_code code;
+        fs::remove(paths::fromUtf8(partial), code);
+        break;
+      }
+      if (status != io::DownloadStatus::Ok) {
         // A refused or missing file still leaves an empty download behind.
         std::error_code code;
         fs::remove(paths::fromUtf8(partial), code);
@@ -341,9 +353,15 @@ void CoverCache::poll(SDL_Renderer *renderer) {
   if (worker_.joinable())
     worker_.join();
   const bool ok = job_->ok;
+  const bool networkFailure = job_->networkFailure;
   const std::string id = job_->id;
   const std::string target = job_->target;
   job_.reset();
+  if (networkFailure) {
+    offline_ = true;
+    noticePending_ = true;
+    pendingGame_ = {};
+  }
   if (!ok)
     return;
   // The file is on the card now, so the next frame finds it like any other.
@@ -351,6 +369,12 @@ void CoverCache::poll(SDL_Renderer *renderer) {
   coverPaths_.erase(id);
   if (covers_.find(id) == covers_.end())
     (void)loadCover(renderer, id, target);
+}
+
+bool CoverCache::takeOfflineNotice() {
+  const bool pending = noticePending_;
+  noticePending_ = false;
+  return pending;
 }
 
 }  // namespace launcher::ui

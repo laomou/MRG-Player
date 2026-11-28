@@ -2985,6 +2985,8 @@ int Application::run(int argc, char **argv) {
     }
     // Downloads and decodes finish here, never inside a draw call.
     coverCache.poll(renderer);
+    if (coverCache.takeOfflineNotice())
+      showToast(i18n::TextId::CoversOffline, 4000);
     // What a menu frame shows: the art, a toast that is still counting down and
     // a focus ring that is still fading in. Nothing else moves, so when none of
     // those changed the pixels on screen are already right.
