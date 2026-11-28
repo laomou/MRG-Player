@@ -582,6 +582,8 @@ struct MoreLayout {
   float rowRight = 0.0f;
   float gridTop = 0.0f;
   float gridBottom = 0.0f;
+  float gridX = 0.0f;
+  float gridY = 0.0f;
   float gap = 0.0f;
   float cardWidth = 0.0f;
   float cardHeight = 0.0f;
@@ -628,28 +630,27 @@ MoreLayout moreLayout() {
         3, static_cast<int>(std::floor((span + layout.gap) /
                                       (layout.cardWidth + layout.gap))));
   }
-  return layout;
-}
-
-SDL_FRect moreCardBox(const MoreLayout &layout, int column, int row) {
   const float gridWidth = layout.columns * layout.cardWidth +
                           (layout.columns - 1) * layout.gap;
   const float gridHeight = layout.rows * layout.cardHeight +
                            (layout.rows - 1) * layout.gap;
-  const float x0 = layout.marginX +
-                   ((layout.rowRight - layout.marginX) - gridWidth) * 0.5f;
-  const float y0 = layout.gridTop +
-                   ((layout.gridBottom - layout.gridTop) - gridHeight) * 0.5f;
-  return {x0 + static_cast<float>(column) * (layout.cardWidth + layout.gap),
-          y0 + static_cast<float>(row) * (layout.cardHeight + layout.gap),
+  layout.gridX =
+      layout.marginX +
+      ((layout.rowRight - layout.marginX) - gridWidth) * 0.5f;
+  layout.gridY =
+      layout.gridTop +
+      ((layout.gridBottom - layout.gridTop) - gridHeight) * 0.5f;
+  return layout;
+}
+
+SDL_FRect moreCardBox(const MoreLayout &layout, int column, int row) {
+  return {layout.gridX +
+              static_cast<float>(column) * (layout.cardWidth + layout.gap),
+          layout.gridY +
+              static_cast<float>(row) * (layout.cardHeight + layout.gap),
           layout.cardWidth, layout.cardHeight};
 }
 
-int pageStart(int cursor) {
-  const MoreGrid grid = moreGrid();
-  const int pageSize = std::max(1, grid.columns * grid.rows);
-  return (cursor / pageSize) * pageSize;
-}
 } // namespace
 
 MoreGrid moreGrid() {
@@ -657,18 +658,23 @@ MoreGrid moreGrid() {
   return {layout.columns, layout.rows};
 }
 
-int moreGameAt(float x, float y, int count, int cursor) {
+int moreGameAt(float x, float y, int count, float rowOffset) {
   if (count <= 0)
     return -1;
   const MoreLayout layout = moreLayout();
-  const int start = pageStart(cursor);
-  const int cells = layout.columns * layout.rows;
-  for (int slot = start; slot < std::min(count, start + cells); ++slot) {
-    const int local = slot - start;
-    const SDL_FRect box =
-        moreCardBox(layout, local % layout.columns, local / layout.columns);
-    if (x >= box.x && x <= box.x + box.w && y >= box.y && y <= box.y + box.h)
-      return slot;
+  const float shift = rowOffset * (layout.cardHeight + layout.gap);
+  const int topRow = static_cast<int>(std::floor(rowOffset));
+  for (int row = topRow; row <= topRow + layout.rows; ++row) {
+    for (int column = 0; column < layout.columns; ++column) {
+      const int slot = row * layout.columns + column;
+      if (slot < 0 || slot >= count)
+        continue;
+      SDL_FRect box = moreCardBox(layout, column, 0);
+      box.y = moreCardBox(layout, 0, row).y - shift;
+      if (x >= box.x && x <= box.x + box.w && y >= box.y &&
+          y <= box.y + box.h)
+        return slot;
+    }
   }
   return -1;
 }
@@ -676,7 +682,7 @@ int moreGameAt(float x, float y, int count, int cursor) {
 void drawMoreGames(SDL_Renderer *renderer,
                    const library::GameLibrary &gameLibrary,
                    const std::vector<std::size_t> &order, int cursor,
-                   i18n::Language language,
+                   float rowOffset, i18n::Language language,
                    const config::InputPrompts &prompts, float focusOpacity,
                    SDL_Color accent, CoverSource *covers) {
   using i18n::TextId;
@@ -684,11 +690,13 @@ void drawMoreGames(SDL_Renderer *renderer,
   const MoreLayout layout = moreLayout();
   const int count = static_cast<int>(order.size());
   cursor = count > 0 ? std::clamp(cursor, 0, count - 1) : 0;
-  const int start = pageStart(cursor);
-  const int pageSize = std::max(1, layout.columns * layout.rows);
-  const int pageCount = std::max(1, (count + pageSize - 1) / pageSize);
-  const int page = count > 0 ? cursor / pageSize : 0;
   const int columns = layout.columns;
+  // A page is the block of rows the grid shows at once; the cursor picks the
+  // page, and the grid slides a whole page when it changes.
+  const int totalRows = (count + columns - 1) / columns;
+  const int pageRows = std::max(1, layout.rows);
+  const int page = count > 0 ? (cursor / columns) / pageRows : 0;
+  const int pageCount = std::max(1, (totalRows + pageRows - 1) / pageRows);
 
   Game style{};
   style.top = kCardTop;
@@ -715,38 +723,57 @@ void drawMoreGames(SDL_Renderer *renderer,
        static_cast<int>(layout.rowRight) - textWidth(pageLabel, 1), 126,
        pageLabel, 1, {191, 201, 220, 255});
 
-  for (int slot = start;
-       slot < std::min(count, start + layout.columns * layout.rows); ++slot) {
-    const library::GameEntry &entry =
-        gameLibrary.entries()[order[static_cast<std::size_t>(slot)]];
-    const int local = slot - start;
-    const SDL_FRect box =
-        moreCardBox(layout, local % columns, local / columns);
-    const float radius = 14.0f;
-    SDL_Texture *art = covers != nullptr ? covers->cover(renderer, entry)
-                                        : nullptr;
-    if (art != nullptr) {
-      drawTexture(renderer, art, box.x, box.y, box.w, box.h);
-    } else {
-      drawCardPanel(renderer, box.x, box.y, box.w, box.h, radius, kCardTop,
-                    kCardBottom, 255);
+  // The grid slides by rows, so both the page above and the page below stay
+  // drawn while the offset travels; the clip keeps the motion inside the grid.
+  const float shift = rowOffset * (layout.cardHeight + layout.gap);
+  const int topRow = static_cast<int>(std::floor(rowOffset));
+  const int lastRow = std::min(
+      static_cast<int>(std::ceil(rowOffset)) + layout.rows,
+      (count + columns - 1) / columns);
+  const SDL_Rect clip{static_cast<int>(layout.marginX) - 8,
+                      static_cast<int>(layout.gridY - layout.gap * 0.5f),
+                      static_cast<int>(layout.rowRight - layout.marginX) + 16,
+                      static_cast<int>(layout.cardHeight * layout.rows +
+                                       layout.gap * (layout.rows - 1) +
+                                       layout.gap)};
+  SDL_RenderSetClipRect(renderer, &clip);
+  for (int row = std::max(0, topRow); row < lastRow; ++row) {
+    for (int column = 0; column < columns; ++column) {
+      const int slot = row * columns + column;
+      if (slot >= count)
+        continue;
+      const library::GameEntry &entry =
+          gameLibrary.entries()[order[static_cast<std::size_t>(slot)]];
+      SDL_FRect box = moreCardBox(layout, column, 0);
+      box.y = moreCardBox(layout, 0, row).y - shift;
+      const float radius = 14.0f;
+      SDL_Texture *art =
+          covers != nullptr ? covers->cover(renderer, entry) : nullptr;
+      if (art != nullptr) {
+        drawTexture(renderer, art, box.x, box.y, box.w, box.h);
+      } else {
+        drawCardPanel(renderer, box.x, box.y, box.w, box.h, radius, kCardTop,
+                      kCardBottom, 255);
+      }
+      const char *badgeLabel = platformBadge(entry.platform);
+      const float badgeHeight = 18.0f;
+      const float badgeWidth =
+          std::max(badgeHeight,
+                   static_cast<float>(textWidth(badgeLabel, 1)) + 10.0f);
+      const float badgeX = box.x + box.w - 8.0f - badgeWidth;
+      const float badgeY = box.y + 8.0f;
+      rounded(renderer, badgeX, badgeY, badgeWidth, badgeHeight,
+              badgeHeight * 0.5f, accent);
+      centeredGlyph(renderer,
+                    static_cast<int>(badgeX + badgeWidth * 0.5f),
+                    static_cast<int>(badgeY + badgeHeight * 0.5f),
+                    badgeLabel, 1, {10, 15, 28, 255});
+      if (slot == cursor)
+        drawFocusRing(renderer, box.x, box.y, box.w, box.h, radius,
+                      focusOpacity);
     }
-    const char *badgeLabel = platformBadge(entry.platform);
-    const float badgeHeight = 18.0f;
-    const float badgeWidth =
-        std::max(badgeHeight,
-                 static_cast<float>(textWidth(badgeLabel, 1)) + 10.0f);
-    const float badgeX = box.x + box.w - 8.0f - badgeWidth;
-    const float badgeY = box.y + 8.0f;
-    rounded(renderer, badgeX, badgeY, badgeWidth, badgeHeight,
-            badgeHeight * 0.5f, accent);
-    centeredGlyph(renderer, static_cast<int>(badgeX + badgeWidth * 0.5f),
-                  static_cast<int>(badgeY + badgeHeight * 0.5f), badgeLabel, 1,
-                  {10, 15, 28, 255});
-    if (slot == cursor)
-      drawFocusRing(renderer, box.x, box.y, box.w, box.h, radius,
-                    focusOpacity);
   }
+  SDL_RenderSetClipRect(renderer, nullptr);
 
   if (count == 0) {
     // A wall with nothing on it still has to say why: the tile is reachable

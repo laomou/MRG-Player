@@ -51,10 +51,12 @@ struct MoreGrid {
 void drawMoreGames(SDL_Renderer *renderer,
                    const library::GameLibrary &gameLibrary,
                    const std::vector<std::size_t> &order, int cursor,
-                   i18n::Language language,
+                   float rowOffset, i18n::Language language,
                    const config::InputPrompts &prompts, float focusOpacity,
                    SDL_Color accent, CoverSource *covers = nullptr);
-[[nodiscard]] int moreGameAt(float x, float y, int count, int cursor);
+// The wall scrolls by rows, so the hit test has to know where the grid sits
+// while it is sliding; rowOffset is the same value the drawing uses.
+[[nodiscard]] int moreGameAt(float x, float y, int count, float rowOffset);
 // How far the shelf has to slide for the selection to stay on screen. It is a
 // fraction while the row is travelling, so callers can animate towards it.
 [[nodiscard]] float homeRowTarget(int selectedGame, int count);
