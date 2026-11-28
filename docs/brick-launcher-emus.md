@@ -306,10 +306,10 @@ exec "$SDCARD/Apps/MRG.pak/launch.sh" "$*"
 就完全不需要 RetroArch：实测 `pidof ra64.trimui` 为空、`pidof mrg-player` 有值，
 `cmdline` 为 `./mrg-player /mnt/SDCARD/Emus/FC/../../Roms/FC/俄罗斯方块.nes`。
 
-仓库里这套包放在 `extras/emus/`（PR #28），装机就是把目录拷到卡上：
+仓库里这套包放在 `platforms/trimui/emus/`（PR #28），装机就是把目录拷到卡上：
 
 ```bash
-cp -r extras/emus/* /mnt/SDCARD/Emus/
+cp -r platforms/trimui/emus/* /mnt/SDCARD/Emus/
 ```
 
 磁贴图默认用我们自绘的 300×300（可见图形 200、圆角 31，与内置 app 图标同规格，走 `icontop`）。

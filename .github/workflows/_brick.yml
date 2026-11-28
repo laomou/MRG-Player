@@ -101,7 +101,7 @@ jobs:
             --prefix "$TC/tc/bin/aarch64-linux-gnu-" \
             --sysroot "$TC/tc/aarch64-linux-gnu/libc" \
             --src "$TC/core-src" \
-            --out pack/cores
+            --out platforms/trimui/pak/cores
 
       # A tag names the build; a push or a manual run keeps the same 0.0.0-dev
       # stamp the desktop jobs use, so an unreleased build never claims a version.
@@ -122,7 +122,7 @@ jobs:
             -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64-brick.cmake \
             -DMRG_CROSS_PREFIX="$TC/tc/bin/aarch64-linux-gnu-" \
             -DMRG_SYSROOT="$TC/tc/aarch64-linux-gnu/libc" \
-            -DMRG_PLATFORM=brick \
+            -DMRG_PLATFORM=trimui \
             -DCMAKE_BUILD_TYPE=MinSizeRel \
             -DMRG_VERSION_STRING="${{ steps.v.outputs.version }}"
 

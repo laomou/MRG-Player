@@ -5,7 +5,7 @@
 - **开放目录**：开在卡根上，原厂桌面（MainUI）也读它，玩家自己往里放东西。MRG 只读，唯一的例外见文末。
 - **应用数据目录**：MRG 自己的账本和存档，藏在 `.userdata/mrg/`（桌面是 SDL 的 pref path）。玩家正常不需要进来。
 
-掌机上的卡根是 `/mnt/SDCARD`，由 `pack/launch.sh` 用 `MRG_CARD_ROOT` 交给程序；应用数据目录是
+掌机上的卡根是 `/mnt/SDCARD`，由 `platforms/trimui/pak/launch.sh` 用 `MRG_CARD_ROOT` 交给程序；应用数据目录是
 `/mnt/SDCARD/.userdata/mrg`，由 `MRG_DATA_DIR` 交给程序。桌面没有卡，两个都落在数据根下，
 所以同一份树拷来拷去都能直接打开。
 

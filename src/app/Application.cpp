@@ -150,7 +150,7 @@ SDL_GameController *openPreferredController(std::string_view preferredGuid) {
              : SDL_GameControllerOpen(candidates.front().deviceIndex);
 }
 
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
 // 15 buttons is A, B, X, Y, L1, R1, Select, Start, Menu, L3, R3, two volume
 // keys and two spares; 6 axes is the analog stick pair plus both triggers.
 constexpr int kBrickPanelButtons = 15;
@@ -396,7 +396,7 @@ int Application::run(int argc, char **argv) {
   }
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   SDL_Joystick *brickJoystick = openBrickJoystick();
   if (brickJoystick != nullptr) {
     gBrickPadInstance = SDL_JoystickInstanceID(brickJoystick);
@@ -478,7 +478,7 @@ int Application::run(int argc, char **argv) {
   auto syncPlayerControllers = [&] {
     if (!activeRuntime)
       return;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     if (brickJoystick != nullptr) {
       activeRuntime->setPlayerController(
           0, SDL_JoystickInstanceID(brickJoystick));
@@ -673,7 +673,7 @@ int Application::run(int argc, char **argv) {
   Uint64 toastUntil = 0;
   std::string toastMessage;
   Uint64 lastAxisMove = 0;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   // The panel is the only input the handheld ships with, so the first screen
   // has to advertise its buttons before the player has touched anything.
   config::InputDeviceKind lastInputDevice =
@@ -700,7 +700,7 @@ int Application::run(int argc, char **argv) {
     return name;
   };
   auto activeControllerName = [&]() -> std::string {
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     if (brickJoystick != nullptr) {
       // The firmware gives the panel the ids of an Xbox 360 pad, so SDL names
       // it that way; the shell says TRIMUI Player1, and so does this line.
@@ -721,7 +721,7 @@ int Application::run(int argc, char **argv) {
     return combined;
   };
   auto resolvedControllerStyle = [&] {
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     if (brickJoystick != nullptr &&
         settings.controllerStyle == config::ControllerStyle::Auto)
       return config::ControllerStyle::Generic;
@@ -733,7 +733,7 @@ int Application::run(int argc, char **argv) {
   };
   auto currentPromptDevice = [&] {
     bool controllerConnected = controller != nullptr;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     controllerConnected = controllerConnected || brickJoystick != nullptr;
     // "Auto" means the panel on a handheld: there is no desk keyboard to
     // switch to, so a host keyboard under an emulator cannot take over the
@@ -791,7 +791,7 @@ int Application::run(int argc, char **argv) {
     syncPlayerControllers();
   };
 
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   // The case lighting follows the accent colour, but only while we hold it:
   // the stock launcher's settings are read back on the way out.
   platform::BrickLeds caseLeds;
@@ -833,7 +833,7 @@ int Application::run(int argc, char **argv) {
     syncAudioOptions();
     syncPlaybackOptions();
     saveSettings(settings);
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     syncCaseLighting();
 #endif
   };
@@ -844,7 +844,7 @@ int Application::run(int argc, char **argv) {
     auto device = currentPromptDevice() == config::InputDeviceKind::KeyboardMouse
                       ? ui::ControlHelpDevice::Keyboard
                       : ui::ControlHelpDevice::Controller;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     if (brickJoystick != nullptr && device == ui::ControlHelpDevice::Controller)
       device = ui::ControlHelpDevice::Brick;
 #endif
@@ -1098,7 +1098,7 @@ int Application::run(int argc, char **argv) {
     activeRuntime->setFastForward(false);
     activeRuntime->setSlowMotion(false);
     rewindHeld = false;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
     brickInput.reset();
 #endif
     pauseSessionClock();
@@ -1254,7 +1254,7 @@ int Application::run(int argc, char **argv) {
   };
   // The frame is grabbed after the scene is drawn and before it is presented,
   // so the file always matches what the player is looking at.
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   // F1 and F2 reach us as stick clicks, and the panel has no sticks, so the
   // two function keys save and reload the running game from the current slot.
   auto quickState = [&](bool save) {
@@ -1292,7 +1292,7 @@ int Application::run(int argc, char **argv) {
     std::printf("screenshot: %s\n", path.c_str());
     return path;
   };
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   auto adjustVolume = [&](int direction) {
     settings.volume = std::clamp(settings.volume + direction * 10, 0, 100);
     if (activeRuntime)
@@ -1800,7 +1800,7 @@ int Application::run(int argc, char **argv) {
     while (SDL_PollEvent(&event) != 0) {
       // Anything the player or the window does can change the picture.
       menuDirty = true;
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
       const bool fromBrick =
           brickJoystick != nullptr &&
           ((event.type == SDL_JOYBUTTONDOWN ||
@@ -1925,7 +1925,7 @@ int Application::run(int argc, char **argv) {
         continue;
       }
 
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
       if (event.type == SDL_JOYDEVICEADDED) {
         if (brickJoystick == nullptr &&
             !SDL_IsGameController(event.jdevice.which)) {
@@ -2112,7 +2112,7 @@ int Application::run(int argc, char **argv) {
         } else if (event.type == SDL_CONTROLLERBUTTONDOWN &&
                    event.cbutton.button == SDL_CONTROLLER_BUTTON_GUIDE) {
           enterPause();
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
         } else if (fromBrick && input::brickMenuPressed(event)) {
           enterPause();
         } else if (fromBrick && activeRuntime) {
@@ -2609,7 +2609,7 @@ int Application::run(int argc, char **argv) {
             (void)openManagement(ui::ManagementDialog::Menu);
           } else if (event.cbutton.button == SDL_CONTROLLER_BUTTON_B ||
                      event.cbutton.button == SDL_CONTROLLER_BUTTON_BACK) {
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
             // B is the only way off the shelf on a handheld, and the stock
             // desktop closes an app with it: nothing here can be lost, so the
             // launcher leaves the way every other pak does.
@@ -3050,7 +3050,7 @@ int Application::run(int argc, char **argv) {
     SDL_GameControllerClose(controller);
   if (controller2 != nullptr)
     SDL_GameControllerClose(controller2);
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
   if (caseLit)
     caseLeds.restore();
   if (brickJoystick != nullptr)

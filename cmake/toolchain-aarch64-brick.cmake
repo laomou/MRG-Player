@@ -14,7 +14,7 @@
 #     -DCMAKE_TOOLCHAIN_FILE=cmake/toolchain-aarch64-brick.cmake \
 #     -DMRG_CROSS_PREFIX=<tc>/bin/aarch64-linux-gnu- \
 #     -DMRG_SYSROOT=<tc>/aarch64-linux-gnu/libc \
-#     -DMRG_PLATFORM=brick
+#     -DMRG_PLATFORM=trimui
 #
 # CMake re-enters this file inside try_compile with the compilers already
 # resolved and user cache entries not forwarded, so every setting below is
