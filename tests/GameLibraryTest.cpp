@@ -79,7 +79,7 @@ int main() {
   const auto nonce =
       std::chrono::steady_clock::now().time_since_epoch().count();
   const fs::path root = fs::temp_directory_path() /
-                        ("nes-player-library-test-" + std::to_string(nonce));
+                        ("mrg-library-test-" + std::to_string(nonce));
   const fs::path sources = root / "sources";
   const fs::path managed = root / "managed";
   const fs::path managedNes = managed / "FC";
