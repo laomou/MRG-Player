@@ -24,6 +24,14 @@
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR aarch64)
 
+# Only the handheld build loads this file, so it is also what selects the
+# platform profile. Without it a cross configure that forgets
+# -DMRG_PLATFORM=trimui would quietly build the desktop profile against the
+# device sysroot.
+if(NOT MRG_PLATFORM)
+  set(MRG_PLATFORM "trimui" CACHE STRING "Target platform profile: desktop or trimui")
+endif()
+
 # try_compile starts a nested configure that only receives the platform variables
 # named here; without this the sysroot would look unset while probing the
 # compiler and the probe would silently use host headers.
