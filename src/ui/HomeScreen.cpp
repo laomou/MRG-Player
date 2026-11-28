@@ -337,18 +337,20 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
   const int pillLabelY = static_cast<int>(layout.headerY) + 8;
   const int pillCountY = static_cast<int>(layout.headerY) + 15;
   if (showPills) {
-    rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
-            libraryPill.h, 23, {4, 10, 26, 145});
-    circle(renderer, libraryPill.x + 26, pillCenterY, 12, style.accent);
-    text(renderer, static_cast<int>(libraryPill.x) + 19, pillLabelY, "+", 2,
-         {18, 18, 33, 255});
-    text(renderer, static_cast<int>(libraryPill.x) + 48, pillLabelY,
-         tr(TextId::Library, language), 2, {255, 255, 255, 255});
-    const std::string countLabel = std::to_string(libraryCount);
-    text(renderer,
-         static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
-                          static_cast<float>(textWidth(countLabel, 1))),
-         pillCountY, countLabel, 1, {191, 201, 220, 255});
+    if (libraryPillVisible()) {
+      rounded(renderer, libraryPill.x, libraryPill.y, libraryPill.w,
+              libraryPill.h, 23, {4, 10, 26, 145});
+      circle(renderer, libraryPill.x + 26, pillCenterY, 12, style.accent);
+      text(renderer, static_cast<int>(libraryPill.x) + 19, pillLabelY, "+", 2,
+           {18, 18, 33, 255});
+      text(renderer, static_cast<int>(libraryPill.x) + 48, pillLabelY,
+           tr(TextId::Library, language), 2, {255, 255, 255, 255});
+      const std::string countLabel = std::to_string(libraryCount);
+      text(renderer,
+           static_cast<int>(libraryPill.x + libraryPill.w - 29.0f -
+                            static_cast<float>(textWidth(countLabel, 1))),
+           pillCountY, countLabel, 1, {191, 201, 220, 255});
+    }
     rounded(renderer, settingsPill.x, settingsPill.y, settingsPill.w,
             settingsPill.h, 23, {4, 10, 26, 175});
     circle(renderer, settingsPill.x + 26, pillCenterY, 12, {255, 255, 255, 45});
@@ -360,7 +362,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
     // keys are on them. The ring is drawn over the pills rather than under them,
     // because they are translucent and would tint it.
     if (focus == HomeFocus::Pills) {
-      const SDL_FRect pill = focusedPill == 0 ? libraryPill : settingsPill;
+      const SDL_FRect pill =
+          focusedPill == 0 && libraryPillVisible() ? libraryPill : settingsPill;
       drawFocusRing(renderer, pill.x, pill.y, pill.w, pill.h, 23.0f,
                     focusOpacity);
     }
@@ -371,7 +374,8 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
           ? TextId::GameLibrary
           : (startupPage == 0 ? TextId::ContinuePlaying : TextId::GameLibrary);
   const TextId sectionSubtitle =
-      libraryEmpty ? TextId::ChooseRom
+      libraryEmpty ? (libraryPillVisible() ? TextId::ChooseRom
+                                           : TextId::ChooseRomHandheld)
                    : (startupPage == 0 ? TextId::ContinueSubtitle
                                        : TextId::LibrarySubtitle);
   text(renderer, static_cast<int>(layout.marginX),
@@ -453,14 +457,24 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
 }
 
 
+bool libraryPillVisible() {
+#if defined(MRG_PLATFORM_TRIMUI)
+  return false;
+#else
+  return true;
+#endif
+}
+
 int homePillAt(float x, float y, i18n::Language language, std::size_t count) {
   const HomeLayout layout = homeLayout();
   if (y < layout.headerY - 3.0f ||
       y > layout.headerY + layout.headerHeight + 3.0f)
     return -1;
-  const SDL_FRect libraryPill = pillRect(layout, false, language, count);
-  if (x >= libraryPill.x && x <= libraryPill.x + libraryPill.w)
-    return 0;
+  if (libraryPillVisible()) {
+    const SDL_FRect libraryPill = pillRect(layout, false, language, count);
+    if (x >= libraryPill.x && x <= libraryPill.x + libraryPill.w)
+      return 0;
+  }
   const SDL_FRect settingsPill = pillRect(layout, true, language, count);
   if (x >= settingsPill.x && x <= settingsPill.x + settingsPill.w)
     return 1;

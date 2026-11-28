@@ -229,13 +229,25 @@ int main(int argc, char **argv) {
         "Outside the row track activates nothing");
   check(settingsRowAt(6, 1000, 340, true) == 0, "The theme row is clickable");
   check(settingsRowAt(7, 1000, 340, true) == 0, "The about row is clickable");
-  for (int category : {1, 2, 4, 6, 7}) {
+  for (int category : {1, 2, 6, 7}) {
     check(settingsRowAt(category, 1000, 327.9f, true) == -1 &&
               settingsRowAt(category, 1000, 328, true) == 0 &&
               settingsRowAt(category, 1000, 401.9f, true) == 0 &&
               settingsRowAt(category, 1000, 402, true) == -1,
           "Settings targets must match painted row edges, not stale coordinates");
   }
+  // The library page grew a second row: the folder report on top, the scan that
+  // imports new ROMs underneath. The handheld relies on it because it has no
+  // library pill.
+  check(settingRowCount(4, true) == 2,
+        "The library page offers the folder row and the scan row");
+  check(settingsRowAt(4, 1000, 328, true) == 0 &&
+            settingsRowAt(4, 1000, 401.9f, true) == 0 &&
+            settingsRowAt(4, 1000, 402, true) == -1 &&
+            settingsRowAt(4, 1000, 413, true) == 1 &&
+            settingsRowAt(4, 1000, 486.9f, true) == 1 &&
+            settingsRowAt(4, 1000, 487, true) == -1,
+        "Both library rows are hit on their own painted span");
   check(settingsRowAt(3, 776, 415, true) == -1 &&
             controllerPageRowAt(776, 415) == -1 &&
             settingsRowAt(3, 650, 323, true) == -1,
