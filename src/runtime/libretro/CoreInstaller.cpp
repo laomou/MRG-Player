@@ -114,8 +114,8 @@ InstallOutcome installCore(const CorePackage &package, const std::string &coresD
   fs::remove(archive, code);
   std::uint64_t bytes = 0;
   std::string downloadError;
-  if (!io::downloadFile(coreArchiveUrl(package), paths::toUtf8(archive),
-                        kMaximumDownloadBytes, bytes, downloadError)) {
+  if (io::downloadFile(coreArchiveUrl(package), paths::toUtf8(archive), kMaximumDownloadBytes,
+                       bytes, downloadError) != io::DownloadStatus::Ok) {
     fs::remove(archive, code);
     outcome.message = downloadError;
     return outcome;

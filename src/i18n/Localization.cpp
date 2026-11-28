@@ -236,7 +236,8 @@ constexpr Entry kText[]{
     {"MORE GAMES", "查看更多"},
     {"MORE GAMES", "更多内容"},
     {"ALL COVERS", "全部封面"},
-    {"BY RECENT PLAY", "按最近游玩"}};
+    {"BY RECENT PLAY", "按最近游玩"},
+    {"NO NETWORK; COVERS SKIPPED", "离线，已跳过封面下载"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

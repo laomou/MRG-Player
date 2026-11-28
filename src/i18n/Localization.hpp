@@ -233,6 +233,9 @@ enum class TextId {
   MoreTitle,
   MoreSubtitle,
   MoreSort,
+  // Shown once when a cover download could not reach the host: the launcher
+  // keeps working offline, it just stops asking.
+  CoversOffline,
   Count
 };
 
