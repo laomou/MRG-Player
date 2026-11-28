@@ -62,6 +62,10 @@ platforms/trimui/           # everything that ships to a TrimUI handheld
 One pak serves the whole TrimUI line: the Brick Pro and the Smart Pro only differ in panel size, which the
 canvas already takes from the build (`MRG_CANVAS_WIDTH` / `MRG_CANVAS_HEIGHT`) rather than from the pak.
 
+Without a handheld, the same firmware runs in the [trimui-brick-emu](https://github.com/imrmnabil/trimui-brick-emu)
+QEMU emulator; [docs/emulator.md](docs/emulator.md) walks through downloading it, building it the first time,
+making an SD card, booting it, installing the pak, and taking screenshots and key presses.
+
 `IGameRuntime` defines the video/audio/input lifecycle used by the application. `RuntimeRegistry` maps `GameEntry::platform` to `LibretroRuntime`, which opens a matching core through `SDL_LoadObject` and adapts it to that interface. `third_party/libretro/libretro.h` is the vendored upstream header, so the ABI matches the cores it loads.
 
 The layout has two halves, and only one of them is yours to edit:
