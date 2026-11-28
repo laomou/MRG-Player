@@ -9,4 +9,4 @@ build*/
 design/
 
 # Cores built by tools/build-cores.sh; the pak ships them, git does not.
-platforms/brick/pak/cores/*.so
+platforms/trimui/pak/cores/*.so

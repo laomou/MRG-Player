@@ -54,10 +54,13 @@ src/
 Device-side assets live beside the code, one directory per target:
 
 ```text
-platforms/brick/               # everything that ships to a TrimUI Brick
-├── pak/                      # the pak skeleton: config.json, launch.sh, icon.png, cores/
-└── emus/                     # optional Emus/<SYS> tiles for the stock desktop
+platforms/trimui/           # everything that ships to a TrimUI handheld
+├── pak/                    # the pak skeleton: config.json, launch.sh, icon.png, cores/
+└── emus/                   # optional Emus/<SYS> tiles for the stock desktop
 ```
+
+One pak serves the whole TrimUI line: the Brick Pro and the Smart Pro only differ in panel size, which the
+canvas already takes from the build (`MRG_CANVAS_WIDTH` / `MRG_CANVAS_HEIGHT`) rather than from the pak.
 
 `IGameRuntime` defines the video/audio/input lifecycle used by the application. `RuntimeRegistry` maps `GameEntry::platform` to `LibretroRuntime`, which opens a matching core through `SDL_LoadObject` and adapts it to that interface. `third_party/libretro/libretro.h` is the vendored upstream header, so the ABI matches the cores it loads.
 
@@ -198,11 +201,11 @@ or a platform without an installed core prints the reason on stderr and exits wi
 ### Launcher tiles instead of RetroArch
 
 The stock desktop does not scan `Roms/`: it lists whatever `Emus/<SYS>/config.json` declares, one
-tile per package. `platforms/brick/emus/` holds a package for each system this build has a core for, so a card
+tile per package. `platforms/trimui/emus/` holds a package for each system this build has a core for, so a card
 can show games directly:
 
 ```bash
-cp -r platforms/brick/emus/* /mnt/SDCARD/Emus/
+cp -r platforms/trimui/emus/* /mnt/SDCARD/Emus/
 ```
 
 A package is three files. `config.json` carries the label, the ROM folder, the extension list and the
