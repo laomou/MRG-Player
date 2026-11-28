@@ -19,7 +19,9 @@
 namespace launcher::library {
 namespace {
 namespace fs = std::filesystem;
-constexpr std::size_t kPlaceholderCount = 7;
+// Ten card positions on the shelf, always: the eleventh slot is the "more"
+// tile, so an empty library still shows a full row instead of a short one.
+constexpr std::size_t kPlaceholderCount = 10;
 constexpr std::uintmax_t kMaximumGameSize = 64U * 1024U * 1024U;
 // V3 replaced the managed copies with the path of the ROM on the card or in the
 // ROM folder; older files still load and are rewritten as V3 on the next save.

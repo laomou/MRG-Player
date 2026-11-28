@@ -112,7 +112,7 @@ int main() {
   GameLibrary library(managed.string());
   ok &= check(library.initialize(), "initialize managed library");
   ok &= check(library.entries().empty(), "new library starts empty");
-  ok &= check(library.slotCount() == 7, "empty library retains seven slots");
+  ok &= check(library.slotCount() == 10, "empty library retains ten slots");
 
   ok &= check(library.importGame(first.string()) == ImportStatus::Imported,
               "import valid ROM");
@@ -161,8 +161,8 @@ int main() {
   ok &= check(rescanned.entries()[0].title == "alpha" &&
                   rescanned.entries()[1].title == "My Game",
               "library entries sort case-insensitively");
-  ok &= check(rescanned.slotCount() == 7,
-              "small populated library retains seven carousel slots");
+  ok &= check(rescanned.slotCount() == 10,
+              "small populated library retains ten carousel slots");
 
   // An entry written by a build that copied ROMs has no path of its own. The
   // first scan adopts the copy; the next import of the real file reclaims it.
