@@ -1,5 +1,5 @@
 # Assembles the TrimUI pak layout: /SDCARD/Apps/MRG.pak/ with the executable,
-# resources, cores, bundled ROMs and the launcher metadata. Driven by the pak
+# resources, cores and the launcher metadata. Driven by the pak
 # target in CMakeLists.txt, which passes every path in, so this script also
 # works standalone when debugging the layout.
 
@@ -17,7 +17,7 @@ file(COPY_FILE "${MRG_EXE}" "${MRG_PAK_DIR}/mrg-player")
 # SDL_GetBasePath points at the executable, so the fonts travel next to it.
 file(COPY "${MRG_SOURCE_DIR}/assets/" DESTINATION "${MRG_PAK_DIR}/res")
 
-foreach(dir cores roms)
+foreach(dir cores)
   if(IS_DIRECTORY "${MRG_SOURCE_DIR}/pack/${dir}")
     file(COPY "${MRG_SOURCE_DIR}/pack/${dir}/" DESTINATION "${MRG_PAK_DIR}/${dir}")
   endif()

@@ -31,48 +31,36 @@ std::string preferenceRoot(const char *product) {
   return result;
 }
 
-} // namespace
-
-std::string dataRoot() {
-  // The handheld pak keeps user data on the SD card so replacing the pak on an
-  // update never costs a save file. SDL_GetPrefPath knows nothing about that
-  // layout, so an explicit override wins over the desktop default.
-  if (const char *override = std::getenv("MRG_DATA_DIR");
-      override != nullptr && override[0] != '\0') {
-    std::string root(override);
-    while (root.size() > 1 && (root.back() == '/' || root.back() == '\\'))
-      root.pop_back();
-    return root + '/';
-  }
-  return preferenceRoot("MRGPlayer");
+// Directories are handed out with a trailing separator, the way SDL_GetPrefPath
+// and SDL_GetBasePath spell them.
+std::string withTrailingSeparator(std::string value) {
+  while (value.size() > 1 && (value.back() == '/' || value.back() == '\\'))
+    value.pop_back();
+  return value + '/';
 }
 
-std::string executableDirectory() {
-  char *base = SDL_GetBasePath();
-  const std::string result = base != nullptr ? std::string(base) : std::string();
-  SDL_free(base);
-  return result;
+std::string normalized(const std::string &value) {
+  return paths::toUtf8(paths::fromUtf8(value));
 }
 
-std::vector<std::string> romSearchDirectories() {
+// The folders the launcher reads, before the existence filter: a cover is
+// written beside a ROM tree the player has not created yet, so the tree has to
+// be named even while it is missing.
+std::vector<std::string> configuredRomDirectories() {
   std::vector<std::string> directories;
   const auto add = [&directories](const std::string &value) {
     if (value.empty())
       return;
-    std::error_code ec;
-    const fs::path candidate = paths::fromUtf8(value);
-    if (!fs::is_directory(candidate, ec) || ec)
-      return;
-    const std::string normalized = paths::toUtf8(candidate);
-    if (std::find(directories.begin(), directories.end(), normalized) ==
+    const std::string entry = normalized(value);
+    if (std::find(directories.begin(), directories.end(), entry) ==
         directories.end())
-      directories.push_back(normalized);
+      directories.push_back(entry);
   };
 
-  // A pak or a device launcher names the folders directly: the bundled roms/
-  // next to the executable, the card's own Roms tree, and whatever the user
-  // added. Separated the way the host names a list; paths are absolute there,
-  // and a relative entry is read as relative to the executable.
+  // A pak or a device launcher names the folders directly: the card's own Roms
+  // tree, and whatever the user added. Separated the way the host names a
+  // list; paths are absolute there, and a relative entry is read as relative
+  // to the executable.
   if (const char *override = std::getenv("MRG_ROM_DIRS");
       override != nullptr && override[0] != '\0') {
     const std::string executablePath = executableDirectory();
@@ -103,31 +91,90 @@ std::vector<std::string> romSearchDirectories() {
   return directories;
 }
 
+bool insideDirectory(const std::string &path, const std::string &directory) {
+  return !directory.empty() && path.size() > directory.size() &&
+         path.compare(0, directory.size(), directory) == 0;
+}
+
+} // namespace
+
+std::string dataRoot() {
+  // The handheld pak keeps user data on the SD card so replacing the pak on an
+  // update never costs a save file. SDL_GetPrefPath knows nothing about that
+  // layout, so an explicit override wins over the desktop default.
+  if (const char *override = std::getenv("MRG_DATA_DIR");
+      override != nullptr && override[0] != '\0')
+    return withTrailingSeparator(override);
+  return preferenceRoot("MRGPlayer");
+}
+
+std::string cardRoot() {
+  // One volume holds both halves of a card: the Roms/ and Imgs/ trees the stock
+  // launcher reads, and the hidden folder the pak keeps its saves in. SDL knows
+  // only the second one, so the pak names the first.
+  if (const char *override = std::getenv("MRG_CARD_ROOT");
+      override != nullptr && override[0] != '\0')
+    return withTrailingSeparator(override);
+  return dataRoot();
+}
+
+std::string executableDirectory() {
+  char *base = SDL_GetBasePath();
+  const std::string result = base != nullptr ? std::string(base) : std::string();
+  SDL_free(base);
+  return result;
+}
+
+std::vector<std::string> romSearchDirectories() {
+  std::vector<std::string> directories;
+  for (const std::string &candidate : configuredRomDirectories()) {
+    std::error_code ec;
+    if (!fs::is_directory(paths::fromUtf8(candidate), ec) || ec)
+      continue;
+    directories.push_back(candidate);
+  }
+  return directories;
+}
+
 std::vector<std::string> coverDirectories() {
   std::vector<std::string> directories;
-  for (const std::string &roms : romSearchDirectories()) {
-    // Roms/ maps to the Imgs/ beside it, which is where the stock launcher
-    // keeps the box art of the games it shipped with. The folder is not
-    // required to exist: a missing one is created when a cover is saved, so a
-    // fresh card and a full one behave the same way.
-    const fs::path candidate = paths::fromUtf8(roms).parent_path() / "Imgs";
-    if (candidate.empty())
-      continue;
-    const std::string normalized = paths::toUtf8(candidate);
-    if (std::find(directories.begin(), directories.end(), normalized) ==
+  const auto add = [&directories](const std::string &value) {
+    if (value.empty())
+      return;
+    const std::string entry = normalized(value);
+    if (std::find(directories.begin(), directories.end(), entry) ==
         directories.end())
-      directories.push_back(normalized);
+      directories.push_back(entry);
+  };
+
+  // The card's own Imgs/ comes first, so a downloaded cover lands where the
+  // stock launcher shows it and never inside the pak, whose folder an update
+  // replaces wholesale. It is named even when it does not exist yet: writing
+  // the first cover is what creates it.
+  const std::string card = cardRoot();
+  if (!card.empty())
+    add(paths::toUtf8(paths::fromUtf8(card) / "Imgs"));
+
+  const std::string executable = executableDirectory();
+  for (const std::string &roms : configuredRomDirectories()) {
+    // Art that travels with the binary belongs to the pak and leaves with it,
+    // so it is not somewhere a download may be written.
+    if (insideDirectory(roms, executable))
+      continue;
+    add(paths::toUtf8(paths::fromUtf8(roms).parent_path() / "Imgs"));
   }
   return directories;
 }
 
 std::string coverNamesPath() {
+  // cover-names.json describes the library, so it sits with it instead of
+  // crowding the root next to settings.ini.
   const std::string root = dataRoot();
   const fs::path base = root.empty() ? fs::path(".") : paths::fromUtf8(root);
+  const fs::path path = base / "library" / "cover-names.json";
   std::error_code ec;
-  if (!root.empty())
-    fs::create_directories(base, ec);
-  return paths::toUtf8(base / "cover-names.json");
+  fs::create_directories(path.parent_path(), ec);
+  return paths::toUtf8(path);
 }
 
 std::string dataSubdirectory(std::string_view first, std::string_view second) {

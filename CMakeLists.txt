@@ -213,6 +213,7 @@ add_compile_definitions(MRG_CANVAS_WIDTH=${_mrg_canvas_width}
 
 add_library(mrg-platform STATIC
   src/config/AppPaths.cpp
+  src/config/DataLayout.cpp
   src/config/InputBindings.cpp
   src/game/GamePlatform.cpp
   src/input/BrickInput.cpp
@@ -378,6 +379,15 @@ if(BUILD_TESTING)
   target_compile_options(input-bindings-test PRIVATE ${MRG_WARNING_FLAGS})
   target_link_libraries(input-bindings-test PRIVATE mrg-platform)
   add_test(NAME input-bindings COMMAND input-bindings-test)
+
+  # The data folders are renamed over time; the migration that moves a player's
+  # saves and library across is checked on a scratch data root.
+  add_executable(data-layout-test tests/DataLayoutTest.cpp)
+  target_include_directories(data-layout-test PRIVATE src)
+  target_compile_features(data-layout-test PRIVATE cxx_std_17)
+  target_compile_options(data-layout-test PRIVATE ${MRG_WARNING_FLAGS})
+  target_link_libraries(data-layout-test PRIVATE mrg-platform)
+  add_test(NAME data-layout COMMAND data-layout-test)
 
   add_executable(brick-input-test tests/BrickInputTest.cpp)
   target_include_directories(brick-input-test PRIVATE src)

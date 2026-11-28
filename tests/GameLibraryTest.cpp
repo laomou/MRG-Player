@@ -82,7 +82,7 @@ int main() {
                         ("nes-player-library-test-" + std::to_string(nonce));
   const fs::path sources = root / "sources";
   const fs::path managed = root / "managed";
-  const fs::path managedNes = managed / "nes";
+  const fs::path managedNes = managed / "FC";
   std::error_code ec;
   fs::create_directories(sources, ec);
   if (!check(!ec, "create temporary source directory"))

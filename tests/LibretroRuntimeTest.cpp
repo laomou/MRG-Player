@@ -341,7 +341,8 @@ int main(int, char **) {
   // Reloading a snapshot must land on exactly the same machine state, so a
   // freshly written second snapshot is byte-identical to the first.
   expect(runtime->saveState(1, error) == launcher::runtime::StateStatus::Saved, "second save state failed: " + error);
-  const fs::path states = fs::path(launcher::config::dataSubdirectory("states", "gba"));
+  const fs::path states = fs::path(launcher::config::dataSubdirectory(
+      "states", launcher::game::platformDescriptor(launcher::game::GamePlatform::Gba).managedDirectory));
   std::vector<std::uint8_t> first;
   std::vector<std::uint8_t> second;
   const bool readFirst = readAll((states / "stubgame-slot1.mrgstate").string(), first);
@@ -479,7 +480,9 @@ int main(int, char **) {
   runtime->stepFrame();
   runtime->stop();
 
-  const fs::path battery = fs::path(launcher::config::dataSubdirectory("saves", "gba")) / "stubgame.srm";
+  const fs::path battery = fs::path(launcher::config::dataSubdirectory(
+                               "saves", launcher::game::platformDescriptor(launcher::game::GamePlatform::Gba).managedDirectory)) /
+                           "stubgame.srm";
   std::error_code batteryError;
   expect(fs::is_regular_file(battery, batteryError) && !batteryError,
          "stopping the game did not write its battery save");
@@ -630,7 +633,7 @@ int main(int, char **) {
   const std::string unpacked = launcher::runtime::libretro::findCore(launcher::game::GamePlatform::Gba);
   expect(!unpacked.empty(), "a zipped core is not discovered");
   expect(fs::path(unpacked).filename().string() == coreFileName, "the unpacked core keeps its name");
-  expect(unpacked.find("cores-unpacked") != std::string::npos, "the core is not unpacked into the data directory");
+  expect(unpacked.find("unpacked") != std::string::npos, "the core is not unpacked into the data directory");
   expect(launcher::runtime::libretro::findCore(launcher::game::GamePlatform::Gba) == unpacked,
          "an already unpacked core is not reused");
   std::unique_ptr<launcher::runtime::IGameRuntime> unpackedRuntime = registry.create(launcher::game::GamePlatform::Gba);
@@ -802,7 +805,8 @@ int main(int, char **) {
       expect(leftoverStages == 0,
              "the staged game file was left behind after stop");
       const fs::path unicodeBattery =
-          fs::path(launcher::config::dataSubdirectory("saves", "gba")) /
+          fs::path(launcher::config::dataSubdirectory(
+              "saves", launcher::game::platformDescriptor(launcher::game::GamePlatform::Gba).managedDirectory)) /
           launcher::paths::fromUtf8("超级马里奥.srm");
       expect(fs::is_regular_file(unicodeBattery),
              "the non-ASCII battery save is missing");

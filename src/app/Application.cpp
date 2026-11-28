@@ -19,6 +19,7 @@
 
 #include "app/LaunchOptions.hpp"
 #include "config/AppPaths.hpp"
+#include "config/DataLayout.hpp"
 #include "config/InputBindings.hpp"
 #include "config/Settings.hpp"
 #include "i18n/Localization.hpp"
@@ -328,6 +329,11 @@ int Application::run(int argc, char **argv) {
 
   AppSettings settings;
   loadSettings(settings);
+  // Folders an earlier build wrote are folded into the current names before
+  // anything reads them, and a staged ROM copy left by a crash is dropped: a run
+  // puts back the one it needs.
+  config::migrateDataLayout();
+  config::clearRomCache();
   if (options.languageOverride >= 0)
     settings.language = options.languageOverride;
   char *basePath = SDL_GetBasePath();

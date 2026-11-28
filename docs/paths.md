@@ -1,0 +1,65 @@
+# 目录契约
+
+这个项目只有两种目录，界线不要糊：
+
+- **开放目录**：开在卡根上，原厂桌面（MainUI）也读它，玩家自己往里放东西。MRG 只读，唯一的例外见文末。
+- **应用数据目录**：MRG 自己的账本和存档，藏在 `.userdata/mrg/`（桌面是 SDL 的 pref path）。玩家正常不需要进来。
+
+掌机上的卡根是 `/mnt/SDCARD`，由 `pack/launch.sh` 用 `MRG_CARD_ROOT` 交给程序；应用数据目录是
+`/mnt/SDCARD/.userdata/mrg`，由 `MRG_DATA_DIR` 交给程序。桌面没有卡，两个都落在数据根下，
+所以同一份树拷来拷去都能直接打开。
+
+## 开放目录
+
+| 路径 | 谁写 | 谁读 | 删掉会怎样 |
+|---|---|---|---|
+| `Roms/<SYS>/<game>` | 玩家、原厂桌面 | MRG 扫描后导入、原厂桌面列表 | 书架上仍有游戏（用的是托管副本），只是不再被扫描到 |
+| `Roms/` 顶层的散装 ROM | 玩家 | 扫描时搬进系统目录 | 同上一行 |
+| `Imgs/<SYS>/<title>.png` | 玩家、原厂桌面、MRG 下载 | MRG 书架、原厂桌面 | 卡片退回渐变底，下次联网再取 |
+
+`<SYS>` 一律是卡上的名字：`FC`、`SFC`、`MD`、`GB`、`GBA`。
+
+## 应用数据目录
+
+| 路径 | 内容 | 删掉会怎样 |
+|---|---|---|
+| `settings.ini` | 语言、显示、音频、键位、主题 | 全部回到默认值 |
+| `library/metadata.tsv` | 收藏、自定义标题、累计时长、最近游玩、每游戏显示覆盖 | 书架的排序与统计丢失 |
+| `library/<SYS>/<name>__<hash>.<ext>` | 导入时的 ROM 托管副本 | 书架清空；存档变成孤儿文件 |
+| `library/cover-names.json` | 本地标题 → No-Intro 名，供封面查找 | 缺失时自动写回模板 |
+| `saves/<SYS>/<id>.srm` | 电池存档 | 存档丢失 |
+| `states/<SYS>/<id>-slotN.mrgstate` | 即时存档（另有同名 `.bmp` 缩略图与 `.meta`） | 即时存档丢失 |
+| `core-options/<core>.tsv` | 用户改过的核心选项 | 回到核心默认值 |
+| `system/` | 核心要的 BIOS / system 文件 | 依赖它们的核心起不来 |
+| `screenshots/` | F12 截图 | 截图丢失 |
+| `rom-cache/` | 非 ASCII 文件名游戏的一次性 ASCII 副本 | 只影响性能，启动时会清空重建 |
+| `cores/` | 核心（`.so`/`.dll`/`.dylib` 或它们的 `.zip`） | 游戏无法启动 |
+| `cores/unpacked/` | 从 `.zip` 解出来的核心 | 下次使用时重新解包 |
+
+## 托管副本
+
+导入不记路径，记**内容哈希**。ROM 会整份复制进 `library/<SYS>/`（上限 64 MiB），之后改名、
+挪目录、换卡都不影响存档、封面和时长的挂接。代价是卡上占两份空间：一份在 `Roms/`，一份在
+`library/`。删 `Roms/` 里的原件只是不再被扫描，删 `library/` 才是真的丢库。
+
+## 一处例外：顶层 ROM 会被搬动
+
+扫描时 `Roms/` **顶层**的 ROM 会被 `fs::rename` 进对应的系统目录（目标是已存在同名文件时不动），
+好让卡在任何机器上读起来一样。系统目录里面、玩家自己建的文件夹（`Roms/My Stuff/`）、
+`Roms/README.md` 这类文档都不动。这是 MRG 唯一会写开放目录的地方，除了封面下载。
+
+## 环境变量
+
+| 变量 | 作用 |
+|---|---|
+| `MRG_CARD_ROOT` | 开放目录的根（掌机由 launch.sh 设成 `$SDCARD`） |
+| `MRG_DATA_DIR` | 应用数据目录 |
+| `MRG_ROM_DIRS` | 扫描哪些 ROM 树，用 `:`（Windows `;`）分隔；相对路径按可执行文件所在目录算 |
+| `MRG_CORES_DIR` | 核心目录，设了就只找这一个 |
+
+## 改名的代价
+
+平台目录曾经是 `nes`/`snes`/`md`/`gb`/`gba`，现在是卡名；`cover-names.json` 曾经在数据根，
+现在在 `library/`；解包核心曾经在 `cores-unpacked/`，现在在 `cores/unpacked/`。启动时
+`src/config/DataLayout.cpp` 会把这些旧目录并进新目录：每个文件都是"目标不存在才搬"，目标已存在
+就保留新文件、旧文件原地不动，源目录空了才删。这段迁移是幂等的，可以每次启动都跑。
