@@ -21,27 +21,20 @@ namespace {
 namespace fs = std::filesystem;
 constexpr std::size_t kPlaceholderCount = 7;
 constexpr std::uintmax_t kMaximumGameSize = 64U * 1024U * 1024U;
-// V2 added the per-game video override columns; V1 files still load and are
-// rewritten as V2 on the next save.
-constexpr const char *kMetadataHeader = "MRG_LIBRARY_METADATA_V2";
+// V3 replaced the managed copies with the path of the ROM on the card or in the
+// ROM folder; older files still load and are rewritten as V3 on the next save.
+constexpr const char *kMetadataHeader = "MRG_LIBRARY_METADATA_V3";
+constexpr const char *kMetadataHeaderV2 = "MRG_LIBRARY_METADATA_V2";
 constexpr const char *kMetadataHeaderV1 = "MRG_LIBRARY_METADATA_V1";
 constexpr std::size_t kMetadataFieldCountV1 = 6;
 constexpr std::size_t kMetadataFieldCountV2 = 10;
+constexpr std::size_t kMetadataFieldCountV3 = 11;
 
 std::string lowerAscii(std::string value) {
   std::transform(
       value.begin(), value.end(), value.begin(),
       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
   return value;
-}
-
-std::uint64_t hashBytes(const std::vector<std::uint8_t> &bytes) {
-  std::uint64_t hash = 14695981039346656037ULL;
-  for (const std::uint8_t byte : bytes) {
-    hash ^= byte;
-    hash *= 1099511628211ULL;
-  }
-  return hash;
 }
 
 std::string hashSuffix(std::uint64_t hash) {
@@ -65,19 +58,10 @@ std::string displayTitle(const fs::path &path) {
   return title.empty() ? std::string("UNTITLED") : title;
 }
 
-std::string safeStem(const fs::path &path) {
-  std::string stem = paths::toUtf8(path.stem());
-  for (char &c : stem) {
-    const unsigned char byte = static_cast<unsigned char>(c);
-    if (byte < 0x80 &&
-        !(std::isalnum(byte) || c == '-' || c == '_' || c == ' '))
-      c = '_';
-  }
-  return stem.empty() ? std::string("game") : stem;
-}
-
-bool readGame(const fs::path &path, game::GamePlatform platform,
-              std::vector<std::uint8_t> &bytes, std::string &error) {
+// The library indexes the file instead of copying it, so the only thing an
+// import does with the bytes is fold them into the content id.
+bool hashGameFile(const fs::path &path, game::GamePlatform platform,
+                  std::string &id, std::string &error) {
   if (!game::validateGameFile(platform, paths::toUtf8(path), error))
     return false;
   std::error_code ec;
@@ -87,12 +71,55 @@ bool readGame(const fs::path &path, game::GamePlatform platform,
                : "Game exceeds the 64 MiB import limit";
     return false;
   }
-  bytes.resize(static_cast<std::size_t>(size));
   std::ifstream input(path, std::ios::binary);
-  if (!input || !input.read(reinterpret_cast<char *>(bytes.data()),
-                            static_cast<std::streamsize>(bytes.size()))) {
+  if (!input) {
     error = "Cannot read game file";
     return false;
+  }
+  std::uint64_t hash = 14695981039346656037ULL;
+  std::array<char, 64U * 1024U> buffer{};
+  while (input) {
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    const std::streamsize got = input.gcount();
+    for (std::streamsize index = 0; index < got; ++index) {
+      hash ^= static_cast<unsigned char>(
+          buffer[static_cast<std::size_t>(index)]);
+      hash *= 1099511628211ULL;
+    }
+  }
+  if (!input.eof()) {
+    error = "Cannot read game file";
+    return false;
+  }
+  id = hashSuffix(hash);
+  return true;
+}
+
+std::string absolutePath(const fs::path &path) {
+  std::error_code ec;
+  const fs::path absolute = fs::absolute(path, ec);
+  return paths::toUtf8(ec ? path : absolute);
+}
+
+// True when path sits inside directory, resolving the two the same way so a
+// card that folds case or a symlinked data root still compares equal.
+bool insideDirectory(const fs::path &path, const fs::path &directory) {
+  if (path.empty() || directory.empty())
+    return false;
+  std::error_code ec;
+  fs::path child = fs::weakly_canonical(path.parent_path(), ec);
+  if (ec) {
+    ec.clear();
+    child = path.parent_path();
+  }
+  fs::path base = fs::weakly_canonical(directory, ec);
+  if (ec)
+    base = directory;
+  auto basePart = base.begin();
+  for (auto childPart = child.begin(); basePart != base.end();
+       ++basePart, ++childPart) {
+    if (childPart == child.end() || *childPart != *basePart)
+      return false;
   }
   return true;
 }
@@ -157,17 +184,53 @@ std::vector<std::string> splitMetadataLine(const std::string &line) {
   }
 }
 
+// The copy an earlier build made of this game, if it is still on the disk. The
+// name ended in "__<id>", which is enough to recognise it by content alone.
+fs::path legacyManagedFile(const fs::path &directory,
+                           game::GamePlatform platform,
+                           const std::string &id) {
+  if (directory.empty() || id.empty())
+    return {};
+  const game::PlatformDescriptor &descriptor =
+      game::platformDescriptor(platform);
+  const std::string suffix = "__" + id;
+  const std::string_view folders[] = {descriptor.managedDirectory,
+                                      descriptor.legacyManagedDirectory};
+  for (const std::string_view folder : folders) {
+    if (folder.empty())
+      continue;
+    const fs::path platformDirectory = directory / paths::fromUtf8(std::string(folder));
+    std::error_code ec;
+    if (!fs::is_directory(platformDirectory, ec))
+      continue;
+    for (const fs::directory_entry &item :
+         fs::directory_iterator(platformDirectory, ec)) {
+      if (!item.is_regular_file(ec)) {
+        ec.clear();
+        continue;
+      }
+      const std::string stem = paths::toUtf8(item.path().stem());
+      if (stem.size() <= suffix.size())
+        continue;
+      if (stem.compare(stem.size() - suffix.size(), suffix.size(), suffix) ==
+          0)
+        return item.path();
+    }
+  }
+  return {};
+}
+
 } // namespace
 
 std::string contentIdForPath(const std::string &path,
                              game::GamePlatform platform) {
   if (platform == game::GamePlatform::Unknown)
     return {};
-  std::vector<std::uint8_t> bytes;
+  std::string id;
   std::string ignored;
-  if (!readGame(paths::fromUtf8(path), platform, bytes, ignored))
+  if (!hashGameFile(paths::fromUtf8(path), platform, id, ignored))
     return {};
-  return hashSuffix(hashBytes(bytes));
+  return id;
 }
 
 std::string titleForPath(const std::string &path) {
@@ -213,56 +276,45 @@ ImportStatus GameLibrary::importGame(const std::string &sourcePath) {
     return ImportStatus::Failed;
   }
 
-  std::vector<std::uint8_t> bytes;
-  if (!readGame(source, platform, bytes, error_))
+  std::string id;
+  if (!hashGameFile(source, platform, id, error_))
     return ImportStatus::Failed;
-  const std::string suffix = hashSuffix(hashBytes(bytes));
-  for (std::size_t i = 0; i < entries_.size(); ++i) {
-    if (entries_[i].platform == platform && entries_[i].id == suffix) {
-      lastImportedIndex_ = static_cast<int>(i);
+
+  // The library keeps the file where the player put it and remembers the path;
+  // nothing is copied, so re-importing the same bytes only has to re-point an
+  // entry that moved or drop a copy an older build left behind.
+  const std::string path = absolutePath(source);
+  Metadata &metadata = metadata_[metadataKey(id, platform)];
+  const bool known = !metadata.path.empty();
+  if (known && metadata.path == path) {
+    lastImportedIndex_ = indexOfPath(path);
+    return ImportStatus::AlreadyPresent;
+  }
+  if (known) {
+    std::error_code ec;
+    const bool present =
+        fs::is_regular_file(paths::fromUtf8(metadata.path), ec);
+    const bool copyInLibrary =
+        insideDirectory(paths::fromUtf8(metadata.path),
+                        paths::fromUtf8(directory_));
+    if (present && !copyInLibrary) {
+      // The same bytes already live somewhere else; the first path wins.
+      lastImportedIndex_ = indexOfPath(metadata.path);
       return ImportStatus::AlreadyPresent;
     }
-  }
-
-  const std::string extension = lowerAscii(paths::toUtf8(source.extension()));
-  const fs::path platformDirectory =
-      paths::fromUtf8(directory_) /
-      game::platformDescriptor(platform).managedDirectory;
-  std::error_code directoryError;
-  fs::create_directories(platformDirectory, directoryError);
-  if (directoryError) {
-    error_ =
-        "Cannot create platform library directory: " + directoryError.message();
-    return ImportStatus::Failed;
-  }
-  const fs::path destination =
-      platformDirectory /
-      paths::fromUtf8(safeStem(source) + "__" + suffix + extension);
-  fs::path temporary = destination;
-  temporary += fs::path(".tmp");
-  {
-    std::ofstream output(temporary, std::ios::binary | std::ios::trunc);
-    if (!output || !output.write(reinterpret_cast<const char *>(bytes.data()),
-                                 static_cast<std::streamsize>(bytes.size()))) {
-      error_ = "Cannot write game into the managed library";
+    const std::string previous = metadata.path;
+    metadata.path = path;
+    if (copyInLibrary && previous != path) {
       std::error_code ignored;
-      fs::remove(temporary, ignored);
-      return ImportStatus::Failed;
+      fs::remove(paths::fromUtf8(previous), ignored);
     }
   }
-  std::error_code ec;
-  fs::rename(temporary, destination, ec);
-  if (ec) {
-    const std::string renameError = ec.message();
-    std::error_code ignored;
-    fs::remove(temporary, ignored);
-    error_ = "Cannot finish game import: " + renameError;
+  if (!known)
+    metadata.path = path;
+  if (!saveMetadata() || !refresh())
     return ImportStatus::Failed;
-  }
-  if (!refresh())
-    return ImportStatus::Failed;
-  lastImportedIndex_ = indexOfPath(paths::toUtf8(destination));
-  return ImportStatus::Imported;
+  lastImportedIndex_ = indexOfPath(path);
+  return known ? ImportStatus::AlreadyPresent : ImportStatus::Imported;
 }
 
 bool GameLibrary::removeGame(std::size_t index) {
@@ -272,25 +324,23 @@ bool GameLibrary::removeGame(std::size_t index) {
     error_ = "Selected game is not in the managed library";
     return false;
   }
-  const fs::path gamePath = paths::fromUtf8(entries_[index].filePath);
-  const fs::path expectedDirectory =
-      paths::fromUtf8(directory_) /
-      game::platformDescriptor(entries_[index].platform).managedDirectory;
-  if (gamePath.parent_path() != expectedDirectory) {
-    error_ = "Refusing to remove a game outside the managed library";
+  const GameEntry entry = entries_[index];
+  const auto found = metadata_.find(metadataKey(entry.id, entry.platform));
+  if (found == metadata_.end()) {
+    error_ = "Selected game is not in the managed library";
     return false;
   }
-  std::error_code ec;
-  const bool removed = fs::remove(gamePath, ec);
-  if (ec) {
-    error_ = "Cannot remove game from the managed library: " + ec.message();
-    return false;
+  // Forgetting a game must never delete a file the player put on the card. The
+  // one exception is a copy an older build made: that file is ours, not theirs,
+  // and leaving it behind would let the next scan adopt it right back.
+  const std::string forgotten = found->second.path;
+  found->second.path.clear();
+  if (!forgotten.empty() &&
+      insideDirectory(paths::fromUtf8(forgotten), paths::fromUtf8(directory_))) {
+    std::error_code ignored;
+    fs::remove(paths::fromUtf8(forgotten), ignored);
   }
-  if (!removed) {
-    error_ = "Managed game file no longer exists";
-    return false;
-  }
-  return refresh();
+  return saveMetadata() && refresh();
 }
 
 bool GameLibrary::setFavorite(std::size_t index, bool favorite) {
@@ -413,13 +463,15 @@ bool GameLibrary::loadMetadata() {
     error_ = "Game library metadata has an unsupported format";
     return false;
   }
-  const bool version2 = line == kMetadataHeader;
-  if (!version2 && line != kMetadataHeaderV1) {
+  const bool version3 = line == kMetadataHeader;
+  const bool version2 = line == kMetadataHeaderV2;
+  if (!version3 && !version2 && line != kMetadataHeaderV1) {
     error_ = "Game library metadata has an unsupported format";
     return false;
   }
   const std::size_t expectedFields =
-      version2 ? kMetadataFieldCountV2 : kMetadataFieldCountV1;
+      version3 ? kMetadataFieldCountV3
+               : (version2 ? kMetadataFieldCountV2 : kMetadataFieldCountV1);
   while (std::getline(input, line)) {
     if (line.empty())
       continue;
@@ -434,7 +486,7 @@ bool GameLibrary::loadMetadata() {
       metadata.playSeconds = std::stoull(fields[3]);
       metadata.lastPlayed = std::stoll(fields[4]);
       const std::size_t titleField = expectedFields - 1;
-      if (version2) {
+      if (version3 || version2) {
         metadata.hasVideoOverride = fields[5] == "1";
         metadata.video.aspect = static_cast<runtime::AspectMode>(
             std::clamp(std::stoi(fields[6]), 0, 2));
@@ -442,6 +494,8 @@ bool GameLibrary::loadMetadata() {
         metadata.video.overscan =
             std::clamp(std::stoi(fields[8]), 0, runtime::kMaxOverscan);
       }
+      if (version3 && !decodeField(fields[9], metadata.path))
+        continue;
       if (!decodeField(fields[titleField], metadata.customTitle))
         continue;
       metadata_[metadataKey(fields[1], platform)] = std::move(metadata);
@@ -479,8 +533,8 @@ bool GameLibrary::saveMetadata() {
              << (metadata.hasVideoOverride ? 1 : 0) << '	'
              << static_cast<int>(metadata.video.aspect) << '	'
              << (metadata.video.integerScale ? 1 : 0) << '	'
-             << metadata.video.overscan << '	'
-             << encodeField(metadata.customTitle) << '\n';
+             << metadata.video.overscan << '	' << encodeField(metadata.path)
+             << '	' << encodeField(metadata.customTitle) << '\n';
     }
     if (!output) {
       error_ = "Cannot finish game library metadata";
@@ -506,38 +560,51 @@ bool GameLibrary::saveMetadata() {
 
 bool GameLibrary::refresh() {
   entries_.clear();
+  // The shelf is the metadata: an entry shows up when its file is still there,
+  // and an entry whose file is gone keeps its save data and is left alone until
+  // the player points the launcher at the game again.
   std::error_code ec;
-  fs::recursive_directory_iterator iterator(paths::fromUtf8(directory_), ec);
-  if (ec) {
-    error_ = "Cannot scan game library: " + ec.message();
-    return false;
-  }
-  for (const fs::directory_entry &item : iterator) {
-    if (!item.is_regular_file(ec) || ec) {
-      ec.clear();
+  bool adopted = false;
+  for (auto &item : metadata_) {
+    const std::size_t separator = item.first.find(':');
+    if (separator == std::string::npos)
+      continue;
+    game::GamePlatform platform = game::GamePlatform::Unknown;
+    try {
+      platform = static_cast<game::GamePlatform>(
+          std::stoi(item.first.substr(0, separator)));
+    } catch (...) {
       continue;
     }
-    const std::string entryPath = paths::toUtf8(item.path());
-    const game::GamePlatform platform = game::detectPlatform(entryPath);
-    std::string validationError;
-    if (platform == game::GamePlatform::Unknown ||
-        !game::validateGameFile(platform, entryPath, validationError))
+    if (platform == game::GamePlatform::Unknown)
       continue;
-    std::string id = paths::toUtf8(item.path().stem());
-    const std::size_t separator = id.rfind("__");
-    id = separator == std::string::npos ? std::string{}
-                                        : id.substr(separator + 2);
-    const auto metadata = metadata_.find(metadataKey(id, platform));
-    const Metadata empty;
-    const Metadata &details =
-        metadata == metadata_.end() ? empty : metadata->second;
+    const std::string id = item.first.substr(separator + 1);
+    Metadata &details = item.second;
+    if (!details.path.empty() &&
+        !fs::is_regular_file(paths::fromUtf8(details.path), ec))
+      details.path.clear();
+    ec.clear();
+    if (details.path.empty()) {
+      // An entry written before the library remembered paths: take over the
+      // copy the old build made, once, and remember where it is from now on.
+      const fs::path copy =
+          legacyManagedFile(paths::fromUtf8(directory_), platform, id);
+      if (copy.empty())
+        continue;
+      details.path = paths::toUtf8(copy);
+      adopted = true;
+    }
+    std::string validationError;
+    if (!game::validateGameFile(platform, details.path, validationError))
+      continue;
     const std::string title = details.customTitle.empty()
-                                  ? displayTitle(item.path())
+                                  ? displayTitle(paths::fromUtf8(details.path))
                                   : details.customTitle;
-    entries_.push_back({std::move(id), title, entryPath, platform,
-                        details.favorite, details.playSeconds,
-                        details.lastPlayed});
+    entries_.push_back({id, title, details.path, platform, details.favorite,
+                        details.playSeconds, details.lastPlayed});
   }
+  if (adopted)
+    (void)saveMetadata();
   std::sort(entries_.begin(), entries_.end(),
             [](const GameEntry &left, const GameEntry &right) {
               if (left.favorite != right.favorite)

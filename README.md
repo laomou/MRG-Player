@@ -8,9 +8,9 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 
 - Native 1280×720 resizable, high-DPI launcher UI with fullscreen support
 - English and Simplified Chinese UI
-- Platform-neutral game model, managed library, runtime interface, and runtime registry
+- Platform-neutral game model, game library index, runtime interface, and runtime registry
 - Dynamic platform and file-type labels in the library and management UI
-- Persistent managed library with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
+- Persistent game library that indexes ROMs where they lie, with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
 - Box art per game in the card's own `Imgs/<system>/` folder, the file the stock launcher shows, so art dropped in by hand and art the launcher fetches are the same picture; map a local title to a libretro-thumbnails name in `cover-names.json` to make lookups hit, and cards without art keep the plain navy card with a console badge while the selected game's art becomes the blurred background
 - Console-agnostic runtime: video, audio, input, pacing, battery saves, and controller hot plugging are handled once for every core
 - In-game pause menu with three persistent instant-state slots, console reset, and a confirmed power cycle (cold boot that keeps battery saves)
@@ -29,7 +29,7 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - libretro back end for NES, GBA, SNES, Game Boy, and Genesis: core discovery, `MRG_CORES_DIR` override, `.so.zip` unpacking, isolated `SDL_LoadObject` loading, and software framebuffer handling for 0RGB1555, RGB565, and XRGB8888 cores
 - Core installer in **Settings → Cores**: downloads the current nightly build of the preferred core per platform and installs it into `cores/`
 - Instant states come from the core's own serialization, wrapped in a versioned header that records the core name
-- Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each routed to its own managed platform directory
+- Import of `.nes`, `.gba`, `.sfc`/`.smc`/`.snes`, `.gb`/`.gbc`, and `.md`/`.gen` files, each validated for its own platform before the library lists it
 - ROM folder scanning: on a build without a file dialog, the folders named by `MRG_ROM_DIRS` are imported on first start, and the Home import action rescans them; without that variable a desktop build reads the card layout, `Roms/<system>` beside `Imgs/<system>` under the data root and beside the executable, and still reads an older `roms/`
 - Identical front-end features for every platform: pause menu, instant-state slots with thumbnails, fast-forward, slow motion, rewind, runahead, frame stepping, screenshots, turbo, display overrides, and mute
 
@@ -43,7 +43,7 @@ src/
 ├── config/                  # Settings, input bindings, data roots, and migration
 ├── game/                    # Platform descriptors, detection, and validation
 ├── i18n/                    # English and Simplified Chinese catalog
-├── library/                 # Platform-neutral managed game library
+├── library/                 # Game library: metadata and ROM paths
 ├── model/                   # Launcher card style metadata
 ├── platform/                # Optional native file picker
 ├── runtime/                 # IGameRuntime, RuntimeRegistry, video geometry
@@ -66,9 +66,8 @@ The layout has two halves, and only one of them is yours to edit:
 │   └── unpacked/             # cores extracted from a .zip
 ├── system/                   # core system and BIOS files
 ├── library/
-│   ├── metadata.tsv          # favorites, titles, play time, display overrides
-│   ├── cover-names.json      # local title to libretro-thumbnails name, for lookups
-│   └── FC/, GBA/, ...        # one managed ROM copy per platform
+│   ├── metadata.tsv          # path, favorites, titles, play time, display overrides
+│   └── cover-names.json      # local title to libretro-thumbnails name, for lookups
 ├── saves/FC/                 # one .srm battery save per game
 ├── states/FC/                # three instant-state slots per game
 ├── core-options/             # one `<core>.tsv` of chosen values per core
@@ -85,7 +84,7 @@ older setups.
 [docs/paths.md](docs/paths.md) spells out which folder is whose, who writes each one, and what
 deleting it costs.
 
-Library metadata is keyed by platform and stable content ID, so favorite, custom-title, play-history, and per-game display data survives removing and later reimporting the same game. `metadata.tsv` is written in a versioned format that also holds each game's optional display override; files written by older builds still load and are rewritten in the current format on the next save.
+Library metadata is keyed by platform and stable content ID, and each row also stores the path of the ROM. The library is an index, not a copy: a game is read from the file the player put on the card, and removing it from the library never deletes that file. A game that is moved or renamed is picked up again by the next scan, which matches the same bytes to the same entry, so favorite, custom-title, play-history, and per-game display data survive removing and later reimporting the same game. `metadata.tsv` is written in a versioned format that also holds each game's optional display override; files written by older builds still load and are rewritten in the current format on the next save.
 
 ## Build and run
 
@@ -115,7 +114,7 @@ The tag without its leading `v` is passed in as `MRG_VERSION_STRING`, so the Abo
 
 ## Game library
 
-Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the file is copied to its managed directory: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
+Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the game is listed: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. The file itself stays where it is -- nothing is copied into the data root, so a card holds one copy of each game. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
 
 On Linux the root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from `SDL_GetPrefPath("MRG", "MRGPlayer")`, and a device build points `MRG_DATA_DIR` at the card instead. It holds what the launcher manages: `library/`, `saves/`, `states/`, `system/`, `core-options/`, `cores/` and `rom-cache/`. The games and their art sit outside it, in `Roms/<system>/` and `Imgs/<system>/` on the card -- `MRG_CARD_ROOT` names it, and on a desktop the data root stands in for the card.
 
@@ -138,7 +137,7 @@ every machine. Only the top of the tree is tidied: a folder you made yourself (`
 a game already inside a system folder, documentation such as `Roms/README.md`, and a name that
 already exists in the target folder are all left exactly where they are.
 
-Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the managed game, or delete its battery save. Removing a game retains its save and metadata; deleting save data retains the managed game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
+Select a populated card and press **M** or keyboard **X**, controller **X**, or right-click to open management. The menu can start the game, toggle its favorite status, display metadata, remove the game from the library, or delete its battery save. Removing a game only forgets the library entry: the ROM stays on the card and the save, favorite, title, and play time are kept, so adding the same file again picks up where it left off. Deleting save data retains the game. Destructive confirmations default to **Cancel**. Favorite games sort before regular games, and play time excludes time spent in the pause menu.
 
 ### Box art
 

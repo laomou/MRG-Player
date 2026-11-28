@@ -72,6 +72,9 @@ private:
     bool hasVideoOverride = false;
     runtime::VideoOptions video;
     std::string customTitle;
+    // Where the ROM lives. The library indexes files, it does not copy them, so
+    // the path is the only thing tying an entry to the bytes on the card.
+    std::string path;
   };
 
   bool refresh();
