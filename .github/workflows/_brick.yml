@@ -101,7 +101,7 @@ jobs:
             --prefix "$TC/tc/bin/aarch64-linux-gnu-" \
             --sysroot "$TC/tc/aarch64-linux-gnu/libc" \
             --src "$TC/core-src" \
-            --out pack/cores
+            --out platforms/brick/pak/cores
 
       # A tag names the build; a push or a manual run keeps the same 0.0.0-dev
       # stamp the desktop jobs use, so an unreleased build never claims a version.
