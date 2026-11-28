@@ -236,6 +236,15 @@ enum class TextId {
   // Shown once when a cover download could not reach the host: the launcher
   // keeps working offline, it just stops asking.
   CoversOffline,
+  // The About page checks the release list on demand; nothing is downloaded
+  // until the player chooses to.
+  CheckForUpdates,
+  CheckForUpdatesDescription,
+  CheckingForUpdates,
+  UpToDate,
+  UpdateAvailable,
+  UpdateFailed,
+  HintCheck,
   Count
 };
 

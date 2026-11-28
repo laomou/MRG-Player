@@ -20,6 +20,11 @@ namespace launcher::config {
 // pak keeps its fonts and cores next to the binary.
 [[nodiscard]] std::string executableDirectory();
 
+// CA bundle used for HTTPS downloads. Empty when the build has none: a desktop
+// normally has a system store, while the handheld firmware ships no certificates
+// at all, so the pak carries one next to its fonts.
+[[nodiscard]] std::string certificateBundlePath();
+
 // Folders scanned for games: MRG_ROM_DIRS when the launcher is packaged for a
 // device, otherwise Roms/ under the data root and next to the executable.
 // Missing folders are dropped.

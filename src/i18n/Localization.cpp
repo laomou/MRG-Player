@@ -237,7 +237,14 @@ constexpr Entry kText[]{
     {"MORE GAMES", "更多内容"},
     {"ALL COVERS", "全部封面"},
     {"BY RECENT PLAY", "按最近游玩"},
-    {"NO NETWORK; COVERS SKIPPED", "离线，已跳过封面下载"}};
+    {"NO NETWORK; COVERS SKIPPED", "离线，已跳过封面下载"},
+    {"CHECK FOR UPDATES", "检查更新"},
+    {"LOOK FOR A NEWER RELEASE", "查找是否有新版本"},
+    {"CHECKING...", "正在检查..."},
+    {"UP TO DATE", "已是最新"},
+    {"AVAILABLE", "可用"},
+    {"CHECK FAILED", "检查失败"},
+    {"CHECK", "检查"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 

@@ -325,6 +325,10 @@ int settingRowCount(int category, bool keyboardPrompts) {
     return 5;
   if (category == 6)
     return kThemeRowCount;
+  // About names the build and offers the one action on that page: asking the
+  // release list whether there is something newer.
+  if (category == 7)
+    return 2;
   return 1;
 }
 
@@ -426,6 +430,8 @@ int settingsRowAt(int category, float x, float y, bool keyboardPrompts) {
     count = 2;
   else if (category == 6)
     count = kThemeRowCount;
+  else if (category == 7)
+    count = 2;
   rows.count = count;
   return rows.hit(x, y);
 }
@@ -510,7 +516,8 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused) {
+                  float focusOpacity, bool refreshFocused,
+                  std::string_view updateStatus) {
   // The background no longer borrows a game's palette: one accent for every
   // screen, so the picture never changes colour when the library does.
   Game game{};
@@ -826,6 +833,16 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                    tr(TextId::RescanRom, language),
                    tr(TextId::RescanRomDescription, language), "", game.accent,
                    focusOpacity);
+  } else if (category == 7) {
+    drawSettingRow(renderer, kSettingRows.item(0), row == 0,
+                   contentFocused && row == 0, "MRG PLAYER",
+                   tr(TextId::LauncherDescription, language), MRG_VERSION,
+                   game.accent, focusOpacity);
+    drawSettingRow(renderer, kSettingRows.item(1), row == 1,
+                   contentFocused && row == 1,
+                   tr(TextId::CheckForUpdates, language),
+                   tr(TextId::CheckForUpdatesDescription, language),
+                   std::string(updateStatus), game.accent, focusOpacity);
   } else {
     drawSettingRow(renderer, kSettingRows.item(0), true, contentFocused, "MRG PLAYER",
                    tr(TextId::LauncherDescription, language), MRG_VERSION,
@@ -864,6 +881,11 @@ std::vector<Hint> settingsFooterHints(int category, int row,
     // the page's one action, and it runs on the confirm key.
     if (row == 1)
       footer.push_back({i18n::tr(i18n::TextId::ConfirmControl, language),
+                        prompts.confirm, true});
+  } else if (category == 7) {
+    // The build row is read-only; the update row is the page's action.
+    if (row == 1)
+      footer.push_back({i18n::tr(i18n::TextId::HintCheck, language),
                         prompts.confirm, true});
   } else {
     footer.push_back(

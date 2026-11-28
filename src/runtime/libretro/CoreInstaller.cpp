@@ -7,6 +7,7 @@
 #include <string>
 
 
+#include "config/AppPaths.hpp"
 #include "runtime/libretro/CoreArchive.hpp"
 #include "runtime/libretro/CoreDiscovery.hpp"
 #if defined(MRG_ENABLE_CORE_DOWNLOAD) && MRG_ENABLE_CORE_DOWNLOAD
@@ -115,7 +116,8 @@ InstallOutcome installCore(const CorePackage &package, const std::string &coresD
   std::uint64_t bytes = 0;
   std::string downloadError;
   if (io::downloadFile(coreArchiveUrl(package), paths::toUtf8(archive), kMaximumDownloadBytes,
-                       bytes, downloadError) != io::DownloadStatus::Ok) {
+                       bytes, downloadError,
+                       config::certificateBundlePath()) != io::DownloadStatus::Ok) {
     fs::remove(archive, code);
     outcome.message = downloadError;
     return outcome;

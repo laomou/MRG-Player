@@ -289,7 +289,8 @@ void CoverCache::startDownload(const library::GameEntry &game) {
   job->id = game.id;
   job->target = target;
   job_ = job;
-  worker_ = std::thread([job, urls, target]() {
+  const std::string caBundle = config::certificateBundlePath();
+  worker_ = std::thread([job, urls, target, caBundle]() {
     // The system folder may not exist yet on a card that never held art.
     std::error_code made;
     fs::create_directories(paths::fromUtf8(target).parent_path(), made);
@@ -299,7 +300,8 @@ void CoverCache::startDownload(const library::GameEntry &game) {
       std::uint64_t bytes = 0;
       std::string error;
       const io::DownloadStatus status =
-          io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error);
+          io::downloadFile(url, partial, kMaximumCoverBytes, bytes, error,
+                           caBundle);
       if (status == io::DownloadStatus::Network) {
         job->networkFailure = true;
         std::error_code code;

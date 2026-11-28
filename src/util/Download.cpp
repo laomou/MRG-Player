@@ -57,7 +57,9 @@ std::string narrow(const std::wstring &text) {
 
 #if defined(_WIN32)
 DownloadStatus downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
-                            std::uint64_t &written, std::string &error) {
+                            std::uint64_t &written, std::string &error,
+                            const std::string &caBundle) {
+  (void)caBundle;  // WinHTTP uses the system certificate store.
   written = 0;
   const std::wstring wideUrl = widen(url);
   URL_COMPONENTS parts{};
@@ -215,7 +217,8 @@ DownloadStatus classifyWget(int code) {
 }  // namespace
 
 DownloadStatus downloadFile(const std::string &url, const std::string &target, std::uint64_t maximumBytes,
-                            std::uint64_t &written, std::string &error) {
+                            std::uint64_t &written, std::string &error,
+                            const std::string &caBundle) {
   written = 0;
   // The cap is applied twice: curl refuses a body larger than the limit before
   // it writes anything, and the result is checked afterwards because wget has
@@ -224,6 +227,8 @@ DownloadStatus downloadFile(const std::string &url, const std::string &target, s
   if (maximumBytes != 0) {
     curl.insert(curl.end(), {"--max-filesize", std::to_string(maximumBytes)});
   }
+  if (!caBundle.empty())
+    curl.insert(curl.end(), {"--cacert", caBundle});
   curl.insert(curl.end(), {"-o", target, url});
   const ProgramResult curlResult = runProgram(curl);
   DownloadStatus status = DownloadStatus::Failed;
@@ -232,7 +237,11 @@ DownloadStatus downloadFile(const std::string &url, const std::string &target, s
   // Only reach for wget when curl is not installed. Once curl ran, a retry
   // through another client would repeat the same timeout for no new answer.
   if (!curlResult.started) {
-    const ProgramResult wgetResult = runProgram({"wget", "-q", "-T", "60", "-O", target, url});
+    std::vector<std::string> wget{"wget", "-q", "-T", "60"};
+    if (!caBundle.empty())
+      wget.push_back("--ca-certificate=" + caBundle);
+    wget.insert(wget.end(), {"-O", target, url});
+    const ProgramResult wgetResult = runProgram(wget);
     if (!wgetResult.started) {
       error = "The download failed; install curl or wget, or fetch the file by hand";
       return DownloadStatus::Failed;

@@ -125,6 +125,21 @@ std::string executableDirectory() {
   return result;
 }
 
+std::string certificateBundlePath() {
+  const std::string executable = executableDirectory();
+  const std::string candidates[] = {
+      executable + "assets/ca-certificates.crt",
+      executable + "res/ca-certificates.crt",
+      executable + "../share/mrg-player/ca-certificates.crt",
+  };
+  for (const std::string &candidate : candidates) {
+    std::error_code ec;
+    if (fs::is_regular_file(paths::fromUtf8(candidate), ec) && !ec)
+      return candidate;
+  }
+  return {};
+}
+
 std::vector<std::string> romSearchDirectories() {
   std::vector<std::string> directories;
   for (const std::string &candidate : configuredRomDirectories()) {
