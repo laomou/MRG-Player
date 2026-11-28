@@ -44,6 +44,7 @@
 #include "ui/SettingsScreen.hpp"
 #include "ui/Theme.hpp"
 #include "util/PngWriter.hpp"
+#include "util/UpdateChecker.hpp"
 
 namespace launcher {
 namespace {
@@ -573,6 +574,14 @@ int Application::run(int argc, char **argv) {
   // row; while it holds the keys the rows draw no focus ring.
   bool coreRefreshFocused = false;
   bool rewindHeld = false;
+  // The About page asks the release list only when the player presses the
+  // action key; the answer arrives on a worker and never blocks the menu.
+  util::UpdateChecker updateChecker;
+  util::UpdateStatus updateStatus = util::UpdateStatus::Idle;
+  std::string updateVersion;
+  // A finished check leaves a short cooldown behind so a held button or an
+  // impatient double press cannot spend the GitHub rate limit on repeats.
+  Uint32 updateReadyAt = 0;
 #if defined(MRG_ENABLE_SMOKE_TESTS)
   const Uint64 smokeSettingsStart = SDL_GetTicks64();
   bool smokeSettingsGeneral = false;
@@ -1299,6 +1308,19 @@ int Application::run(int argc, char **argv) {
       bindingCapture = true;
       return;
     }
+    if (settingCategory == 7) {
+      // The version row is read-only. The row under it asks GitHub for the
+      // release list; the answer is shown in place, nothing is downloaded.
+      if (settingRow == 1 && updateStatus != util::UpdateStatus::Checking &&
+          SDL_GetTicks() >= updateReadyAt &&
+          updateChecker.start(MRG_VERSION,
+                              config::dataSubdirectory("update", "") +
+                                  "/releases.json",
+                              config::certificateBundlePath())) {
+        updateStatus = util::UpdateStatus::Checking;
+      }
+      return;
+    }
     applySetting(1);
   };
   auto settingsFooter = [&] {
@@ -1913,6 +1935,13 @@ int Application::run(int argc, char **argv) {
                           currentLanguage()),
                  3000);
       refreshCoreRows();
+    }
+    util::UpdateResult updateResult;
+    if (updateChecker.poll(updateResult)) {
+      updateStatus = updateResult.status;
+      updateVersion = std::move(updateResult.version);
+      updateReadyAt = SDL_GetTicks() + 2000;
+      menuDirty = true;
     }
     SDL_Event event{};
     while (SDL_PollEvent(&event) != 0) {
@@ -3077,10 +3106,31 @@ int Application::run(int argc, char **argv) {
                         currentLanguage(), prompts, focusOpacity,
                         ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
+      std::string updateText;
+      switch (updateStatus) {
+      case util::UpdateStatus::Checking:
+        updateText = i18n::tr(i18n::TextId::CheckingForUpdates,
+                              currentLanguage());
+        break;
+      case util::UpdateStatus::UpToDate:
+        updateText = i18n::tr(i18n::TextId::UpToDate, currentLanguage());
+        break;
+      case util::UpdateStatus::Available:
+        updateText = updateVersion + " " +
+                     i18n::tr(i18n::TextId::UpdateAvailable,
+                              currentLanguage());
+        break;
+      case util::UpdateStatus::Failed:
+        updateText = i18n::tr(i18n::TextId::UpdateFailed, currentLanguage());
+        break;
+      default:
+        break;
+      }
       ui::drawSettings(renderer, settings, settingCategory, settingRow,
                        bindingCapture, activeControllerName(),
                        resolvedControllerStyle(), coreRows, prompts,
-                       settingsRailFocus, focusOpacity, coreRefreshFocused);
+                       settingsRailFocus, focusOpacity, coreRefreshFocused,
+                       updateText);
     } else if (selectedEntryAvailable()) {
       ui::drawHome(renderer, selectedGame, toastUntil, toastMessage,
                    settings.startupPage, currentLanguage(), gameLibrary,

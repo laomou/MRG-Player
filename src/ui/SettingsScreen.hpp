@@ -81,6 +81,7 @@ void drawSettings(SDL_Renderer *renderer, const AppSettings &settings,
                   config::ControllerStyle resolvedControllerStyle,
                   const std::vector<CoreRow> &cores,
                   const config::InputPrompts &prompts, bool railFocused,
-                  float focusOpacity, bool refreshFocused = false);
+                  float focusOpacity, bool refreshFocused = false,
+                  std::string_view updateStatus = {});
 
 } // namespace launcher::ui

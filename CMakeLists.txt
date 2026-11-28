@@ -219,6 +219,7 @@ add_library(mrg-platform STATIC
   src/input/BrickInput.cpp
   src/util/ImageFile.cpp
   src/util/Utf8Path.cpp
+  src/util/Version.cpp
 )
 target_include_directories(mrg-platform PUBLIC src)
 mrg_configure_target(mrg-platform)
@@ -274,6 +275,7 @@ add_executable(mrg-player
   src/ui/SettingsScreen.cpp
   src/util/Image.cpp
   src/util/PngWriter.cpp
+  src/util/UpdateChecker.cpp
 )
 target_include_directories(mrg-player PRIVATE src third_party/stb)
 mrg_configure_target(mrg-player)
@@ -365,6 +367,12 @@ if(BUILD_TESTING)
   target_compile_features(sha256-test PRIVATE cxx_std_17)
   target_compile_options(sha256-test PRIVATE ${MRG_WARNING_FLAGS})
   add_test(NAME sha256 COMMAND sha256-test)
+
+  add_executable(version-test tests/VersionTest.cpp src/util/Version.cpp)
+  target_include_directories(version-test PRIVATE src)
+  target_compile_features(version-test PRIVATE cxx_std_17)
+  target_compile_options(version-test PRIVATE ${MRG_WARNING_FLAGS})
+  add_test(NAME version COMMAND version-test)
 
   add_executable(core-option-text-test tests/CoreOptionTextTest.cpp
     src/i18n/CoreOptionText.cpp)

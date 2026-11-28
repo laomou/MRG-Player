@@ -23,6 +23,7 @@ enum class DownloadStatus {
 // and a message.
 [[nodiscard]] DownloadStatus downloadFile(const std::string &url, const std::string &target,
                                           std::uint64_t maximumBytes, std::uint64_t &written,
-                                          std::string &error);
+                                          std::string &error,
+                                          const std::string &caBundle = {});
 
 }  // namespace launcher::io
