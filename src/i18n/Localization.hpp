@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <string>
 #include <string_view>
 
 namespace launcher::i18n {
@@ -219,10 +221,17 @@ enum class TextId {
   HintDetails,
   LedLighting,
   LedDescription,
+  // The handheld has no window, so its display page is about the picture only.
+  DisplayHandheldDescription,
+  // A save file that has never been written: "NONE" reads as "nothing yet",
+  // where "NOT FOUND" read as "your save is gone".
+  None,
   Count
 };
 
 Language languageFromSetting(int value);
 const char *tr(TextId id, Language language);
+// "1h 20m" / "1 小时 20 分钟": a duration a player reads, not a debug number.
+[[nodiscard]] std::string durationText(std::uint64_t seconds, Language language);
 
 } // namespace launcher::i18n

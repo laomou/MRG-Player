@@ -148,6 +148,18 @@ int main() {
   check(launcherKey(SDLK_UP) == SDLK_UP, "the d-pad keys stay arrows");
   check(launcherKey(SDLK_m) == SDLK_m, "unbound keys reach the screen intact");
 
+  // The controller page gives each column half a row at 1024 px, so the d-pad
+  // and the shoulders are drawn as glyphs and abbreviations rather than the
+  // long names SDL reports.
+  check(launcher::config::keyBindingShortName(SDLK_DOWN) == "\xE2\x86\x93", "the down key is one arrow");
+  check(launcher::config::keyBindingShortName(SDLK_RSHIFT) == "RShift", "the right shift key is abbreviated");
+  check(launcher::config::controllerButtonShortPrompt(SDL_CONTROLLER_BUTTON_DPAD_RIGHT,
+                                                      launcher::config::ControllerStyle::Xbox) == "D-RT",
+        "the d-pad right button is abbreviated");
+  check(launcher::config::controllerButtonShortPrompt(SDL_CONTROLLER_BUTTON_LEFTSTICK,
+                                                      launcher::config::ControllerStyle::Xbox) == "LS",
+        "the left stick is abbreviated");
+
   // The pulse is a 50% duty cycle: two frames held, two frames released. Half a
   // second of NTSC frames therefore presses exactly fifteen times.
   int presses = 0;

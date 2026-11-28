@@ -549,8 +549,12 @@ int Application::run(int argc, char **argv) {
   std::string focusKey;
   float focusOpacity = 1.0f;
   Uint64 focusSince = 0;
-  selectedGame = std::clamp(selectedGame, 0,
-                            static_cast<int>(gameLibrary.slotCount()) - 1);
+  // The remembered number is an index into entries(), not into the padded grid.
+  // Clamping to slotCount() would park the ring on an empty slot whenever the
+  // library is shorter than it was last time, which hides the title, the play
+  // time and the whole footer.
+  const int entryCount = static_cast<int>(gameLibrary.entries().size());
+  selectedGame = entryCount > 0 ? std::clamp(selectedGame, 0, entryCount - 1) : 0;
   int settingCategory = 0;
   int settingRow = 0;
   // The core page's refresh button is reached by pressing up from the first
@@ -1607,8 +1611,9 @@ int Application::run(int argc, char **argv) {
     if (managementDialog == ui::ManagementDialog::ConfirmRemoveRom) {
       const int removedIndex = selectedGame;
       if (gameLibrary.removeGame(static_cast<std::size_t>(selectedGame))) {
-        selectedGame = std::clamp(
-            removedIndex, 0, static_cast<int>(gameLibrary.slotCount()) - 1);
+        const int remaining = static_cast<int>(gameLibrary.entries().size());
+        selectedGame =
+            remaining > 0 ? std::clamp(removedIndex, 0, remaining - 1) : 0;
         screen = Screen::Home;
         showToast(i18n::TextId::RomRemoved);
       } else {

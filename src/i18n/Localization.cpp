@@ -93,8 +93,9 @@ constexpr Entry kText[]{
     {"OPTIONS", "选项"},
     {"GAME OPTIONS", "游戏选项"},
     {"REMOVE FROM LIBRARY", "从游戏库移除"},
-    {"FORGET THIS GAME; KEEP THE ROM AND SAVES",
-     "从游戏库移除，保留 ROM 和存档"},
+    // The row above already says "remove from the library"; this line only has
+    // to add what happens to the files.
+    {"KEEP THE ROM AND SAVES", "保留 ROM 和存档"},
     {"DELETE SAVE DATA", "删除保存数据"},
     {"REQUIRES A SEPARATE CONFIRMATION", "需要单独确认，不影响 ROM"},
     {"NO SAVE DATA", "没有保存数据"},
@@ -224,7 +225,9 @@ constexpr Entry kText[]{
     {"REFRESH", "刷新"},
     {"DETAILS", "详情"},
     {"LED LIGHTING", "机壳灯"},
-    {"LIGHT THE CASE IN THE ACCENT COLOUR", "机壳灯跟随主题色"}};
+    {"LIGHT THE CASE IN THE ACCENT COLOUR", "机壳灯跟随主题色"},
+    {"PICTURE FIT AND SCALING", "画面适配与缩放"},
+    {"NONE", "无"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 
@@ -238,6 +241,19 @@ const char *tr(TextId id, Language language) {
   const auto &entry = kText[static_cast<std::size_t>(id)];
   return language == Language::SimplifiedChinese ? entry.chinese
                                                  : entry.english;
+}
+
+std::string durationText(std::uint64_t seconds, Language language) {
+  const std::uint64_t hours = seconds / 3600;
+  const std::uint64_t minutes = (seconds % 3600) / 60;
+  if (language == Language::SimplifiedChinese) {
+    if (hours > 0)
+      return std::to_string(hours) + " 小时 " + std::to_string(minutes) + " 分钟";
+    return std::to_string(minutes) + " 分钟";
+  }
+  if (hours > 0)
+    return std::to_string(hours) + "h " + std::to_string(minutes) + "m";
+  return std::to_string(minutes) + "m";
 }
 
 } // namespace launcher::i18n

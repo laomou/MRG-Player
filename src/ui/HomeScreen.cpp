@@ -73,7 +73,6 @@ struct HomeLayout {
   float footerY = 0.0f;
   float footerRight = 0.0f;
   float toastX = 0.0f;
-  float toastY = 0.0f;
   float toastWidth = 0.0f;
   float visibleSlots = kVisibleSlotsAt1280;
 };
@@ -109,7 +108,6 @@ HomeLayout homeLayout() {
       std::min(608.0f, layout.rowRight - layout.rowLeft);
   layout.toastWidth = std::min(506.0f, layout.rowRight - layout.rowLeft);
   layout.toastX = layout.centerX - layout.toastWidth * 0.5f;
-  layout.toastY = layout.captionY + 39.0f;
   // Keep the half card that says the row continues: the count scales with the
   // width, but a whole number of slots would hide the next card completely on a
   // narrower canvas, so it always ends in a half.
@@ -415,19 +413,20 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
            true, cardsFocused, focusOpacity, accent, selectedEntry, covers);
   clearClipRect(renderer);
 
-  if (selectedEntry != nullptr) {
+  // A toast takes the caption's place instead of covering the play time: the
+  // two lines would otherwise be laid on top of each other whenever the
+  // importer reports back.
+  const bool toastVisible =
+      SDL_GetTicks64() < toastUntil && !toastMessage.empty();
+  if (selectedEntry != nullptr && !toastVisible) {
     centeredText(renderer, static_cast<int>(layout.centerX),
                  static_cast<int>(layout.captionY),
                  fitText(selectedEntry->title,
                          static_cast<int>(layout.captionWidth), 3),
                  3, style.accent);
-    const std::uint64_t hours = selectedEntry->playSeconds / 3600;
-    const std::uint64_t minutes = (selectedEntry->playSeconds % 3600) / 60;
-    std::string playTime = tr(TextId::PlayTime, language);
-    playTime += ": ";
-    if (hours > 0)
-      playTime += std::to_string(hours) + "h ";
-    playTime += std::to_string(minutes) + "m";
+    const std::string playTime =
+        std::string(tr(TextId::PlayTime, language)) + ": " +
+        i18n::durationText(selectedEntry->playSeconds, language);
     centeredText(renderer, static_cast<int>(layout.centerX),
                  static_cast<int>(layout.playTimeY), playTime, 1,
                  {232, 236, 244, 255});
@@ -444,11 +443,11 @@ void drawHome(SDL_Renderer *renderer, int selectedGame, Uint64 toastUntil, std::
     drawActionRow(renderer, layout.footerRight, layout.footerY, hints);
   }
 
-  if (SDL_GetTicks64() < toastUntil && !toastMessage.empty()) {
-    rounded(renderer, layout.toastX, layout.toastY, layout.toastWidth, 53, 14,
+  if (toastVisible) {
+    rounded(renderer, layout.toastX, layout.captionY, layout.toastWidth, 53, 14,
             {4, 8, 22, 235});
     centeredText(renderer, static_cast<int>(layout.centerX),
-                 static_cast<int>(layout.toastY + 15),
+                 static_cast<int>(layout.captionY + 15),
                  std::string(toastMessage), 2, style.accent);
   }
 }

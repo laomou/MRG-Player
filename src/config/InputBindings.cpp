@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
 
 namespace launcher::config {
 namespace {
@@ -109,6 +110,33 @@ std::string keyBindingName(SDL_Keycode key) {
   return name != nullptr && *name != '\0' ? name : "?";
 }
 
+std::string keyBindingShortName(SDL_Keycode key) {
+  // The arrows are one glyph each, which is what keeps a d-pad row readable in
+  // the half-row the binding list gives it at 1024 px.
+  switch (key) {
+  case SDLK_UP:
+    return "\xE2\x86\x91";
+  case SDLK_DOWN:
+    return "\xE2\x86\x93";
+  case SDLK_LEFT:
+    return "\xE2\x86\x90";
+  case SDLK_RIGHT:
+    return "\xE2\x86\x92";
+  default:
+    break;
+  }
+  std::string name = keyBindingName(key);
+  static const std::pair<const char *, const char *> kShortNames[] = {
+      {"Right Shift", "RShift"}, {"Left Shift", "LShift"}, {"Right Ctrl", "RCtrl"}, {"Left Ctrl", "LCtrl"},
+      {"Right Alt", "RAlt"},     {"Left Alt", "LAlt"},     {"Return", "Enter"},     {"Backspace", "Bksp"},
+      {"Caps Lock", "Caps"},     {"Page Up", "PgUp"},      {"Page Down", "PgDn"},   {"Print Screen", "PrtSc"},
+  };
+  for (const auto &[longName, shortName] : kShortNames)
+    if (name == longName)
+      return shortName;
+  return name;
+}
+
 std::string controllerBindingName(SDL_GameControllerButton button) {
   const char *name = SDL_GameControllerGetStringForButton(button);
   if (name == nullptr || *name == '\0')
@@ -177,6 +205,34 @@ std::string controllerButtonPrompt(SDL_GameControllerButton button,
       return "TRIANGLE";
   }
   return controllerBindingName(button);
+}
+
+namespace {
+
+// The long names a pad reports for its shoulders, sticks and d-pad.
+std::string shortPadName(std::string name) {
+  static const std::pair<const char *, const char *> kShortNames[] = {
+      {"LEFTSHOULDER", "LB"},
+      {"RIGHTSHOULDER", "RB"},
+      {"LEFTSTICK", "LS"},
+      {"RIGHTSTICK", "RS"},
+      // SDL spells the d-pad buttons DPUP/DPDOWN/DPLEFT/DPRIGHT.
+      {"DPUP", "D-UP"},
+      {"DPDOWN", "D-DN"},
+      {"DPLEFT", "D-LF"},
+      {"DPRIGHT", "D-RT"},
+  };
+  for (const auto &[longName, shortName] : kShortNames)
+    if (name == longName)
+      return shortName;
+  return name;
+}
+
+} // namespace
+
+std::string controllerButtonShortPrompt(SDL_GameControllerButton button,
+                                        ControllerStyle style) {
+  return shortPadName(controllerButtonPrompt(button, style));
 }
 
 InputPrompts inputPrompts(InputDeviceKind device, ControllerStyle style,

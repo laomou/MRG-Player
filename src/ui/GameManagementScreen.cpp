@@ -92,10 +92,12 @@ void drawMenu(SDL_Renderer *renderer, const library::GameEntry &entry,
        fitText(entry.title, static_cast<int>(panel.header.w), 2), 2,
        themeAccent);
   const auto &platform = game::platformDescriptor(entry.platform);
+  // Name the thing before its state: a bare "不存在" after the platform read as
+  // "this game is gone" instead of "no save file has been written yet".
   text(renderer, titleX, headerY + 70,
        std::string(platform.displayName) + "  /  " +
-           tr(saveDataPresent ? TextId::SaveDataPresent
-                              : TextId::SaveDataMissing,
+           tr(TextId::SaveData, language) + ": " +
+           tr(saveDataPresent ? TextId::SaveDataPresent : TextId::None,
               language),
        1, {180, 195, 213, 255});
   fill(renderer, panel.header.x, panel.header.bottom(), panel.header.w, 1,
@@ -215,14 +217,6 @@ void drawConfirmation(SDL_Renderer *renderer, const library::GameEntry &entry,
                {122, 135, 159, 255});
 }
 
-std::string playTimeText(std::uint64_t seconds) {
-  const std::uint64_t hours = seconds / 3600;
-  const std::uint64_t minutes = (seconds % 3600) / 60;
-  if (hours > 0)
-    return std::to_string(hours) + "h " + std::to_string(minutes) + "m";
-  return std::to_string(minutes) + "m";
-}
-
 std::string lastPlayedText(std::int64_t timestamp, i18n::Language language) {
   if (timestamp <= 0)
     return tr(TextId::NeverPlayed, language);
@@ -252,14 +246,18 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
        accent);
   text(renderer, x + 48, y + 154, tr(TextId::File, language), 1,
        {132, 145, 169, 255});
-  text(renderer, x + 48, y + 176,
-       fitText(paths::toUtf8(paths::fromUtf8(entry.filePath).filename()),
-               fileWidth, 2),
-       2, {235, 239, 247, 255});
+  // The whole path, not just the file name: the row above promises the ROM's
+  // location, and a bare "俄罗斯方块.nes" says nothing about which folder or
+  // which card it lives on.
+  const std::string romPath = paths::toUtf8(paths::fromUtf8(entry.filePath));
+  const int pathScale = textWidth(romPath, 2) <= fileWidth ? 2 : 1;
+  text(renderer, x + 48, y + 176, fitText(romPath, fileWidth, pathScale),
+       pathScale, {235, 239, 247, 255});
 
   text(renderer, x + 48, y + 222, tr(TextId::PlayTime, language), 1,
        {132, 145, 169, 255});
-  text(renderer, x + 48, y + 245, playTimeText(entry.playSeconds), 2,
+  text(renderer, x + 48, y + 245,
+       i18n::durationText(entry.playSeconds, language), 2,
        {235, 239, 247, 255});
   text(renderer, x + 348, y + 222, tr(TextId::LastPlayed, language), 1,
        {132, 145, 169, 255});
@@ -274,8 +272,7 @@ void drawInfo(SDL_Renderer *renderer, const library::GameEntry &entry,
   text(renderer, x + 348, y + 291, tr(TextId::SaveData, language), 1,
        {132, 145, 169, 255});
   text(renderer, x + 348, y + 314,
-       tr(saveDataPresent ? TextId::SaveDataPresent : TextId::SaveDataMissing,
-          language),
+       tr(saveDataPresent ? TextId::SaveDataPresent : TextId::None, language),
        2,
        saveDataPresent ? SDL_Color{132, 220, 157, 255}
                        : SDL_Color{180, 190, 210, 255});
