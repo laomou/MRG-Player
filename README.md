@@ -12,7 +12,6 @@ The project remains independent from MRG-OS-clean. It ships no emulator implemen
 - Dynamic platform and file-type labels in the library and management UI
 - Persistent managed library with click-to-import, drag-and-drop, duplicate detection, and Switch-style management
 - Box art per game in the card's own `Imgs/<system>/` folder, the file the stock launcher shows, so art dropped in by hand and art the launcher fetches are the same picture; map a local title to a libretro-thumbnails name in `cover-names.json` to make lookups hit, and cards without art keep the plain navy card with a console badge while the selected game's art becomes the blurred background
-- Non-destructive migration from the legacy NES Player data directory
 - Console-agnostic runtime: video, audio, input, pacing, battery saves, and controller hot plugging are handled once for every core
 - In-game pause menu with three persistent instant-state slots, console reset, and a confirmed power cycle (cold boot that keeps battery saves)
 - Slot preview cards with instant-state thumbnails, save time, and the play time at capture
@@ -115,13 +114,7 @@ The tag without its leading `v` is passed in as `MRG_VERSION_STRING`, so the Abo
 
 Click **+ Game Library** to choose a game file, or drag one onto the window. The extension selects the platform, then that platform's validation runs before the file is copied to its managed directory: NES images must carry an iNES or NES 2.0 header, other platforms are checked for the 64 MiB size limit and validated by the core when they start. Content hashes provide stable game identities and duplicate detection. A dropped game starts after import; a game selected through the picker is added without auto-starting.
 
-On Linux the new root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from `SDL_GetPrefPath("MRG", "MRGPlayer")`. On first use, data is copied non-destructively from `SDL_GetPrefPath("MRG", "NESPlayerLauncher")` when the corresponding new destination does not exist:
-
-- `settings.ini` → `settings.ini`
-- `roms/` → `library/nes/`
-- `saves/` → `saves/nes/`
-
-The legacy files are retained. Existing MRG Player destinations are never overwritten.
+On Linux the root is normally `~/.local/share/MRG/MRGPlayer/`, obtained from `SDL_GetPrefPath("MRG", "MRGPlayer")`, and a device build points `MRG_DATA_DIR` at the card instead. Everything inside it is one layout on both: `Roms/<system>/` for the games the card ships, `Imgs/<system>/` for their art beside it, and `library/`, `saves/`, `states/`, `system/`, `core-options/` and `rom-cache/` for what the launcher manages.
 
 ### Folders on a card
 
@@ -387,10 +380,9 @@ Everything above the runtime interface treats every platform the same: one pause
 
 - Every platform requires a libretro core you install yourself. Without a matching core, launching the game reports that no libretro core is installed for the platform instead of running it.
 - Game compatibility, expansion audio, FDS support, and mapper coverage are the core's, not the launcher's; pick a core that covers the titles you play.
-- Battery saves are `.srm` files written by the core. The legacy NES Player directory migration copies old `.sav` files into `saves/nes/`, but a libretro NES core looks for `.srm`, so those files are preserved rather than imported.
 - Only software-rendered cores are supported, and a core that insists on an OpenGL or Vulkan context is refused.
 - Instant states are the core's own blob, so their cross-build compatibility is the core's, not ours; the launcher still rejects a state written by a different core.
-- Box art is looked up by exact No-Intro name. A title the thumbnails project does not ship needs a `covers/names.json` entry or a file dropped into `covers/` by hand.
+- Box art is looked up by exact No-Intro name. A title the thumbnails project does not ship needs an entry in `cover-names.json` under the data root, or `Imgs/<system>/<title>.png` dropped in by hand.
 
 ## Tests
 

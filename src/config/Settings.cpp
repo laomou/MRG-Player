@@ -31,8 +31,6 @@ constexpr std::array<const char *, config::kInputActionCount> kPad2Names{
 } // namespace
 
 std::string settingsPath() {
-  std::string migrationError;
-  (void)config::migrateLegacyData(migrationError);
   const std::string root = config::dataRoot();
   return root.empty() ? "mrg-player.ini"
                       : paths::toUtf8(paths::fromUtf8(root) / "settings.ini");

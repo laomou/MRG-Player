@@ -182,8 +182,6 @@ bool GameLibrary::initialize() {
   if (!directoryOverride_.empty()) {
     directory_ = directoryOverride_;
   } else {
-    if (!config::migrateLegacyData(error_))
-      return false;
     const std::string root = config::dataRoot();
     if (root.empty()) {
       error_ = "Cannot locate MRG Player data directory";
