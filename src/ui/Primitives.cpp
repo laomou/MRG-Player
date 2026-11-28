@@ -90,6 +90,7 @@ struct Backdrop {
   SDL_Color accent{};
   SDL_Texture *wallpaper = nullptr;
   int sunX = 0;
+  bool scene = true;
   // Set when the backend refuses to render into a texture: paint directly
   // instead of paying for a failed attempt every frame.
   bool unwritable = false;
@@ -1136,7 +1137,7 @@ bool sameColor(SDL_Color a, SDL_Color b) {
 // Paints the whole backdrop into whatever target the renderer holds, sun
 // included.
 void paintBackdrop(SDL_Renderer *renderer, const Game &game, int sunX,
-                   SDL_Texture *wallpaper) {
+                   SDL_Texture *wallpaper, bool scene) {
   // Every band here is walked in device rows, so the gradient is smooth at any
   // window size instead of being stretched by the renderer.
   const float left = gOffsetX;
@@ -1172,6 +1173,7 @@ void paintBackdrop(SDL_Renderer *renderer, const Game &game, int sunX,
     SDL_RenderDrawLineF(renderer, left, top + row + 0.5f, left + width,
                         top + row + 0.5f);
   }
+  if (scene) {
   circle(renderer, sunX, 138, 72,
          {game.accent.r, game.accent.g, game.accent.b, 150});
   setColor(renderer, {15, 27, 57, 175});
@@ -1210,6 +1212,7 @@ void paintBackdrop(SDL_Renderer *renderer, const Game &game, int sunX,
   for (int i = 0; i < 3; ++i)
     fill(renderer, 158.0f + i * 42.0f, 363, 38, 38,
          {game.accent.r, game.accent.g, game.accent.b, 135});
+  }
   for (int row = 0; row < rows; ++row) {
     const float t = static_cast<float>(row) / rows;
     const Uint8 alpha = static_cast<Uint8>(18 + 185 * t * t);
@@ -1224,20 +1227,23 @@ void paintBackdrop(SDL_Renderer *renderer, const Game &game, int sunX,
 }
 
 bool backdropHolds(SDL_Renderer *renderer, int width, int height,
-                   const Game &game, SDL_Texture *wallpaper, int sunX) {
+                   const Game &game, SDL_Texture *wallpaper, int sunX,
+                   bool scene) {
   return gBackdrop.texture != nullptr && gBackdrop.renderer == renderer &&
          gBackdrop.width == width && gBackdrop.height == height &&
          sameColor(gBackdrop.top, game.top) &&
          sameColor(gBackdrop.bottom, game.bottom) &&
          sameColor(gBackdrop.accent, game.accent) &&
-         gBackdrop.wallpaper == wallpaper && gBackdrop.sunX == sunX;
+         gBackdrop.wallpaper == wallpaper && gBackdrop.sunX == sunX &&
+         gBackdrop.scene == scene;
 }
 
 // Bakes the backdrop once so a frame only has to blit it. Returns false when
 // the backend cannot render into a texture, which leaves the caller painting
 // the rows directly.
 bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
-                  const Game &game, int sunX, SDL_Texture *wallpaper) {
+                  const Game &game, int sunX, SDL_Texture *wallpaper,
+                  bool scene) {
   if (gBackdrop.renderer != renderer)
     releaseBackdrop();
   gBackdrop.renderer = renderer;
@@ -1248,6 +1254,7 @@ bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
   gBackdrop.accent = game.accent;
   gBackdrop.wallpaper = wallpaper;
   gBackdrop.sunX = sunX;
+  gBackdrop.scene = scene;
   SDL_Texture *texture =
       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                         SDL_TEXTUREACCESS_TARGET, width, height);
@@ -1270,7 +1277,7 @@ bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
   SDL_RenderClear(renderer);
-  paintBackdrop(renderer, game, sunX, wallpaper);
+  paintBackdrop(renderer, game, sunX, wallpaper, scene);
   SDL_SetRenderTarget(renderer, nullptr);
   SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
   if (clipped)
@@ -1286,7 +1293,7 @@ bool bakeBackdrop(SDL_Renderer *renderer, int width, int height,
 // follows the clock: a still picture costs nothing to hold on screen and lets
 // the loop stop drawing entirely while the shelf sits untouched.
 void drawBackground(SDL_Renderer *renderer, const Game &game,
-                    SDL_Texture *wallpaper) {
+                    SDL_Texture *wallpaper, bool scene) {
   if (renderer == nullptr)
     return;
   const int sunX = 1008;
@@ -1297,15 +1304,15 @@ void drawBackground(SDL_Renderer *renderer, const Game &game,
     gBackdrop.renderer = renderer;
   }
   if (width > 0 && height > 0 && !gBackdrop.unwritable) {
-    const int focus = wallpaper != nullptr ? 0 : sunX;
-    if (!backdropHolds(renderer, width, height, game, wallpaper, focus))
-      bakeBackdrop(renderer, width, height, game, focus, wallpaper);
+    const int focus = wallpaper != nullptr || !scene ? 0 : sunX;
+    if (!backdropHolds(renderer, width, height, game, wallpaper, focus, scene))
+      bakeBackdrop(renderer, width, height, game, focus, wallpaper, scene);
     if (gBackdrop.texture != nullptr) {
       SDL_RenderCopy(renderer, gBackdrop.texture, nullptr, nullptr);
       return;
     }
   }
-  paintBackdrop(renderer, game, sunX, wallpaper);
+  paintBackdrop(renderer, game, sunX, wallpaper, scene);
 }
 
 namespace {

@@ -2,7 +2,9 @@
 
 #include <SDL.h>
 
+#include <cstddef>
 #include <string_view>
+#include <vector>
 
 #include "config/InputBindings.hpp"
 #include "ui/CoverSource.hpp"
@@ -30,9 +32,29 @@ void moveSelection(int &selectedGame, int direction, int count);
 // for the mouse, but they never take focus: the keys stay on the cards, so the
 // strip is always drawn idle.
 [[nodiscard]] int homeActionAt(float x, float y, bool hasGame,
-                               i18n::Language language,
+                               bool moreSelected, i18n::Language language,
                                const config::InputPrompts &prompts);
 [[nodiscard]] int homeCardAt(float x, float y, int count, float rowOffset);
+// Ten game cards and the "more" tile that closes the row: everything that walks
+// the shelf counts slots, not games, so an empty card can hold the selection.
+[[nodiscard]] int homeSlotCount(const library::GameLibrary &library);
+
+// The cover wall behind the "more" tile: every game, newest play first. The
+// order is the page's own, so the cursor is an index into it.
+[[nodiscard]] std::vector<std::size_t>
+recentOrder(const library::GameLibrary &library);
+struct MoreGrid {
+  int columns = 0;
+  int rows = 0;
+};
+[[nodiscard]] MoreGrid moreGrid();
+void drawMoreGames(SDL_Renderer *renderer,
+                   const library::GameLibrary &gameLibrary,
+                   const std::vector<std::size_t> &order, int cursor,
+                   i18n::Language language,
+                   const config::InputPrompts &prompts, float focusOpacity,
+                   SDL_Color accent, CoverSource *covers = nullptr);
+[[nodiscard]] int moreGameAt(float x, float y, int count, int cursor);
 // How far the shelf has to slide for the selection to stay on screen. It is a
 // fraction while the row is travelling, so callers can animate towards it.
 [[nodiscard]] float homeRowTarget(int selectedGame, int count);

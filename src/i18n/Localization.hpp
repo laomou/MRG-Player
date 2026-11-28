@@ -229,6 +229,10 @@ enum class TextId {
   // A save file that has never been written: "NONE" reads as "nothing yet",
   // where "NOT FOUND" read as "your save is gone".
   None,
+  MoreGames,
+  MoreTitle,
+  MoreSubtitle,
+  MoreSort,
   Count
 };
 

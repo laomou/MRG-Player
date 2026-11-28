@@ -342,17 +342,22 @@ int main(int argc, char **argv) {
   check(homePillAt(950, 65, launcher::i18n::Language::SimplifiedChinese,
                    4) == 0,
         "The Chinese pills keep their native geometry");
+  const launcher::ui::MoreGrid wall = launcher::ui::moreGrid();
+  check(wall.columns >= 3 && wall.rows >= 2,
+        "The cover wall fills the canvas with at least three columns");
+  check(launcher::ui::moreGameAt(0, 0, 0, 0) == -1,
+        "An empty cover wall answers no click");
   check(homeCardAt(400, 400, 7, 0.0f) >= 0,
         "A card in the row is clickable");
   check(homeCardAt(400, 160, 7, 0.0f) == -1,
         "Above the row activates nothing");
-  // Seven and a half cards fit: the last one is always half visible so the
-  // shelf shows there is more to the right, and the row never scrolls past its
-  // last card.
+  // Seven whole cards and a half fit: the half one says there is more to the
+  // right. The travel stops one slot earlier than that half, so the final
+  // position - the MORE GAMES tile - can be scrolled fully into view.
   check(homeRowTarget(0, 5) == 0.0f && homeRowTarget(6, 7) == 0.0f,
         "A short library never scrolls");
-  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 2.5f,
-        "A long library stops with the last card flush against the right edge");
+  check(homeRowTarget(8, 10) == 2.0f && homeRowTarget(9, 10) == 3.0f,
+        "The last position can be scrolled fully into view");
   check(homeCardAt(1200, 400, 10, 2.0f) >= 7,
         "Scrolling the row moves the cards under the pointer");
   // A prompt set always names the device it was written for, so the legend

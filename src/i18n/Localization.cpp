@@ -230,7 +230,13 @@ constexpr Entry kText[]{
     {"LED LIGHTING", "机壳灯"},
     {"LIGHT THE CASE IN THE ACCENT COLOUR", "机壳灯跟随主题色"},
     {"PICTURE FIT AND SCALING", "画面适配与缩放"},
-    {"NONE", "无"}};
+    {"NONE", "无"},
+    // The shelf ends on a tile that opens the full cover wall; the wall is a
+    // plain page of art with no header of its own.
+    {"MORE GAMES", "查看更多"},
+    {"MORE GAMES", "更多内容"},
+    {"ALL COVERS", "全部封面"},
+    {"BY RECENT PLAY", "按最近游玩"}};
 static_assert(std::size(kText) == static_cast<std::size_t>(TextId::Count));
 } // namespace
 
