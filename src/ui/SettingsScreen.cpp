@@ -265,7 +265,7 @@ CoreRowColumns coreRowColumns(const std::string &status) {
            static_cast<float>(statusWidth), 0.0f}};
 }
 
-#if defined(MRG_PLATFORM_BRICK)
+#if defined(MRG_PLATFORM_TRIMUI)
 // The case lighting only exists on the handheld, so the theme page grows a
 // second row there and stays a single row everywhere else.
 constexpr int kThemeRowCount = 2;

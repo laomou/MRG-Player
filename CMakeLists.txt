@@ -12,8 +12,8 @@ endif()
 # The device build is the same program with a different display/input profile:
 # one canvas size serves every platform, only the platform layer and the
 # automatic filters (dialogs, downloads, scripted screenshots) differ.
-set(MRG_PLATFORM "desktop" CACHE STRING "Target platform profile: desktop or brick")
-set_property(CACHE MRG_PLATFORM PROPERTY STRINGS desktop brick)
+set(MRG_PLATFORM "desktop" CACHE STRING "Target platform profile: desktop or trimui")
+set_property(CACHE MRG_PLATFORM PROPERTY STRINGS desktop trimui)
 
 option(MRG_USE_SYSTEM_SDL2 "Link the SDL2/SDL2_ttf installed on the target" OFF)
 set(MRG_SDL2_ROOT "" CACHE PATH "Root of an SDL2 install (include/ and lib/)")
@@ -26,7 +26,7 @@ option(MRG_ENABLE_CORE_DOWNLOAD "Fetch libretro cores from the libretro buildbot
 # The Brick Pro has no zenity, no curl and no offscreen SDL video driver, so the
 # device profile turns those features off rather than discovering them at run
 # time. Tests stay on the desktop because they need the dummy video driver.
-if(MRG_PLATFORM STREQUAL "brick")
+if(MRG_PLATFORM STREQUAL "trimui")
   set(MRG_USE_SYSTEM_SDL2 ON CACHE BOOL "" FORCE)
   set(MRG_ENABLE_SMOKE_TESTS OFF CACHE BOOL "" FORCE)
   set(MRG_ENABLE_PAK_TARGET ON CACHE BOOL "" FORCE)
@@ -35,7 +35,7 @@ if(MRG_PLATFORM STREQUAL "brick")
   set(MRG_ENABLE_CORE_DOWNLOAD OFF CACHE BOOL "" FORCE)
   set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 elseif(NOT MRG_PLATFORM STREQUAL "desktop")
-  message(FATAL_ERROR "MRG_PLATFORM must be desktop or brick, got ${MRG_PLATFORM}")
+  message(FATAL_ERROR "MRG_PLATFORM must be desktop or trimui, got ${MRG_PLATFORM}")
 endif()
 
 # Every screen draws on a canvas of logical pixels and the window is letterboxed
@@ -43,9 +43,9 @@ endif()
 # handheld draws its interface at 1024x768 and therefore never scales it by 0.8,
 # which is what turned its text to mush. Only the size differs; the layouts are
 # the same code. A preview build can ask for any other size.
-set(MRG_CANVAS_WIDTH "" CACHE STRING "Canvas width in logical pixels (default: 1280 desktop, 1024 brick)")
+set(MRG_CANVAS_WIDTH "" CACHE STRING "Canvas width in logical pixels (default: 1280 desktop, 1024 trimui)")
 set(MRG_CANVAS_HEIGHT "" CACHE STRING "Canvas height in logical pixels (default: 720 desktop, 768 brick)")
-if(MRG_PLATFORM STREQUAL "brick")
+if(MRG_PLATFORM STREQUAL "trimui")
   set(_mrg_default_canvas_width 1024)
   set(_mrg_default_canvas_height 768)
 else()
@@ -106,10 +106,10 @@ function(mrg_configure_target target)
     target_compile_definitions(${target} PRIVATE MRG_ENABLE_CORE_DOWNLOAD=0)
   endif()
   get_target_property(_mrg_type ${target} TYPE)
-  if(MRG_PLATFORM STREQUAL "brick")
+  if(MRG_PLATFORM STREQUAL "trimui")
     # The firmware ships no libstdc++ of a known version, so it is linked in
     # statically; section GC keeps the stripped binary small.
-    target_compile_definitions(${target} PRIVATE MRG_PLATFORM_BRICK=1)
+    target_compile_definitions(${target} PRIVATE MRG_PLATFORM_TRIMUI=1)
     target_compile_options(${target} PRIVATE
       -ffunction-sections -fdata-sections -fvisibility=hidden)
     if(NOT _mrg_type STREQUAL "STATIC_LIBRARY")
@@ -123,7 +123,7 @@ function(mrg_configure_target target)
       target_link_libraries(${target} PUBLIC stdc++fs)
     endif()
   endif()
-  if(MRG_ENABLE_LTO AND NOT MRG_PLATFORM STREQUAL "brick")
+  if(MRG_ENABLE_LTO AND NOT MRG_PLATFORM STREQUAL "trimui")
     include(CheckIPOSupported)
     check_ipo_supported(RESULT _mrg_ipo LANGUAGES CXX)
     if(_mrg_ipo)
@@ -475,7 +475,7 @@ else()
   target_link_libraries(mrg-player PRIVATE SDL2_ttf::SDL2_ttf)
 endif()
 
-if(MRG_PLATFORM STREQUAL "brick")
+if(MRG_PLATFORM STREQUAL "trimui")
   # The cross toolchain carries glibc 2.28 while the device does not, and ld
   # picks the 2.28 libm up through the SDL2 dependency before the sysroot copy,
   # which would make powf a GLIBC_2.27 symbol. Naming the 2.23 libm from the
