@@ -543,10 +543,15 @@ int Application::run(int argc, char **argv) {
   // The drawer opens over either the shelf or the wall; closing it has to go
   // back to the one it came from.
   Screen managementOrigin = Screen::Home;
+  // Where the running game was started from: leaving it returns there.
+  Screen gameOrigin = Screen::Home;
   ui::HomeFocus homeFocus = ui::HomeFocus::Cards;
   int homePill = 0;
   float homeRow = 0.0f;
   bool homeRowSettled = false;
+  // The wall slides by whole rows, in the same units as the shelf's offset.
+  float moreRow = 0.0f;
+  bool moreRowSettled = false;
   // Which half of the settings screen the direction keys drive: the category
   // rail or the page next to it. Entering the screen always starts on the rail.
   bool settingsRailFocus = true;
@@ -1012,6 +1017,9 @@ int Application::run(int argc, char **argv) {
     sessionActiveSince = SDL_GetTicks64();
     gameEntryHintSince = sessionActiveSince;
     gameEntryHintVisible = true;
+    gameOrigin = screen == Screen::More       ? Screen::More
+                 : screen == Screen::Management ? managementOrigin
+                                                : Screen::Home;
     screen = Screen::Game;
     SDL_SetWindowTitle(
         window, (std::string("MRG Player - ") + gameEntry.title).c_str());
@@ -1114,7 +1122,23 @@ int Application::run(int argc, char **argv) {
     // folders take over the import action instead of pointing at a drag.
     scanRomFolders();
   };
+  // Rebuild the wall's recent order and keep the cursor on one game: the
+  // order changes when a game is played, favourited or removed.
+  auto keepMoreCursor = [&](const std::string &id) {
+    moreOrder = ui::recentOrder(gameLibrary);
+    moreCursor = 0;
+    for (std::size_t i = 0; i < moreOrder.size(); ++i) {
+      if (gameLibrary.entries()[moreOrder[i]].id == id) {
+        moreCursor = static_cast<int>(i);
+        break;
+      }
+    }
+    if (moreCursor >= static_cast<int>(moreOrder.size()))
+      moreCursor = static_cast<int>(moreOrder.size()) - 1;
+    moreCursor = std::max(0, moreCursor);
+  };
   auto leaveGame = [&] {
+    const std::string finishedId = activeGameId;
     recordCurrentSession();
     rewindHeld = false;
     if (activeRuntime) {
@@ -1130,7 +1154,12 @@ int Application::run(int argc, char **argv) {
       running = false;
       return;
     }
-    screen = Screen::Home;
+    if (gameOrigin == Screen::More) {
+      keepMoreCursor(finishedId);
+      screen = Screen::More;
+    } else {
+      screen = Screen::Home;
+    }
     SDL_SetWindowTitle(window, "MRG Player");
   };
   auto resumeGame = [&] {
@@ -1617,17 +1646,7 @@ int Application::run(int argc, char **argv) {
                    .entries()[moreOrder[static_cast<std::size_t>(moreCursor)]]
                    .id;
     }
-    moreOrder = ui::recentOrder(gameLibrary);
-    moreCursor = 0;
-    for (std::size_t i = 0; i < moreOrder.size(); ++i) {
-      if (gameLibrary.entries()[moreOrder[i]].id == keepId) {
-        moreCursor = static_cast<int>(i);
-        break;
-      }
-    }
-    if (moreCursor >= static_cast<int>(moreOrder.size()))
-      moreCursor = static_cast<int>(moreOrder.size()) - 1;
-    moreCursor = std::max(0, moreCursor);
+    keepMoreCursor(keepId);
     screen = Screen::More;
   };
   // The wall's options button opens the same drawer the shelf has, and the
@@ -2616,7 +2635,7 @@ int Application::run(int argc, char **argv) {
           } else if (event.button.button == SDL_BUTTON_LEFT) {
             const int clicked =
                 ui::moreGameAt(x, y, static_cast<int>(moreOrder.size()),
-                               moreCursor);
+                               moreRow);
             if (clicked >= 0) {
               const bool alreadySelected = clicked == moreCursor;
               moreCursor = clicked;
@@ -2932,6 +2951,28 @@ int Application::run(int argc, char **argv) {
     } else {
       homeRowSettled = false;
     }
+    if (screen == Screen::More) {
+      // Same easing as the shelf: the grid only moves a row at a time, and it
+      // stops short of scrolling past the last full page.
+      const ui::MoreGrid grid = ui::moreGrid();
+      const int columns = std::max(1, grid.columns);
+      const int rows = std::max(1, grid.rows);
+      // A page is a block of rows: the grid only travels when the cursor
+      // leaves the block, and it then slides exactly one block.
+      const float rowTarget =
+          static_cast<float>(((moreCursor / columns) / rows) * rows);
+      if (!moreRowSettled) {
+        moreRow = rowTarget;
+        moreRowSettled = true;
+      }
+      moreRow += (rowTarget - moreRow) * 0.35f;
+      if (std::abs(rowTarget - moreRow) < 0.002f)
+        moreRow = rowTarget;
+      if (moreRow != rowTarget)
+        menuDirty = true;
+    } else {
+      moreRowSettled = false;
+    }
     // The highlighted game is the one being looked at, so its art jumps the
     // queue; the shelf's left-to-right order fills in after it.
     if (screen == Screen::Home || screen == Screen::More ||
@@ -3030,7 +3071,7 @@ int Application::run(int argc, char **argv) {
                    focusOpacity, ui::accentColor(settings.accent),
                    &coverCache);
     } else if (screen == Screen::More) {
-      ui::drawMoreGames(renderer, gameLibrary, moreOrder, moreCursor,
+      ui::drawMoreGames(renderer, gameLibrary, moreOrder, moreCursor, moreRow,
                         currentLanguage(), prompts, focusOpacity,
                         ui::accentColor(settings.accent), &coverCache);
     } else if (screen == Screen::Settings) {
